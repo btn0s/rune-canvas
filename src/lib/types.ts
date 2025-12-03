@@ -53,3 +53,4 @@ export interface Guide {
   gapLeftX?: number; // for horizontal gaps - left edge of overlap
   gapRightX?: number; // for horizontal gaps - right edge of overlap
 }
+

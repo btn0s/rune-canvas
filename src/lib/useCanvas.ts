@@ -631,6 +631,30 @@ export function useCanvas() {
     setTool("select");
   }, [selectedIds]);
 
+  // Compute bounding box of selected frames
+  const getSelectionBounds = useCallback(
+    (framesList: Frame[], ids: string[]) => {
+      const selected = framesList.filter((f) => ids.includes(f.id));
+      if (selected.length === 0) return null;
+
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
+      for (const f of selected) {
+        minX = Math.min(minX, f.x);
+        minY = Math.min(minY, f.y);
+        maxX = Math.max(maxX, f.x + f.width);
+        maxY = Math.max(maxY, f.y + f.height);
+      }
+      return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    },
+    []
+  );
+
+  // Store initial selection bounds for dragging
+  const dragBoundsStart = useRef<{ x: number; y: number } | null>(null);
+
   const startDrag = useCallback(
     (frameId: string, canvasPoint: Point, addToSelection = false) => {
       const frame = frames.find((f) => f.id === frameId);
@@ -652,11 +676,20 @@ export function useCanvas() {
       dragStart.current = canvasPoint;
 
       // Store starting positions for all selected frames
-      dragFramesStart.current = frames
-        .filter((f) => newSelectedIds.includes(f.id))
-        .map((f) => ({ id: f.id, x: f.x, y: f.y }));
+      const selectedFramesList = frames.filter((f) =>
+        newSelectedIds.includes(f.id)
+      );
+      dragFramesStart.current = selectedFramesList.map((f) => ({
+        id: f.id,
+        x: f.x,
+        y: f.y,
+      }));
+
+      // Store initial bounding box position
+      const bounds = getSelectionBounds(frames, newSelectedIds);
+      dragBoundsStart.current = bounds ? { x: bounds.x, y: bounds.y } : null;
     },
-    [frames, selectedIds]
+    [frames, selectedIds, getSelectionBounds]
   );
 
   const updateDrag = useCallback(
@@ -664,40 +697,50 @@ export function useCanvas() {
       if (
         !isDragging ||
         !dragStart.current ||
-        dragFramesStart.current.length === 0
+        dragFramesStart.current.length === 0 ||
+        !dragBoundsStart.current
       )
         return;
 
       const dx = canvasPoint.x - dragStart.current.x;
       const dy = canvasPoint.y - dragStart.current.y;
 
-      // For snapping, use the first selected frame as reference
-      const primaryId = selectedIds[0];
-      const primaryStart = dragFramesStart.current.find(
-        (f) => f.id === primaryId
-      );
-      const primaryFrame = frames.find((f) => f.id === primaryId);
+      // Compute current bounding box dimensions from starting frames
+      const startingFrames = dragFramesStart.current;
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
+      for (const sf of startingFrames) {
+        const frame = frames.find((f) => f.id === sf.id);
+        if (!frame) continue;
+        minX = Math.min(minX, sf.x);
+        minY = Math.min(minY, sf.y);
+        maxX = Math.max(maxX, sf.x + frame.width);
+        maxY = Math.max(maxY, sf.y + frame.height);
+      }
+      const boundsWidth = maxX - minX;
+      const boundsHeight = maxY - minY;
 
-      if (!primaryStart || !primaryFrame) return;
-
-      const newX = primaryStart.x + dx;
-      const newY = primaryStart.y + dy;
+      // New bounding box position
+      const newBoundsX = dragBoundsStart.current.x + dx;
+      const newBoundsY = dragBoundsStart.current.y + dy;
 
       const otherFrames = frames.filter((f) => !selectedIds.includes(f.id));
       const snapped = calculateSnapping(
         {
-          x: newX,
-          y: newY,
-          width: primaryFrame.width,
-          height: primaryFrame.height,
+          x: newBoundsX,
+          y: newBoundsY,
+          width: boundsWidth,
+          height: boundsHeight,
         },
         otherFrames,
         "move"
       );
 
       // Calculate the snap delta
-      const snapDx = snapped.x - newX;
-      const snapDy = snapped.y - newY;
+      const snapDx = snapped.x - newBoundsX;
+      const snapDy = snapped.y - newBoundsY;
 
       setGuides(snapped.guides);
       setFrames((prev) =>
@@ -720,6 +763,7 @@ export function useCanvas() {
     setGuides([]);
     dragStart.current = null;
     dragFramesStart.current = [];
+    dragBoundsStart.current = null;
   }, []);
 
   const startResize = useCallback(
@@ -939,8 +983,12 @@ export function useCanvas() {
         x: f.x,
         y: f.y,
       }));
+
+      // Set initial bounds for snapping
+      const bounds = getSelectionBounds(newFrames, newFrames.map((f) => f.id));
+      dragBoundsStart.current = bounds ? { x: bounds.x, y: bounds.y } : null;
     },
-    [frames, selectedIds]
+    [frames, selectedIds, getSelectionBounds]
   );
 
   const deleteSelected = useCallback(() => {
@@ -950,12 +998,14 @@ export function useCanvas() {
   }, [selectedIds]);
 
   const selectedFrames = frames.filter((f) => selectedIds.includes(f.id));
+  const selectionBounds = getSelectionBounds(frames, selectedIds);
 
   return {
     transform,
     frames,
     selectedIds,
     selectedFrames,
+    selectionBounds,
     tool,
     isCreating,
     isDragging,
@@ -990,3 +1040,4 @@ export function useCanvas() {
     deleteSelected,
   };
 }
+

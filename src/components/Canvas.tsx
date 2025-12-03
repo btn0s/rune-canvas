@@ -231,6 +231,7 @@ export function Canvas() {
     transform,
     frames,
     selectedFrames,
+    selectionBounds,
     tool,
     isCreating,
     isDragging,
@@ -483,37 +484,48 @@ export function Canvas() {
       ctx.strokeRect(x, y, w, h);
     }
 
-    // Draw resize handles only for single selection
-    if (selectedFrames.length === 1) {
-      const sf = selectedFrames[0];
-      const x = sf.x * transform.scale + transform.x;
-      const y = sf.y * transform.scale + transform.y;
-      const w = sf.width * transform.scale;
-      const h = sf.height * transform.scale;
+    // Draw bounding box, handles, and dimensions for selection
+    if (selectionBounds) {
+      const x = selectionBounds.x * transform.scale + transform.x;
+      const y = selectionBounds.y * transform.scale + transform.y;
+      const w = selectionBounds.width * transform.scale;
+      const h = selectionBounds.height * transform.scale;
 
-      ctx.fillStyle = "#fff";
-      ctx.strokeStyle = "#3b82f6";
-      const hs = HANDLE_SIZE;
+      // Draw bounding box for multi-selection
+      if (selectedFrames.length > 1) {
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(x, y, w, h);
+        ctx.setLineDash([]);
+      }
 
-      const handlePositions: Record<ResizeHandle, [number, number]> = {
-        nw: [x - hs / 2, y - hs / 2],
-        n: [x + w / 2 - hs / 2, y - hs / 2],
-        ne: [x + w - hs / 2, y - hs / 2],
-        e: [x + w - hs / 2, y + h / 2 - hs / 2],
-        se: [x + w - hs / 2, y + h - hs / 2],
-        s: [x + w / 2 - hs / 2, y + h - hs / 2],
-        sw: [x - hs / 2, y + h - hs / 2],
-        w: [x - hs / 2, y + h / 2 - hs / 2],
-      };
+      // Resize handles (only for single selection for now)
+      if (selectedFrames.length === 1) {
+        ctx.fillStyle = "#fff";
+        ctx.strokeStyle = "#3b82f6";
+        const hs = HANDLE_SIZE;
 
-      HANDLES.forEach((handle) => {
-        const [hx, hy] = handlePositions[handle];
-        ctx.fillRect(hx, hy, hs, hs);
-        ctx.strokeRect(hx, hy, hs, hs);
-      });
+        const handlePositions: Record<ResizeHandle, [number, number]> = {
+          nw: [x - hs / 2, y - hs / 2],
+          n: [x + w / 2 - hs / 2, y - hs / 2],
+          ne: [x + w - hs / 2, y - hs / 2],
+          e: [x + w - hs / 2, y + h / 2 - hs / 2],
+          se: [x + w - hs / 2, y + h - hs / 2],
+          s: [x + w / 2 - hs / 2, y + h - hs / 2],
+          sw: [x - hs / 2, y + h - hs / 2],
+          w: [x - hs / 2, y + h / 2 - hs / 2],
+        };
 
-      // Dimension badge below selection
-      const dimLabel = `${Math.round(sf.width)} × ${Math.round(sf.height)}`;
+        HANDLES.forEach((handle) => {
+          const [hx, hy] = handlePositions[handle];
+          ctx.fillRect(hx, hy, hs, hs);
+          ctx.strokeRect(hx, hy, hs, hs);
+        });
+      }
+
+      // Dimension badge below selection bounds
+      const dimLabel = `${Math.round(selectionBounds.width)} × ${Math.round(selectionBounds.height)}`;
       ctx.font = "11px system-ui";
       const dimTextWidth = ctx.measureText(dimLabel).width;
       const dimPillWidth = dimTextWidth + 12;
@@ -545,7 +557,7 @@ export function Canvas() {
       ctx.strokeRect(mx, my, mw, mh);
       ctx.setLineDash([]);
     }
-  }, [transform, selectedFrames, guides, marqueeRect, isMarqueeSelecting]);
+  }, [transform, selectedFrames, selectionBounds, guides, marqueeRect, isMarqueeSelecting]);
 
   useEffect(() => {
     draw();
@@ -836,3 +848,4 @@ export function Canvas() {
     </TooltipProvider>
   );
 }
+
