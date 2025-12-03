@@ -15,6 +15,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Kbd } from "@/components/ui/kbd";
 import { LayersPanel } from "./LayersPanel";
 import { PropertyPanel } from "./PropertyPanel";
 
@@ -991,24 +992,24 @@ export function Canvas() {
         />
 
         {/* Toolbar */}
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex gap-1 p-2 bg-card border border-border border-b-0 rounded-t-lg">
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex gap-1 p-1.5 bg-card border border-border border-b-0 rounded-t-lg">
           {TOOLS.map((t) => (
             <Tooltip key={t.id}>
               <TooltipTrigger asChild>
-                <Toggle
-                  size="sm"
-                  pressed={tool === t.id}
-                  onPressedChange={() => setTool(t.id)}
-                  aria-label={t.label}
-                >
-                  {t.icon}
-                </Toggle>
+                <span>
+                  <Toggle
+                    size="sm"
+                    pressed={tool === t.id}
+                    onPressedChange={() => setTool(t.id)}
+                    aria-label={t.label}
+                  >
+                    {t.icon}
+                  </Toggle>
+                </span>
               </TooltipTrigger>
               <TooltipContent side="top" className="flex items-center gap-2">
                 <span>{t.label}</span>
-                <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded">
-                  {t.shortcut}
-                </kbd>
+                <Kbd>{t.shortcut}</Kbd>
               </TooltipContent>
             </Tooltip>
           ))}
