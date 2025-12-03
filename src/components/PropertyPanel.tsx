@@ -4,11 +4,127 @@ import {
   TextObject,
   ImageObject,
   Transform,
+  LayoutMode,
+  FlexDirection,
+  JustifyContent,
+  AlignItems,
+  FlexWrap,
+  SizeMode,
 } from "../lib/types";
 import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "./ui/dropdown-menu";
+import { Check, MoveHorizontal, Shrink, ArrowLeftRight } from "lucide-react";
+
+// Size mode dropdown component
+function SizeModeDropdown({
+  axis,
+  mode,
+  value,
+  showFit,
+  showFill,
+  onChange,
+  onValueChange,
+}: {
+  axis: "width" | "height";
+  mode: SizeMode;
+  value: number;
+  showFit: boolean;
+  showFill: boolean;
+  onChange: (mode: SizeMode) => void;
+  onValueChange: (value: number) => void;
+}) {
+  const label = axis === "width" ? "W" : "H";
+  const fixedLabel = axis === "width" ? "Fixed width" : "Fixed height";
+
+  const getModeIcon = (m: SizeMode) => {
+    switch (m) {
+      case "fixed":
+        return <MoveHorizontal className="size-3" />;
+      case "fit":
+        return <Shrink className="size-3" />;
+      case "expand":
+        return <ArrowLeftRight className="size-3" />;
+    }
+  };
+
+  return (
+    <div className="flex items-center">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button className="flex items-center gap-1 h-5 px-1 text-[10px] font-mono text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded cursor-pointer outline-none">
+            <span className="text-zinc-500">{label}</span>
+            {mode !== "fixed" && <span>{mode === "fit" ? "Hug" : "Fill"}</span>}
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="min-w-[160px]">
+          <DropdownMenuItem
+            onClick={() => onChange("fixed")}
+            className="flex items-center gap-2"
+          >
+            {mode === "fixed" ? (
+              <Check className="size-4" />
+            ) : (
+              <span className="size-4" />
+            )}
+            {getModeIcon("fixed")}
+            <span>
+              {fixedLabel} ({value})
+            </span>
+          </DropdownMenuItem>
+          {showFit && (
+            <DropdownMenuItem
+              onClick={() => onChange("fit")}
+              className="flex items-center gap-2"
+            >
+              {mode === "fit" ? (
+                <Check className="size-4" />
+              ) : (
+                <span className="size-4" />
+              )}
+              {getModeIcon("fit")}
+              <span>Hug contents</span>
+            </DropdownMenuItem>
+          )}
+          {showFill && (
+            <DropdownMenuItem
+              onClick={() => onChange("expand")}
+              className="flex items-center gap-2"
+            >
+              {mode === "expand" ? (
+                <Check className="size-4" />
+              ) : (
+                <span className="size-4" />
+              )}
+              {getModeIcon("expand")}
+              <span>Fill container</span>
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {mode === "fixed" ? (
+        <input
+          type="number"
+          value={value}
+          onChange={(e) => onValueChange(parseFloat(e.target.value) || 0)}
+          className="w-10 h-5 text-[10px] font-mono text-zinc-400 bg-transparent border-none outline-none text-right hover:text-zinc-200 focus:text-zinc-200"
+        />
+      ) : (
+        <span className="w-10 h-5 text-[10px] font-mono text-zinc-500 text-right leading-5">
+          {value}
+        </span>
+      )}
+    </div>
+  );
+}
 
 interface PropertyPanelProps {
   selectedObjects: CanvasObject[];
+  allObjects: CanvasObject[];
   transform: Transform;
   containerRef: React.RefObject<HTMLDivElement>;
   onUpdate: (id: string, updates: Partial<CanvasObject>) => void;
@@ -16,6 +132,7 @@ interface PropertyPanelProps {
 
 export function PropertyPanel({
   selectedObjects,
+  allObjects,
   transform,
   containerRef,
   onUpdate,
@@ -25,6 +142,23 @@ export function PropertyPanel({
   const panelRef = useRef<HTMLDivElement>(null);
   const selectedObject =
     selectedObjects.length === 1 ? selectedObjects[0] : null;
+
+  // Check if selected object is inside a flex/grid container
+  const isInsideFlexContainer = selectedObject
+    ? (() => {
+        if (!selectedObject.parentId) return false;
+        const parent = allObjects.find((o) => o.id === selectedObject.parentId);
+        return (
+          parent?.type === "frame" &&
+          (parent as FrameObject).layoutMode !== "none"
+        );
+      })()
+    : false;
+
+  // Check if selected frame has layout enabled (for showing Hug option)
+  const hasLayoutEnabled =
+    selectedObject?.type === "frame" &&
+    (selectedObject as FrameObject).layoutMode !== "none";
 
   // Check if panel overlaps with any object
   const checkOverlap = useCallback(() => {
@@ -86,27 +220,69 @@ export function PropertyPanel({
       >
         {/* Size */}
         <div className="flex items-center gap-1">
-          <input
-            type="number"
-            value={Math.round(selectedObject.width)}
-            onChange={(e) =>
-              onUpdate(selectedObject.id, {
-                width: parseFloat(e.target.value) || 0,
-              })
-            }
-            className="w-10 h-5 text-[10px] font-mono text-zinc-400 bg-transparent border-none outline-none text-right hover:text-zinc-200 focus:text-zinc-200"
-          />
+          {selectedObject.type === "frame" ? (
+            <SizeModeDropdown
+              axis="width"
+              mode={(selectedObject as FrameObject).widthMode || "fixed"}
+              value={Math.round(selectedObject.width)}
+              showFit={hasLayoutEnabled}
+              showFill={isInsideFlexContainer}
+              onChange={(mode) =>
+                onUpdate(selectedObject.id, {
+                  widthMode: mode,
+                } as Partial<FrameObject>)
+              }
+              onValueChange={(val) =>
+                onUpdate(selectedObject.id, { width: val })
+              }
+            />
+          ) : (
+            <>
+              <span className="text-[10px] text-zinc-500 w-3">W</span>
+              <input
+                type="number"
+                value={Math.round(selectedObject.width)}
+                onChange={(e) =>
+                  onUpdate(selectedObject.id, {
+                    width: parseFloat(e.target.value) || 0,
+                  })
+                }
+                className="w-10 h-5 text-[10px] font-mono text-zinc-400 bg-transparent border-none outline-none text-right hover:text-zinc-200 focus:text-zinc-200"
+              />
+            </>
+          )}
           <span className="text-[10px] text-zinc-600">×</span>
-          <input
-            type="number"
-            value={Math.round(selectedObject.height)}
-            onChange={(e) =>
-              onUpdate(selectedObject.id, {
-                height: parseFloat(e.target.value) || 0,
-              })
-            }
-            className="w-10 h-5 text-[10px] font-mono text-zinc-400 bg-transparent border-none outline-none hover:text-zinc-200 focus:text-zinc-200"
-          />
+          {selectedObject.type === "frame" ? (
+            <SizeModeDropdown
+              axis="height"
+              mode={(selectedObject as FrameObject).heightMode || "fixed"}
+              value={Math.round(selectedObject.height)}
+              showFit={hasLayoutEnabled}
+              showFill={isInsideFlexContainer}
+              onChange={(mode) =>
+                onUpdate(selectedObject.id, {
+                  heightMode: mode,
+                } as Partial<FrameObject>)
+              }
+              onValueChange={(val) =>
+                onUpdate(selectedObject.id, { height: val })
+              }
+            />
+          ) : (
+            <>
+              <span className="text-[10px] text-zinc-500 w-3">H</span>
+              <input
+                type="number"
+                value={Math.round(selectedObject.height)}
+                onChange={(e) =>
+                  onUpdate(selectedObject.id, {
+                    height: parseFloat(e.target.value) || 0,
+                  })
+                }
+                className="w-10 h-5 text-[10px] font-mono text-zinc-400 bg-transparent border-none outline-none hover:text-zinc-200 focus:text-zinc-200"
+              />
+            </>
+          )}
         </div>
 
         {/* Position */}
@@ -192,6 +368,148 @@ export function PropertyPanel({
               className="w-6 h-5 text-[10px] font-mono text-zinc-500 bg-transparent border-none outline-none hover:text-zinc-300 focus:text-zinc-300"
             />
           </div>
+        )}
+
+        {/* Layout Mode - only for frames */}
+        {selectedObject.type === "frame" && (
+          <>
+            <div className="h-px bg-zinc-800 my-1" />
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-zinc-600 w-8">Layout</span>
+              <select
+                value={(selectedObject as FrameObject).layoutMode || "none"}
+                onChange={(e) =>
+                  onUpdate(selectedObject.id, {
+                    layoutMode: e.target.value as LayoutMode,
+                  } as Partial<FrameObject>)
+                }
+                className="h-5 text-[10px] font-mono text-zinc-400 bg-zinc-800 border-none outline-none rounded cursor-pointer"
+              >
+                <option value="none">None</option>
+                <option value="flex">Flex</option>
+                <option value="grid">Grid</option>
+              </select>
+            </div>
+
+            {/* Flex/Grid specific options */}
+            {(selectedObject as FrameObject).layoutMode === "flex" && (
+              <>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-zinc-600 w-8">Dir</span>
+                  <select
+                    value={
+                      (selectedObject as FrameObject).flexDirection || "row"
+                    }
+                    onChange={(e) =>
+                      onUpdate(selectedObject.id, {
+                        flexDirection: e.target.value as FlexDirection,
+                      } as Partial<FrameObject>)
+                    }
+                    className="h-5 text-[10px] font-mono text-zinc-400 bg-zinc-800 border-none outline-none rounded cursor-pointer"
+                  >
+                    <option value="row">Row</option>
+                    <option value="column">Column</option>
+                    <option value="row-reverse">Row ↩</option>
+                    <option value="column-reverse">Col ↩</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-zinc-600 w-8">Justify</span>
+                  <select
+                    value={
+                      (selectedObject as FrameObject).justifyContent ||
+                      "flex-start"
+                    }
+                    onChange={(e) =>
+                      onUpdate(selectedObject.id, {
+                        justifyContent: e.target.value as JustifyContent,
+                      } as Partial<FrameObject>)
+                    }
+                    className="h-5 text-[10px] font-mono text-zinc-400 bg-zinc-800 border-none outline-none rounded cursor-pointer"
+                  >
+                    <option value="flex-start">Start</option>
+                    <option value="flex-end">End</option>
+                    <option value="center">Center</option>
+                    <option value="space-between">Between</option>
+                    <option value="space-around">Around</option>
+                    <option value="space-evenly">Evenly</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-zinc-600 w-8">Align</span>
+                  <select
+                    value={
+                      (selectedObject as FrameObject).alignItems || "flex-start"
+                    }
+                    onChange={(e) =>
+                      onUpdate(selectedObject.id, {
+                        alignItems: e.target.value as AlignItems,
+                      } as Partial<FrameObject>)
+                    }
+                    className="h-5 text-[10px] font-mono text-zinc-400 bg-zinc-800 border-none outline-none rounded cursor-pointer"
+                  >
+                    <option value="flex-start">Start</option>
+                    <option value="flex-end">End</option>
+                    <option value="center">Center</option>
+                    <option value="stretch">Stretch</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-zinc-600 w-8">Wrap</span>
+                  <select
+                    value={(selectedObject as FrameObject).flexWrap || "nowrap"}
+                    onChange={(e) =>
+                      onUpdate(selectedObject.id, {
+                        flexWrap: e.target.value as FlexWrap,
+                      } as Partial<FrameObject>)
+                    }
+                    className="h-5 text-[10px] font-mono text-zinc-400 bg-zinc-800 border-none outline-none rounded cursor-pointer"
+                  >
+                    <option value="nowrap">No Wrap</option>
+                    <option value="wrap">Wrap</option>
+                    <option value="wrap-reverse">Wrap ↩</option>
+                  </select>
+                </div>
+              </>
+            )}
+
+            {/* Gap and Padding - for flex and grid */}
+            {((selectedObject as FrameObject).layoutMode === "flex" ||
+              (selectedObject as FrameObject).layoutMode === "grid") && (
+              <>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-zinc-600 w-8">Gap</span>
+                  <input
+                    type="number"
+                    value={(selectedObject as FrameObject).gap || 0}
+                    onChange={(e) =>
+                      onUpdate(selectedObject.id, {
+                        gap: Math.max(0, parseFloat(e.target.value) || 0),
+                      } as Partial<FrameObject>)
+                    }
+                    className="w-8 h-5 text-[10px] font-mono text-zinc-500 bg-transparent border-none outline-none hover:text-zinc-300 focus:text-zinc-300"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-zinc-600 w-8">Pad</span>
+                  <input
+                    type="number"
+                    value={(selectedObject as FrameObject).padding || 0}
+                    onChange={(e) =>
+                      onUpdate(selectedObject.id, {
+                        padding: Math.max(0, parseFloat(e.target.value) || 0),
+                      } as Partial<FrameObject>)
+                    }
+                    className="w-8 h-5 text-[10px] font-mono text-zinc-500 bg-transparent border-none outline-none hover:text-zinc-300 focus:text-zinc-300"
+                  />
+                </div>
+              </>
+            )}
+          </>
         )}
 
         {/* Font size - only for text */}

@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useCanvas } from "../lib/useCanvas";
 import type {
   ResizeHandle,
@@ -301,6 +307,79 @@ export function Canvas() {
   // Hovered resize handle for cursor
   const [hoveredHandle, setHoveredHandle] = useState<ResizeHandle | null>(null);
 
+  // Focus text element when editing starts
+  useEffect(() => {
+    if (editingTextId) {
+      // Small delay to ensure the element is rendered with contentEditable
+      requestAnimationFrame(() => {
+        const el = document.querySelector(
+          `[data-text-id="${editingTextId}"]`
+        ) as HTMLElement;
+        if (el) {
+          el.focus();
+        }
+      });
+    }
+  }, [editingTextId]);
+
+  // Sync positions and sizes from DOM for flex children and fit/expand frames
+  useLayoutEffect(() => {
+    if (!containerRef.current) return;
+
+    objects.forEach((obj) => {
+      const el = containerRef.current?.querySelector(
+        `[data-object-id="${obj.id}"]`
+      ) as HTMLElement;
+      if (!el) return;
+
+      const rect = el.getBoundingClientRect();
+      const updates: Partial<CanvasObject> = {};
+
+      // Sync size for frames with fit/expand mode
+      if (obj.type === "frame") {
+        const frame = obj as FrameObject;
+        if (frame.widthMode !== "fixed") {
+          const domWidth = rect.width / transform.scale;
+          if (Math.abs(obj.width - domWidth) > 1) {
+            updates.width = domWidth;
+          }
+        }
+        if (frame.heightMode !== "fixed") {
+          const domHeight = rect.height / transform.scale;
+          if (Math.abs(obj.height - domHeight) > 1) {
+            updates.height = domHeight;
+          }
+        }
+      }
+
+      // Sync position for objects inside flex/grid containers
+      if (obj.parentId) {
+        const parent = objects.find((o) => o.id === obj.parentId);
+        if (
+          parent?.type === "frame" &&
+          (parent as FrameObject).layoutMode !== "none"
+        ) {
+          const parentEl = containerRef.current?.querySelector(
+            `[data-object-id="${parent.id}"]`
+          ) as HTMLElement;
+          if (parentEl) {
+            const parentRect = parentEl.getBoundingClientRect();
+            const relX = (rect.left - parentRect.left) / transform.scale;
+            const relY = (rect.top - parentRect.top) / transform.scale;
+
+            if (Math.abs(obj.x - relX) > 1) updates.x = relX;
+            if (Math.abs(obj.y - relY) > 1) updates.y = relY;
+          }
+        }
+      }
+
+      // Apply updates if any
+      if (Object.keys(updates).length > 0) {
+        updateObject(obj.id, updates);
+      }
+    });
+  }, [objects, transform.scale, updateObject]);
+
   // Draw interaction layer
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -449,7 +528,7 @@ export function Canvas() {
       ctx.setLineDash([]);
     }
 
-    // Draw selection: outline, handles, dimensions (same for single or multi)
+    // Draw selection: outline, handles, dimensions
     if (selectionBounds) {
       const x = selectionBounds.x * transform.scale + transform.x;
       const y = selectionBounds.y * transform.scale + transform.y;
@@ -511,7 +590,30 @@ export function Canvas() {
       ctx.fillRect(mx, my, mw, mh);
       ctx.strokeRect(mx, my, mw, mh);
     }
-  }, [transform, selectionBounds, guides, marqueeRect, isMarqueeSelecting]);
+
+    // Debug mode visualizations
+    if (debugMode && selectionBounds) {
+      ctx.font = "10px monospace";
+      ctx.fillStyle = "rgba(59, 130, 246, 0.9)";
+      ctx.fillRect(10, 10, 180, 40);
+      ctx.fillStyle = "#fff";
+      ctx.fillText(
+        `Bounds: ${Math.round(selectionBounds.x)},${Math.round(
+          selectionBounds.y
+        )}`,
+        15,
+        25
+      );
+      ctx.fillText(`Selected: ${selectedIds.length} objects`, 15, 45);
+    }
+  }, [
+    transform,
+    selectionBounds,
+    guides,
+    marqueeRect,
+    isMarqueeSelecting,
+    debugMode,
+  ]);
 
   useEffect(() => {
     draw();
@@ -755,6 +857,9 @@ export function Canvas() {
   // Keyboard shortcuts
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // Skip shortcuts when editing text
+      if (editingTextId) return;
+
       // Space to temporarily pan
       if (e.key === " " && !e.repeat) {
         e.preventDefault();
@@ -859,6 +964,7 @@ export function Canvas() {
       window.removeEventListener("keyup", onKeyUp);
     };
   }, [
+    editingTextId,
     setTool,
     copySelected,
     pasteClipboard,
@@ -976,107 +1082,190 @@ export function Canvas() {
             transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
           }}
         >
-          {objects.map((obj) => {
-            const isSelected = selectedIds.includes(obj.id);
-            const isEditing = editingTextId === obj.id;
-            const isPotentialParent = potentialParentId === obj.id;
-            const canvasPos = getCanvasPosition(obj);
+          {(() => {
+            // Helper to check if parent has layout enabled (children render inside)
+            const parentHasLayout = (parentId: string | null): boolean => {
+              if (!parentId) return false;
+              const parent = objects.find((o) => o.id === parentId);
+              if (!parent || parent.type !== "frame") return false;
+              return (parent as FrameObject).layoutMode !== "none";
+            };
 
-            return (
-              <div
-                key={obj.id}
-                data-object-id={obj.id}
-                className="absolute left-0 top-0"
-                style={{
-                  transform: `translate(${canvasPos.x}px, ${canvasPos.y}px)`,
-                  opacity: obj.opacity,
-                }}
-              >
-                {/* Object label - hidden for nested objects */}
-                {!obj.parentId && (
-                  <div
-                    className={`absolute whitespace-nowrap pointer-events-none select-none ${
-                      isSelected ? "text-blue-400" : "text-zinc-500"
-                    }`}
-                    style={{
-                      bottom: "100%",
-                      left: 0,
-                      marginBottom: 4,
-                      fontSize: `${Math.max(10, 11 / transform.scale)}px`,
-                    }}
-                  >
-                    {obj.name}
-                  </div>
-                )}
+            // Render an object (recursive for frames with layout)
+            const renderObject = (
+              obj: CanvasObject,
+              useAbsolutePosition: boolean
+            ): React.ReactNode => {
+              const isSelected = selectedIds.includes(obj.id);
+              const isEditing = editingTextId === obj.id;
+              const isPotentialParent = potentialParentId === obj.id;
+              const canvasPos = getCanvasPosition(obj);
+              const frame = obj.type === "frame" ? (obj as FrameObject) : null;
+              const hasLayout = frame && frame.layoutMode !== "none";
 
-                {/* Render based on object type */}
-                {obj.type === "frame" && (
-                  <div
-                    className={`transition-shadow duration-150 ${
-                      isPotentialParent
-                        ? "shadow-[inset_0_0_0_2px_#3b82f6]"
-                        : ""
-                    }`}
-                    style={{
-                      width: obj.width,
-                      height: obj.height,
-                      backgroundColor: (obj as FrameObject).fill,
-                      borderRadius: (obj as FrameObject).radius,
-                      overflow: (obj as FrameObject).clipContent
-                        ? "hidden"
-                        : "visible",
-                    }}
-                  />
-                )}
+              // Get children for this object
+              const children = objects.filter((o) => o.parentId === obj.id);
 
-                {obj.type === "image" && (
-                  <img
-                    src={(obj as ImageObject).src}
-                    alt={obj.name}
-                    draggable={false}
-                    style={{
-                      width: obj.width,
-                      height: obj.height,
-                      maxWidth: "unset",
-                      objectFit: "cover",
-                      display: "block",
-                    }}
-                  />
-                )}
+              const wrapperStyle: React.CSSProperties = useAbsolutePosition
+                ? {
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    transform: `translate(${canvasPos.x}px, ${canvasPos.y}px)`,
+                    opacity: obj.opacity,
+                  }
+                : {
+                    opacity: obj.opacity,
+                    flexShrink: 0,
+                  };
 
-                {obj.type === "text" && (
-                  <div
-                    contentEditable={isEditing}
-                    suppressContentEditableWarning
-                    onBlur={(e) => {
-                      updateTextContent(
-                        obj.id,
-                        e.currentTarget.textContent || ""
-                      );
-                      setEditingTextId(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Escape") {
-                        e.currentTarget.blur();
-                      }
-                    }}
-                    style={{
-                      width: obj.width,
-                      minHeight: obj.height,
-                      color: (obj as TextObject).fill,
-                      fontSize: (obj as TextObject).fontSize,
-                      fontFamily: (obj as TextObject).fontFamily,
-                      outline: isEditing ? "1px solid #3b82f6" : "none",
-                      whiteSpace: "pre-wrap",
-                      wordWrap: "break-word",
-                    }}
-                  >
-                    {(obj as TextObject).content}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+              return (
+                <div key={obj.id} data-object-id={obj.id} style={wrapperStyle}>
+                  {/* Object label - hidden for nested objects */}
+                  {!obj.parentId && (
+                    <div
+                      className={`absolute whitespace-nowrap pointer-events-none select-none ${
+                        isSelected ? "text-blue-400" : "text-zinc-500"
+                      }`}
+                      style={{
+                        bottom: "100%",
+                        left: 0,
+                        marginBottom: 4,
+                        fontSize: `${Math.max(10, 11 / transform.scale)}px`,
+                      }}
+                    >
+                      {obj.name}
+                    </div>
+                  )}
+
+                  {/* Render based on object type */}
+                  {obj.type === "frame" && (
+                    <div
+                      className={`transition-shadow duration-150 ${
+                        isPotentialParent
+                          ? "shadow-[inset_0_0_0_2px_#3b82f6]"
+                          : ""
+                      }`}
+                      style={{
+                        // Size modes (fit/expand only work with layout enabled)
+                        width:
+                          frame!.widthMode === "fixed" || !hasLayout
+                            ? obj.width
+                            : frame!.widthMode === "fit"
+                            ? "fit-content"
+                            : undefined,
+                        height:
+                          frame!.heightMode === "fixed" || !hasLayout
+                            ? obj.height
+                            : frame!.heightMode === "fit"
+                            ? "fit-content"
+                            : undefined,
+                        minWidth:
+                          hasLayout && frame!.widthMode === "fit"
+                            ? obj.width
+                            : undefined,
+                        minHeight:
+                          hasLayout && frame!.heightMode === "fit"
+                            ? obj.height
+                            : undefined,
+                        // Flex grow for expand mode (only works inside flex parent)
+                        flex:
+                          frame!.widthMode === "expand" ||
+                          frame!.heightMode === "expand"
+                            ? "1"
+                            : undefined,
+                        backgroundColor: frame!.fill,
+                        borderRadius: frame!.radius,
+                        overflow: frame!.clipContent ? "hidden" : "visible",
+                        position: hasLayout ? "relative" : undefined,
+                        // Layout styles
+                        display: hasLayout
+                          ? frame!.layoutMode === "flex"
+                            ? "flex"
+                            : "grid"
+                          : undefined,
+                        flexDirection:
+                          frame!.layoutMode === "flex"
+                            ? frame!.flexDirection
+                            : undefined,
+                        justifyContent: hasLayout
+                          ? frame!.justifyContent
+                          : undefined,
+                        alignItems: hasLayout ? frame!.alignItems : undefined,
+                        flexWrap:
+                          frame!.layoutMode === "flex"
+                            ? frame!.flexWrap
+                            : undefined,
+                        gap: hasLayout ? frame!.gap : undefined,
+                        padding: hasLayout ? frame!.padding : undefined,
+                      }}
+                    >
+                      {/* Render children inside frame if layout enabled */}
+                      {hasLayout &&
+                        children.map((child) => renderObject(child, false))}
+                    </div>
+                  )}
+
+                  {obj.type === "image" && (
+                    <img
+                      src={(obj as ImageObject).src}
+                      alt={obj.name}
+                      draggable={false}
+                      style={{
+                        width: obj.width,
+                        height: obj.height,
+                        maxWidth: "unset",
+                        objectFit: "cover",
+                        display: "block",
+                      }}
+                    />
+                  )}
+
+                  {obj.type === "text" && (
+                    <div
+                      data-text-id={obj.id}
+                      contentEditable={isEditing}
+                      suppressContentEditableWarning
+                      onBlur={(e) => {
+                        // Use innerText to preserve newlines
+                        updateTextContent(
+                          obj.id,
+                          e.currentTarget.innerText || ""
+                        );
+                        setEditingTextId(null);
+                      }}
+                      onKeyDown={(e) => {
+                        // Stop propagation to prevent global shortcuts while editing
+                        e.stopPropagation();
+                        if (e.key === "Escape") {
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      style={{
+                        width: obj.width,
+                        minHeight: obj.height,
+                        color: (obj as TextObject).fill,
+                        fontSize: (obj as TextObject).fontSize,
+                        fontFamily: (obj as TextObject).fontFamily,
+                        outline: isEditing ? "1px solid #3b82f6" : "none",
+                        whiteSpace: "pre-wrap",
+                        wordWrap: "break-word",
+                        pointerEvents: isEditing ? "auto" : "none",
+                        cursor: isEditing ? "text" : "default",
+                      }}
+                    >
+                      {(obj as TextObject).content}
+                    </div>
+                  )}
+                </div>
+              );
+            };
+
+            // Render objects - skip children of frames with layout (they're rendered inside)
+            return objects
+              .filter((obj) => !parentHasLayout(obj.parentId))
+              .map((obj) => renderObject(obj, true));
+          })()}
         </div>
 
         {/* Canvas layer - selection + handles */}
@@ -1128,6 +1317,7 @@ export function Canvas() {
         {/* Property panel */}
         <PropertyPanel
           selectedObjects={selectedObjects}
+          allObjects={objects}
           transform={transform}
           containerRef={containerRef as React.RefObject<HTMLDivElement>}
           onUpdate={updateObject}
@@ -1153,4 +1343,3 @@ export function Canvas() {
     </TooltipProvider>
   );
 }
-

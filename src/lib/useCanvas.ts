@@ -605,6 +605,15 @@ export function useCanvas() {
           fill: "#ffffff",
           radius: 0,
           clipContent: false,
+          widthMode: "fixed",
+          heightMode: "fixed",
+          layoutMode: "none",
+          flexDirection: "row",
+          justifyContent: "flex-start",
+          alignItems: "flex-start",
+          flexWrap: "nowrap",
+          gap: 0,
+          padding: 0,
         };
         setObjects((prev) => [...prev, newFrame]);
         setSelectedIds([id]);
@@ -618,10 +627,10 @@ export function useCanvas() {
           parentId,
           x: relativePoint.x,
           y: relativePoint.y,
-          width: 100,
+          width: 200,
           height: 24,
           opacity: 1,
-          content: "Text",
+          content: "",
           fontSize: 16,
           fontFamily: "system-ui",
           fill: "#000000",
@@ -629,6 +638,7 @@ export function useCanvas() {
         setObjects((prev) => [...prev, newText]);
         setSelectedIds([id]);
         setEditingTextId(id);
+        setTool("select"); // Switch to select after creating text
       }
     },
     [tool, objects]
@@ -738,10 +748,8 @@ export function useCanvas() {
     setIsCreating(false);
     setGuides([]);
     createStart.current = null;
-    if (tool !== "text") {
-      setTool("select");
-    }
-  }, [selectedIds, tool]);
+    setTool("select");
+  }, [selectedIds]);
 
   // Compute bounding box of selected objects (in canvas space)
   const getSelectionBounds = useCallback(
