@@ -833,9 +833,21 @@ export function Canvas() {
             const src = event.target?.result as string;
             const img = new Image();
             img.onload = () => {
+              console.log(
+                "Adding image:",
+                img.naturalWidth,
+                img.naturalHeight,
+                canvasPoint
+              );
               addImage(src, img.naturalWidth, img.naturalHeight, canvasPoint);
             };
+            img.onerror = () => {
+              console.error("Failed to load dropped image");
+            };
             img.src = src;
+          };
+          reader.onerror = () => {
+            console.error("Failed to read file");
           };
           reader.readAsDataURL(file);
         });
@@ -954,10 +966,12 @@ export function Canvas() {
                   <img
                     src={(obj as ImageObject).src}
                     alt={obj.name}
+                    draggable={false}
                     style={{
                       width: obj.width,
                       height: obj.height,
-                      objectFit: "contain",
+                      maxWidth: "unset",
+                      objectFit: "cover",
                       display: "block",
                     }}
                   />
