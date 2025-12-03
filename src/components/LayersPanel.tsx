@@ -106,12 +106,12 @@ export function LayersPanel({
         return (
           <div
             key={frame.id}
-            className="relative flex items-center cursor-pointer transition-all duration-300 ease-out overflow-hidden"
+            className={`
+              relative flex items-center cursor-pointer transition-all duration-300 ease-out
+              ${isHovered ? "hover:bg-zinc-700/50 rounded px-2" : ""}
+            `}
             style={{
-              width: isHovered ? "100%" : 24,
-              height: isHovered ? 20 : 2,
-              paddingLeft: isHovered ? 8 : 0,
-              paddingRight: isHovered ? 8 : 0,
+              height: isHovered ? 24 : 2,
               opacity: isNew ? 0 : 1,
               transform: isNew ? "translateX(-10px)" : "translateX(0)",
               animation: isNew ? "slideIn 300ms ease-out forwards" : undefined,
@@ -124,28 +124,26 @@ export function LayersPanel({
               }
             }}
           >
-            {/* Collapsed line (visible when not hovered) - no transition to avoid ghosts */}
+            {/* Collapsed line - fixed size, instant show/hide */}
             {!isHovered && (
               <div
                 className={`
-                  absolute inset-0 rounded-full
+                  w-5 h-[2px] rounded-full
                   ${isSelected ? "bg-blue-400/70" : "bg-zinc-600"}
                 `}
               />
             )}
             {/* Expanded name */}
-            <span
-              className={`
-                text-xs whitespace-nowrap transition-all duration-300 ease-out
-                ${isSelected ? "text-blue-400" : "text-zinc-500"}
-              `}
-              style={{
-                opacity: isHovered ? 1 : 0,
-                transform: isHovered ? "translateX(0)" : "translateX(-8px)",
-              }}
-            >
-              {frame.name}
-            </span>
+            {isHovered && (
+              <span
+                className={`
+                  text-xs whitespace-nowrap
+                  ${isSelected ? "text-blue-400" : "text-zinc-500"}
+                `}
+              >
+                {frame.name}
+              </span>
+            )}
           </div>
         );
       })}
