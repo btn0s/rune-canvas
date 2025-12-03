@@ -1298,42 +1298,103 @@ export function useCanvas() {
   // Clipboard for copy/paste
   const clipboard = useRef<CanvasObject[]>([]);
 
+  // Helper to get all descendants of given object IDs
+  const getDescendants = useCallback(
+    (ids: string[], allObjects: CanvasObject[]): CanvasObject[] => {
+      const result: CanvasObject[] = [];
+      const collectDescendants = (parentIds: string[]) => {
+        const children = allObjects.filter(
+          (o) => o.parentId && parentIds.includes(o.parentId)
+        );
+        if (children.length > 0) {
+          result.push(...children);
+          collectDescendants(children.map((c) => c.id));
+        }
+      };
+      collectDescendants(ids);
+      return result;
+    },
+    []
+  );
+
+  // Helper to duplicate a tree of objects with new IDs and proper parent remapping
+  const duplicateTree = useCallback(
+    (
+      objectsToDupe: CanvasObject[],
+      offset: { x: number; y: number } = { x: 20, y: 20 },
+      appendCopy: boolean = true
+    ): CanvasObject[] => {
+      // Create ID mapping: old ID -> new ID
+      const idMap = new Map<string, string>();
+      objectsToDupe.forEach((o, index) => {
+        idMap.set(
+          o.id,
+          `${o.type}-${Date.now()}-${index}-${Math.random()
+            .toString(36)
+            .substr(2, 9)}`
+        );
+      });
+
+      // Create new objects with remapped IDs and parents
+      return objectsToDupe.map((o) => {
+        const isRoot = !o.parentId || !idMap.has(o.parentId);
+        return {
+          ...o,
+          id: idMap.get(o.id)!,
+          name: appendCopy ? `${o.name} copy` : o.name,
+          // If parent is in the copy set, remap to new ID; otherwise set to null (not stale old ID)
+          parentId:
+            o.parentId && idMap.has(o.parentId) ? idMap.get(o.parentId)! : null,
+          // Only offset root-level objects (children stay relative to parent)
+          x: isRoot ? o.x + offset.x : o.x,
+          y: isRoot ? o.y + offset.y : o.y,
+        };
+      });
+    },
+    []
+  );
+
   const copySelected = useCallback(() => {
     if (selectedIds.length === 0) return;
-    clipboard.current = objects
-      .filter((o) => selectedIds.includes(o.id))
-      .map((o) => ({ ...o }));
-  }, [selectedIds, objects]);
+    // Get selected objects and all their descendants
+    const selected = objects.filter((o) => selectedIds.includes(o.id));
+    const descendants = getDescendants(selectedIds, objects);
+    clipboard.current = [...selected, ...descendants].map((o) => ({ ...o }));
+  }, [selectedIds, objects, getDescendants]);
 
   const pasteClipboard = useCallback(() => {
     if (clipboard.current.length === 0) return;
-    const newObjects: CanvasObject[] = clipboard.current.map((o) => ({
-      ...o,
-      id: `${o.type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      name: `${o.name} copy`,
-      x: o.x + 20,
-      y: o.y + 20,
-    }));
+    const newObjects = duplicateTree(
+      clipboard.current,
+      { x: 20, y: 20 },
+      false
+    );
     setObjects((prev) => [...prev, ...newObjects]);
-    setSelectedIds(newObjects.map((o) => o.id));
-  }, []);
+    // Select only the root-level pasted objects
+    const newRootIds = newObjects
+      .filter(
+        (o) => !o.parentId || !newObjects.some((c) => c.id === o.parentId)
+      )
+      .map((o) => o.id);
+    setSelectedIds(newRootIds);
+  }, [duplicateTree]);
 
   const duplicateSelected = useCallback(() => {
     if (selectedIds.length === 0) return;
-    const newObjects: CanvasObject[] = objects
-      .filter((o) => selectedIds.includes(o.id))
-      .map((o) => ({
-        ...o,
-        id: `${o.type}-${Date.now()}-${Math.random()
-          .toString(36)
-          .substr(2, 9)}`,
-        name: `${o.name} copy`,
-        x: o.x + 20,
-        y: o.y + 20,
-      }));
+    // Get selected objects and all their descendants
+    const selected = objects.filter((o) => selectedIds.includes(o.id));
+    const descendants = getDescendants(selectedIds, objects);
+    const allToDupe = [...selected, ...descendants];
+    const newObjects = duplicateTree(allToDupe);
     setObjects((prev) => [...prev, ...newObjects]);
-    setSelectedIds(newObjects.map((o) => o.id));
-  }, [selectedIds, objects]);
+    // Select only the root-level duplicated objects
+    const newRootIds = newObjects
+      .filter(
+        (o) => !o.parentId || !newObjects.some((c) => c.id === o.parentId)
+      )
+      .map((o) => o.id);
+    setSelectedIds(newRootIds);
+  }, [selectedIds, objects, getDescendants, duplicateTree]);
 
   // Alt+drag to duplicate
   const startDuplicateDrag = useCallback(
@@ -1342,44 +1403,68 @@ export function useCanvas() {
       const toDuplicate = selectedIds.includes(objectId)
         ? selectedIds
         : [objectId];
-      const objectsToDupe = objects.filter((o) => toDuplicate.includes(o.id));
+      const selected = objects.filter((o) => toDuplicate.includes(o.id));
+      const descendants = getDescendants(toDuplicate, objects);
+      const allToDupe = [...selected, ...descendants];
 
-      const newObjects: CanvasObject[] = objectsToDupe.map((o) => ({
-        ...o,
-        id: `${o.type}-${Date.now()}-${Math.random()
-          .toString(36)
-          .substr(2, 9)}`,
-        name: `${o.name} copy`,
-      }));
+      const newObjects = duplicateTree(allToDupe, { x: 0, y: 0 }, true);
 
       setObjects((prev) => [...prev, ...newObjects]);
-      setSelectedIds(newObjects.map((o) => o.id));
 
-      // Start dragging the new objects
+      // Select only the root-level duplicated objects
+      const newRootIds = newObjects
+        .filter(
+          (o) => !o.parentId || !newObjects.some((c) => c.id === o.parentId)
+        )
+        .map((o) => o.id);
+      setSelectedIds(newRootIds);
+
+      // Start dragging the new root objects
       setIsDragging(true);
       dragStart.current = canvasPoint;
-      dragObjectsStart.current = newObjects.map((o) => ({
+      const rootObjects = newObjects.filter((o) => newRootIds.includes(o.id));
+      dragObjectsStart.current = rootObjects.map((o) => ({
         id: o.id,
         x: o.x,
         y: o.y,
       }));
 
       // Set initial bounds for snapping
-      const bounds = getSelectionBounds(
-        newObjects,
-        newObjects.map((o) => o.id)
-      );
+      const bounds = getSelectionBounds(rootObjects, newRootIds);
       dragBoundsStart.current = bounds ? { x: bounds.x, y: bounds.y } : null;
     },
-    [objects, selectedIds, getSelectionBounds]
+    [objects, selectedIds, getSelectionBounds, getDescendants, duplicateTree]
   );
 
   const deleteSelected = useCallback(() => {
     if (selectedIds.length === 0) return;
-    setObjects((prev) => prev.filter((o) => !selectedIds.includes(o.id)));
+    // Delete selected and all their descendants
+    const descendants = getDescendants(selectedIds, objects);
+    const toDelete = new Set([...selectedIds, ...descendants.map((d) => d.id)]);
+    setObjects((prev) => prev.filter((o) => !toDelete.has(o.id)));
     setSelectedIds([]);
     setEditingTextId(null);
-  }, [selectedIds]);
+  }, [selectedIds, objects, getDescendants]);
+
+  // Select all siblings within the current parent
+  const selectAllSiblings = useCallback(() => {
+    if (selectedIds.length === 0) {
+      // Nothing selected - select all root objects
+      const rootIds = objects
+        .filter((o) => o.parentId === null)
+        .map((o) => o.id);
+      setSelectedIds(rootIds);
+    } else {
+      // Get the parent of the first selected object
+      const firstSelected = objects.find((o) => o.id === selectedIds[0]);
+      const parentId = firstSelected?.parentId ?? null;
+      // Select all siblings with the same parent
+      const siblingIds = objects
+        .filter((o) => o.parentId === parentId)
+        .map((o) => o.id);
+      setSelectedIds(siblingIds);
+    }
+  }, [selectedIds, objects]);
 
   // Add image object
   const addImage = useCallback(
@@ -1511,6 +1596,7 @@ export function useCanvas() {
     duplicateSelected,
     startDuplicateDrag,
     deleteSelected,
+    selectAllSiblings,
     addImage,
     updateObject,
     updateTextContent,

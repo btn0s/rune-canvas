@@ -277,6 +277,7 @@ export function Canvas() {
     duplicateSelected,
     startDuplicateDrag,
     deleteSelected,
+    selectAllSiblings,
     addImage,
     updateTextContent,
     updateObject,
@@ -284,6 +285,9 @@ export function Canvas() {
 
   // Space key held for temporary pan
   const [spaceHeld, setSpaceHeld] = useState(false);
+
+  // Debug mode for hitbox visualization
+  const [debugMode, setDebugMode] = useState(false);
 
   // Draw interaction layer
   const draw = useCallback(() => {
@@ -765,7 +769,7 @@ export function Canvas() {
       if (e.key === "r") setTool("rectangle");
       if (e.key === "t") setTool("text");
 
-      // Copy/Paste/Delete
+      // Copy/Paste/Delete/Select All
       if ((e.metaKey || e.ctrlKey) && e.key === "c") {
         e.preventDefault();
         copySelected();
@@ -777,6 +781,11 @@ export function Canvas() {
       if ((e.metaKey || e.ctrlKey) && e.key === "d") {
         e.preventDefault();
         duplicateSelected();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        e.stopPropagation();
+        selectAllSiblings();
       }
       if (e.key === "Backspace" || e.key === "Delete") {
         e.preventDefault();
@@ -790,10 +799,10 @@ export function Canvas() {
       }
     };
 
-    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, { capture: true });
     window.addEventListener("keyup", onKeyUp);
     return () => {
-      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keydown", onKeyDown, { capture: true });
       window.removeEventListener("keyup", onKeyUp);
     };
   }, [
@@ -802,6 +811,7 @@ export function Canvas() {
     pasteClipboard,
     duplicateSelected,
     deleteSelected,
+    selectAllSiblings,
   ]);
 
   // Image drop handlers
@@ -1017,6 +1027,7 @@ export function Canvas() {
           transform={transform}
           containerRef={containerRef as React.RefObject<HTMLDivElement>}
           onSelect={select}
+          debug={debugMode}
         />
 
         {/* Property panel */}
@@ -1031,6 +1042,18 @@ export function Canvas() {
         <div className="absolute bottom-4 left-4 px-3 py-1.5 bg-card border border-border rounded-md text-xs font-mono text-muted-foreground">
           {Math.round(transform.scale * 100)}%
         </div>
+
+        {/* Debug toggle */}
+        <button
+          onClick={() => setDebugMode(!debugMode)}
+          className={`absolute top-4 right-4 px-2 py-1 text-xs font-mono rounded transition-colors ${
+            debugMode
+              ? "bg-red-500/20 text-red-400 border border-red-500/50"
+              : "bg-zinc-800/50 text-zinc-500 border border-zinc-700 hover:bg-zinc-700/50"
+          }`}
+        >
+          {debugMode ? "Debug ON" : "Debug"}
+        </button>
       </div>
     </TooltipProvider>
   );
