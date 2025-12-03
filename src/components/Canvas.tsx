@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useCanvas } from "../lib/useCanvas";
 import type { ResizeHandle, Tool } from "../lib/types";
 import { Toggle } from "@/components/ui/toggle";
@@ -259,6 +259,9 @@ export function Canvas() {
     startDuplicateDrag,
     deleteSelected,
   } = useCanvas();
+
+  // Space key held for temporary pan
+  const [spaceHeld, setSpaceHeld] = useState(false);
 
   // Draw interaction layer
   const draw = useCallback(() => {
@@ -594,8 +597,8 @@ export function Canvas() {
     const screenY = e.clientY - rect.top;
     const canvasPoint = screenToCanvas(screenX, screenY);
 
-    // Middle click or hand tool to pan
-    if (e.button === 1 || (e.button === 0 && tool === "hand")) {
+    // Middle click, hand tool, or space held to pan
+    if (e.button === 1 || (e.button === 0 && (tool === "hand" || spaceHeld))) {
       startPan({ x: e.clientX, y: e.clientY });
       return;
     }
@@ -652,6 +655,13 @@ export function Canvas() {
   // Keyboard shortcuts
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // Space to temporarily pan
+      if (e.key === " " && !e.repeat) {
+        e.preventDefault();
+        setSpaceHeld(true);
+        return;
+      }
+
       // Tool shortcuts
       if (e.key === "v" || e.key === "Escape") setTool("select");
       if (e.key === "h") setTool("hand");
@@ -677,8 +687,19 @@ export function Canvas() {
         deleteSelected();
       }
     };
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === " ") {
+        setSpaceHeld(false);
+      }
+    };
+
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
   }, [
     setTool,
     copySelected,
@@ -689,7 +710,7 @@ export function Canvas() {
 
   const cursor = isPanning
     ? "grabbing"
-    : tool === "hand"
+    : tool === "hand" || spaceHeld
     ? "grab"
     : tool === "frame" || tool === "rectangle"
     ? "crosshair"
