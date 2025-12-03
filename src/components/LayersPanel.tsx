@@ -1,5 +1,5 @@
 import { Frame } from "../lib/types";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface LayersPanelProps {
   frames: Frame[];
@@ -13,34 +13,66 @@ export function LayersPanel({
   onSelect,
 }: LayersPanelProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [animatedIds, setAnimatedIds] = useState<Set<string>>(new Set());
+  const prevFrameIds = useRef<Set<string>>(new Set());
+
+  // Track new frames for animation
+  useEffect(() => {
+    const currentIds = new Set(frames.map((f) => f.id));
+    const newIds = frames
+      .filter((f) => !prevFrameIds.current.has(f.id))
+      .map((f) => f.id);
+
+    if (newIds.length > 0) {
+      // Mark new frames as animating
+      setAnimatedIds((prev) => new Set([...prev, ...newIds]));
+
+      // Remove animation class after animation completes
+      setTimeout(() => {
+        setAnimatedIds((prev) => {
+          const next = new Set(prev);
+          newIds.forEach((id) => next.delete(id));
+          return next;
+        });
+      }, 300);
+    }
+
+    prevFrameIds.current = currentIds;
+  }, [frames]);
 
   // Reverse frames so top-most appears first
   const reversedFrames = [...frames].reverse();
 
   return (
     <div
-      className="absolute left-4 top-1/2 -translate-y-1/2 flex flex-col gap-1 p-2 rounded-lg bg-zinc-900/50 backdrop-blur-sm transition-all duration-300 ease-out"
+      className="absolute left-4 top-1/2 -translate-y-1/2 flex flex-col p-2 rounded-lg bg-zinc-900/50 backdrop-blur-sm transition-all duration-300 ease-out"
       style={{
         width: isHovered ? "auto" : "fit-content",
         minWidth: isHovered ? 140 : 40,
+        gap: isHovered ? 4 : 2,
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {reversedFrames.map((frame) => {
         const isSelected = selectedIds.includes(frame.id);
+        const isNew = animatedIds.has(frame.id);
         return (
           <div
             key={frame.id}
             className={`
-              relative h-5 flex items-center cursor-pointer rounded
+              relative flex items-center cursor-pointer rounded
               transition-all duration-300 ease-out overflow-hidden
               ${isSelected ? "bg-blue-500/20" : "hover:bg-zinc-800"}
             `}
             style={{
               width: isHovered ? "100%" : 24,
+              height: isHovered ? 20 : 2,
               paddingLeft: isHovered ? 8 : 0,
               paddingRight: isHovered ? 8 : 0,
+              opacity: isNew ? 0 : 1,
+              transform: isNew ? "translateX(-10px)" : "translateX(0)",
+              animation: isNew ? "slideIn 300ms ease-out forwards" : undefined,
             }}
             onClick={(e) => {
               if (e.shiftKey) {
@@ -50,15 +82,13 @@ export function LayersPanel({
               }
             }}
           >
-            {/* Collapsed line */}
+            {/* Collapsed line (visible when not hovered) */}
             <div
               className={`
-                absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
-                h-[2px] rounded-full transition-all duration-300 ease-out
+                absolute inset-0 rounded-full transition-opacity duration-300 ease-out
                 ${isSelected ? "bg-blue-400" : "bg-zinc-500"}
               `}
               style={{
-                width: isHovered ? 0 : 20,
                 opacity: isHovered ? 0 : 1,
               }}
             />
@@ -78,6 +108,18 @@ export function LayersPanel({
           </div>
         );
       })}
+      <style>{`
+        @keyframes slideIn {
+          from {
+            opacity: 0;
+            transform: translateX(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
+      `}</style>
     </div>
   );
 }
