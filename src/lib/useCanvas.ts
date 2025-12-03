@@ -881,7 +881,13 @@ export function useCanvas() {
       const newBoundsX = dragBoundsStart.current.x + dx;
       const newBoundsY = dragBoundsStart.current.y + dy;
 
-      const otherObjects = objects.filter((o) => !selectedIds.includes(o.id));
+      // Exclude selected objects and all their descendants from snapping
+      const descendants = getDescendants(selectedIds, objects);
+      const excludeIds = new Set([
+        ...selectedIds,
+        ...descendants.map((d) => d.id),
+      ]);
+      const otherObjects = objects.filter((o) => !excludeIds.has(o.id));
       const snapped = calculateSnapping(
         {
           x: newBoundsX,
