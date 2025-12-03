@@ -201,95 +201,29 @@ function calculateSnapping(
     });
   }
 
-  // Dimension snapping (width/height matching) - only during resize/create
-  if (mode === "resize" || mode === "create") {
-    const isChangingWidth =
-      mode === "create" ||
-      (resizeHandle &&
-        (resizeHandle.includes("e") || resizeHandle.includes("w")));
-    const isChangingHeight =
-      mode === "create" ||
-      (resizeHandle &&
-        (resizeHandle.includes("n") || resizeHandle.includes("s")));
-
-    if (isChangingWidth) {
-      const matchingWidthObjects = otherObjects.filter(
-        (o) => Math.abs(o.width - width) < SNAP_THRESHOLD
-      );
-      if (matchingWidthObjects.length > 0) {
-        const targetWidth = matchingWidthObjects[0].width;
-        const oldWidth = width;
-        width = targetWidth;
-        if (resizeHandle?.includes("w")) {
-          x += oldWidth - width;
-        }
-        for (const matchObj of matchingWidthObjects) {
-          const canvasPos = getCanvasPosition(matchObj, allObjects);
-          guides.push({
-            type: "width",
-            position: targetWidth,
-            refFrame: {
-              x: canvasPos.x,
-              y: canvasPos.y,
-              width: matchObj.width,
-              height: matchObj.height,
-            },
-          });
-        }
-      }
+  // Edge snapping during resize
+  if (mode === "resize" && resizeHandle) {
+    if (resizeHandle.includes("e")) {
+      trySnapX(x + width, (v) => {
+        width = v - x;
+      });
     }
-
-    if (isChangingHeight) {
-      const matchingHeightObjects = otherObjects.filter(
-        (o) => Math.abs(o.height - height) < SNAP_THRESHOLD
-      );
-      if (matchingHeightObjects.length > 0) {
-        const targetHeight = matchingHeightObjects[0].height;
-        const oldHeight = height;
-        height = targetHeight;
-        if (resizeHandle?.includes("n")) {
-          y += oldHeight - height;
-        }
-        for (const matchObj of matchingHeightObjects) {
-          const canvasPos = getCanvasPosition(matchObj, allObjects);
-          guides.push({
-            type: "height",
-            position: targetHeight,
-            refFrame: {
-              x: canvasPos.x,
-              y: canvasPos.y,
-              width: matchObj.width,
-              height: matchObj.height,
-            },
-          });
-        }
-      }
+    if (resizeHandle.includes("w")) {
+      trySnapX(x, (v) => {
+        width = width + (x - v);
+        x = v;
+      });
     }
-
-    // Edge snapping during resize
-    if (resizeHandle) {
-      if (resizeHandle.includes("e")) {
-        trySnapX(x + width, (v) => {
-          width = v - x;
-        });
-      }
-      if (resizeHandle.includes("w")) {
-        trySnapX(x, (v) => {
-          width = width + (x - v);
-          x = v;
-        });
-      }
-      if (resizeHandle.includes("s")) {
-        trySnapY(y + height, (v) => {
-          height = v - y;
-        });
-      }
-      if (resizeHandle.includes("n")) {
-        trySnapY(y, (v) => {
-          height = height + (y - v);
-          y = v;
-        });
-      }
+    if (resizeHandle.includes("s")) {
+      trySnapY(y + height, (v) => {
+        height = v - y;
+      });
+    }
+    if (resizeHandle.includes("n")) {
+      trySnapY(y, (v) => {
+        height = height + (y - v);
+        y = v;
+      });
     }
   }
 
@@ -564,6 +498,12 @@ export function useCanvas() {
     null
   );
 
+  // Reparent delay timer
+  const reparentTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingParentId = useRef<string | null>(null);
+  const lastDragPoint = useRef<Point | null>(null);
+  const REPARENT_DELAY = 150; // ms
+
   const createStart = useRef<Point | null>(null);
   const objectCounter = useRef(1);
   const dragStart = useRef<Point | null>(null);
@@ -702,42 +642,76 @@ export function useCanvas() {
       const creatingObj = objects.find((o) => o.id === creatingId);
       if (!creatingObj) return;
 
-      // Calculate in canvas space
-      let x = Math.min(start.x, canvasPoint.x);
-      let y = Math.min(start.y, canvasPoint.y);
-      let width = Math.abs(canvasPoint.x - start.x);
-      let height = Math.abs(canvasPoint.y - start.y);
+      // For creation, the start point is FIXED - only snap the end point
+      let endX = canvasPoint.x;
+      let endY = canvasPoint.y;
+      const guides: Guide[] = [];
 
+      // Collect snap targets from other objects
       const otherObjects = objects.filter((o) => o.id !== creatingId);
-      const snapped = calculateSnapping(
-        { x, y, width, height },
-        otherObjects,
-        objects,
-        "create"
-      );
+      const xTargets: number[] = [];
+      const yTargets: number[] = [];
 
-      // Convert snapped position to relative if object has a parent
-      let finalX = snapped.x;
-      let finalY = snapped.y;
+      for (const other of otherObjects) {
+        const canvasPos = getCanvasPosition(other, objects);
+        xTargets.push(
+          canvasPos.x,
+          canvasPos.x + other.width,
+          canvasPos.x + other.width / 2
+        );
+        yTargets.push(
+          canvasPos.y,
+          canvasPos.y + other.height,
+          canvasPos.y + other.height / 2
+        );
+      }
+
+      // Snap end point X
+      for (const target of xTargets) {
+        if (Math.abs(endX - target) < SNAP_THRESHOLD) {
+          endX = target;
+          guides.push({ type: "vertical", position: target });
+          break;
+        }
+      }
+
+      // Snap end point Y
+      for (const target of yTargets) {
+        if (Math.abs(endY - target) < SNAP_THRESHOLD) {
+          endY = target;
+          guides.push({ type: "horizontal", position: target });
+          break;
+        }
+      }
+
+      // Calculate bounding box from fixed start and snapped end
+      const finalWidth = Math.abs(endX - start.x);
+      const finalHeight = Math.abs(endY - start.y);
+      const finalX = Math.min(start.x, endX);
+      const finalY = Math.min(start.y, endY);
+
+      // Convert to relative if object has a parent
+      let relativeX = finalX;
+      let relativeY = finalY;
       if (creatingObj.parentId) {
         const parent = objects.find((o) => o.id === creatingObj.parentId);
         if (parent) {
           const parentCanvasPos = getCanvasPosition(parent, objects);
-          finalX = snapped.x - parentCanvasPos.x;
-          finalY = snapped.y - parentCanvasPos.y;
+          relativeX = finalX - parentCanvasPos.x;
+          relativeY = finalY - parentCanvasPos.y;
         }
       }
 
-      setGuides(snapped.guides);
+      setGuides(guides);
       setObjects((prev) =>
         prev.map((o) =>
           o.id === creatingId
             ? {
                 ...o,
-                x: finalX,
-                y: finalY,
-                width: snapped.width,
-                height: snapped.height,
+                x: relativeX,
+                y: relativeY,
+                width: finalWidth,
+                height: finalHeight,
               }
             : o
         )
@@ -793,6 +767,10 @@ export function useCanvas() {
   // Track clicked frame for potential deselect-on-mouseup
   const clickedFrameId = useRef<string | null>(null);
   const didDrag = useRef(false);
+  // Track if shift was held on mousedown (for deselect on mouseup)
+  const shiftOnMouseDown = useRef(false);
+  // Track locked axis for shift-drag constraint
+  const dragLockedAxis = useRef<"x" | "y" | null>(null);
 
   const startDrag = useCallback(
     (objectId: string, canvasPoint: Point, addToSelection = false) => {
@@ -801,19 +779,14 @@ export function useCanvas() {
 
       const isAlreadySelected = selectedIds.includes(objectId);
 
-      // Shift+click on selected object = deselect it (no drag)
-      if (addToSelection && isAlreadySelected) {
-        setSelectedIds(selectedIds.filter((id) => id !== objectId));
-        return;
-      }
-
       // Reset drag tracking
       clickedFrameId.current = objectId;
       didDrag.current = false;
+      shiftOnMouseDown.current = addToSelection;
 
       // Determine new selection
       let newSelectedIds: string[];
-      if (addToSelection) {
+      if (addToSelection && !isAlreadySelected) {
         // Shift+click unselected = add to selection
         newSelectedIds = [...selectedIds, objectId];
       } else if (isAlreadySelected) {
@@ -846,7 +819,7 @@ export function useCanvas() {
   );
 
   const updateDrag = useCallback(
-    (canvasPoint: Point) => {
+    (canvasPoint: Point, shiftKey = false) => {
       if (
         !isDragging ||
         !dragStart.current ||
@@ -855,12 +828,32 @@ export function useCanvas() {
       )
         return;
 
-      const dx = canvasPoint.x - dragStart.current.x;
-      const dy = canvasPoint.y - dragStart.current.y;
+      // Store last drag point for reparent timer
+      lastDragPoint.current = canvasPoint;
+
+      let dx = canvasPoint.x - dragStart.current.x;
+      let dy = canvasPoint.y - dragStart.current.y;
 
       // Mark as dragged if moved more than 2px
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
         didDrag.current = true;
+      }
+
+      // Shift-drag: lock to axis based on initial movement direction
+      if (shiftKey && didDrag.current) {
+        // Determine locked axis on first significant movement
+        if (!dragLockedAxis.current) {
+          dragLockedAxis.current = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+        }
+        // Constrain movement to locked axis
+        if (dragLockedAxis.current === "x") {
+          dy = 0;
+        } else {
+          dx = 0;
+        }
+      } else {
+        // Reset locked axis when shift is released
+        dragLockedAxis.current = null;
       }
 
       // Compute current bounding box dimensions from starting objects (canvas space)
@@ -919,7 +912,7 @@ export function useCanvas() {
         })
       );
 
-      // Calculate potential parent for nesting feedback
+      // Calculate potential parent for nesting with delay
       if (selectedIds.length === 1) {
         const dragged = objects.find((o) => o.id === selectedIds[0]);
         if (dragged) {
@@ -965,9 +958,70 @@ export function useCanvas() {
             }
           }
 
-          setPotentialParentId(targetFrame?.id ?? null);
+          const newTargetId = targetFrame?.id ?? null;
+
+          // If target changed, reset timer
+          if (newTargetId !== pendingParentId.current) {
+            if (reparentTimer.current) {
+              clearTimeout(reparentTimer.current);
+              reparentTimer.current = null;
+            }
+            pendingParentId.current = newTargetId;
+
+            // If we have a new target and it's different from current parent, start timer
+            if (newTargetId && newTargetId !== dragged.parentId) {
+              reparentTimer.current = setTimeout(() => {
+                // Immediately reparent when timer fires
+                setPotentialParentId(newTargetId);
+                setObjects((prev) => {
+                  const obj = prev.find((o) => o.id === dragged.id);
+                  const newParent = prev.find((o) => o.id === newTargetId);
+                  if (!obj || !newParent) return prev;
+
+                  const canvasPos = getCanvasPosition(obj, prev);
+                  const parentCanvasPos = getCanvasPosition(newParent, prev);
+
+                  // Calculate new relative position
+                  const newRelX = canvasPos.x - parentCanvasPos.x;
+                  const newRelY = canvasPos.y - parentCanvasPos.y;
+
+                  // Reset drag references to current position so drag continues smoothly
+                  if (lastDragPoint.current) {
+                    dragStart.current = lastDragPoint.current;
+                    dragBoundsStart.current = {
+                      x: canvasPos.x,
+                      y: canvasPos.y,
+                    };
+                    dragObjectsStart.current = [
+                      { id: dragged.id, x: newRelX, y: newRelY },
+                    ];
+                  }
+
+                  return prev.map((o) =>
+                    o.id === dragged.id
+                      ? {
+                          ...o,
+                          parentId: newTargetId,
+                          x: newRelX,
+                          y: newRelY,
+                        }
+                      : o
+                  );
+                });
+                reparentTimer.current = null;
+              }, REPARENT_DELAY);
+            } else if (!newTargetId || newTargetId === dragged.parentId) {
+              // No target or same as current parent - clear highlight
+              setPotentialParentId(null);
+            }
+          }
         }
       } else {
+        if (reparentTimer.current) {
+          clearTimeout(reparentTimer.current);
+          reparentTimer.current = null;
+        }
+        pendingParentId.current = null;
         setPotentialParentId(null);
       }
     },
@@ -975,100 +1029,79 @@ export function useCanvas() {
   );
 
   const endDrag = useCallback(() => {
-    // If clicked on a selected object but didn't drag, deselect others
-    if (
-      clickedFrameId.current &&
-      !didDrag.current &&
-      selectedIds.length > 1 &&
-      selectedIds.includes(clickedFrameId.current)
-    ) {
-      setSelectedIds([clickedFrameId.current]);
+    // Clear reparent timer
+    if (reparentTimer.current) {
+      clearTimeout(reparentTimer.current);
+      reparentTimer.current = null;
+    }
+    pendingParentId.current = null;
+
+    // Handle click-without-drag scenarios
+    if (clickedFrameId.current && !didDrag.current) {
+      if (
+        shiftOnMouseDown.current &&
+        selectedIds.includes(clickedFrameId.current)
+      ) {
+        // Shift+click on selected object without dragging = deselect it
+        setSelectedIds(
+          selectedIds.filter((id) => id !== clickedFrameId.current)
+        );
+      } else if (
+        !shiftOnMouseDown.current &&
+        selectedIds.length > 1 &&
+        selectedIds.includes(clickedFrameId.current)
+      ) {
+        // Click on selected object without shift = select only this one
+        setSelectedIds([clickedFrameId.current]);
+      }
     }
 
-    // Auto-nesting: check if dragged objects should be nested into a frame
-    if (didDrag.current && selectedIds.length > 0) {
+    // Handle unnesting: if object has a parent but is now outside all frames, unnest it
+    if (didDrag.current && selectedIds.length === 1) {
       setObjects((prev) => {
-        const draggedObjects = prev.filter((o) => selectedIds.includes(o.id));
+        const dragged = prev.find((o) => o.id === selectedIds[0]);
+        if (!dragged || !dragged.parentId) return prev;
+
+        const draggedCanvasPos = getCanvasPosition(dragged, prev);
+        const draggedCenter = {
+          x: draggedCanvasPos.x + dragged.width / 2,
+          y: draggedCanvasPos.y + dragged.height / 2,
+        };
+
+        // Check if still inside any frame
         const frames = prev.filter(
-          (o) => o.type === "frame" && !selectedIds.includes(o.id)
+          (o) => o.type === "frame" && o.id !== dragged.id
         );
 
-        // For each dragged object, check if it should be nested
-        let updated = [...prev];
-        for (const dragged of draggedObjects) {
-          const draggedCanvasPos = getCanvasPosition(dragged, prev);
-          const draggedCenter = {
-            x: draggedCanvasPos.x + dragged.width / 2,
-            y: draggedCanvasPos.y + dragged.height / 2,
-          };
-
-          // Find the smallest frame that contains the dragged object's center
-          let targetFrame: CanvasObject | null = null;
-          let smallestArea = Infinity;
-
-          for (const frame of frames) {
-            // Don't nest into own children
-            let isDescendant = false;
-            let checkId: string | null = frame.id;
-            while (checkId) {
-              const check = prev.find((o) => o.id === checkId);
-              if (check?.parentId === dragged.id) {
-                isDescendant = true;
-                break;
-              }
-              checkId = check?.parentId ?? null;
-            }
-            if (isDescendant) continue;
-
-            const frameCanvasPos = getCanvasPosition(frame, prev);
-            const inBounds =
-              draggedCenter.x >= frameCanvasPos.x &&
-              draggedCenter.x <= frameCanvasPos.x + frame.width &&
-              draggedCenter.y >= frameCanvasPos.y &&
-              draggedCenter.y <= frameCanvasPos.y + frame.height;
-
-            if (inBounds) {
-              const area = frame.width * frame.height;
-              if (area < smallestArea) {
-                smallestArea = area;
-                targetFrame = frame;
-              }
-            }
-          }
-
-          // Update parent if needed
-          const currentParentId = dragged.parentId;
-          const newParentId = targetFrame?.id ?? null;
-
-          if (currentParentId !== newParentId) {
-            const objIndex = updated.findIndex((o) => o.id === dragged.id);
-            if (objIndex !== -1) {
-              const obj = updated[objIndex];
-              if (newParentId && targetFrame) {
-                // Nesting into a frame
-                const canvasPos = getCanvasPosition(obj, updated);
-                const parentCanvasPos = getCanvasPosition(targetFrame, updated);
-                updated[objIndex] = {
-                  ...obj,
-                  parentId: newParentId,
-                  x: canvasPos.x - parentCanvasPos.x,
-                  y: canvasPos.y - parentCanvasPos.y,
-                };
-              } else {
-                // Unnesting to root
-                const canvasPos = getCanvasPosition(obj, updated);
-                updated[objIndex] = {
-                  ...obj,
-                  parentId: null,
-                  x: canvasPos.x,
-                  y: canvasPos.y,
-                };
-              }
-            }
+        let insideAnyFrame = false;
+        for (const frame of frames) {
+          const frameCanvasPos = getCanvasPosition(frame, prev);
+          if (
+            draggedCenter.x >= frameCanvasPos.x &&
+            draggedCenter.x <= frameCanvasPos.x + frame.width &&
+            draggedCenter.y >= frameCanvasPos.y &&
+            draggedCenter.y <= frameCanvasPos.y + frame.height
+          ) {
+            insideAnyFrame = true;
+            break;
           }
         }
 
-        return updated;
+        // If outside all frames, unnest to root
+        if (!insideAnyFrame) {
+          return prev.map((o) =>
+            o.id === dragged.id
+              ? {
+                  ...o,
+                  parentId: null,
+                  x: draggedCanvasPos.x,
+                  y: draggedCanvasPos.y,
+                }
+              : o
+          );
+        }
+
+        return prev;
       });
     }
 
@@ -1080,6 +1113,9 @@ export function useCanvas() {
     dragBoundsStart.current = null;
     clickedFrameId.current = null;
     didDrag.current = false;
+    shiftOnMouseDown.current = false;
+    dragLockedAxis.current = null;
+    lastDragPoint.current = null;
   }, [selectedIds]);
 
   // Store resize starting state
@@ -1115,31 +1151,102 @@ export function useCanvas() {
   );
 
   const updateResize = useCallback(
-    (canvasPoint: Point) => {
+    (canvasPoint: Point, shiftKey = false, altKey = false) => {
       if (!isResizing || !resizeStart.current || !resizeBoundsStart.current)
         return;
       const { point: start } = resizeStart.current;
       const { bounds: origBounds, frames: origObjects } =
         resizeBoundsStart.current;
       const handle = resizeHandle.current!;
-      const dx = canvasPoint.x - start.x;
-      const dy = canvasPoint.y - start.y;
+      let dx = canvasPoint.x - start.x;
+      let dy = canvasPoint.y - start.y;
+
+      // Shift: lock aspect ratio
+      if (shiftKey && origBounds.width > 0 && origBounds.height > 0) {
+        const aspectRatio = origBounds.width / origBounds.height;
+        // For corner handles, constrain to aspect ratio
+        if (handle.length === 2) {
+          // Corner handle (nw, ne, sw, se)
+          const absDx = Math.abs(dx);
+          const absDy = Math.abs(dy);
+          if (absDx / aspectRatio > absDy) {
+            // Width is dominant, adjust height
+            dy = (absDx / aspectRatio) * Math.sign(dy || 1);
+            // Correct sign based on handle
+            if (handle.includes("n"))
+              dy =
+                -Math.abs(dy) * Math.sign(dx * (handle.includes("w") ? -1 : 1));
+            if (handle.includes("s"))
+              dy =
+                Math.abs(dy) * Math.sign(dx * (handle.includes("w") ? -1 : 1));
+          } else {
+            // Height is dominant, adjust width
+            dx = absDy * aspectRatio * Math.sign(dx || 1);
+            // Correct sign based on handle
+            if (handle.includes("w"))
+              dx =
+                -Math.abs(dx) * Math.sign(dy * (handle.includes("n") ? -1 : 1));
+            if (handle.includes("e"))
+              dx =
+                Math.abs(dx) * Math.sign(dy * (handle.includes("n") ? -1 : 1));
+          }
+        } else if (handle === "e" || handle === "w") {
+          // Horizontal edge: adjust height based on width change
+          dy = (Math.abs(dx) / aspectRatio) * (handle === "w" ? -1 : 1);
+        } else if (handle === "n" || handle === "s") {
+          // Vertical edge: adjust width based on height change
+          dx = Math.abs(dy) * aspectRatio * (handle === "n" ? -1 : 1);
+        }
+      }
 
       let { x, y, width, height } = origBounds;
+      const centerX = origBounds.x + origBounds.width / 2;
+      const centerY = origBounds.y + origBounds.height / 2;
 
-      if (handle.includes("w")) {
-        x = origBounds.x + dx;
-        width = origBounds.width - dx;
-      }
-      if (handle.includes("e")) {
-        width = origBounds.width + dx;
-      }
-      if (handle.includes("n")) {
-        y = origBounds.y + dy;
-        height = origBounds.height - dy;
-      }
-      if (handle.includes("s")) {
-        height = origBounds.height + dy;
+      // Alt: resize from center (handle follows cursor exactly, opposite edge mirrors)
+      if (altKey) {
+        if (handle.includes("w")) {
+          width = origBounds.width - dx * 2;
+          x = centerX - width / 2;
+        }
+        if (handle.includes("e")) {
+          width = origBounds.width + dx * 2;
+          x = centerX - width / 2;
+        }
+        if (handle.includes("n")) {
+          height = origBounds.height - dy * 2;
+          y = centerY - height / 2;
+        }
+        if (handle.includes("s")) {
+          height = origBounds.height + dy * 2;
+          y = centerY - height / 2;
+        }
+        // For edge handles with shift, also apply the other dimension symmetrically
+        if (shiftKey) {
+          if (handle === "e" || handle === "w") {
+            height = origBounds.height + Math.abs(width - origBounds.width);
+            y = centerY - height / 2;
+          } else if (handle === "n" || handle === "s") {
+            width = origBounds.width + Math.abs(height - origBounds.height);
+            x = centerX - width / 2;
+          }
+        }
+      } else {
+        // Normal resize: opposite corner stays fixed
+        if (handle.includes("w")) {
+          x = origBounds.x + dx;
+          width = origBounds.width - dx;
+        }
+        if (handle.includes("e")) {
+          width = origBounds.width + dx;
+        }
+        if (handle.includes("n")) {
+          y = origBounds.y + dy;
+          height = origBounds.height - dy;
+        }
+        if (handle.includes("s")) {
+          height = origBounds.height + dy;
+        }
       }
 
       if (width < 1) {
@@ -1436,12 +1543,16 @@ export function useCanvas() {
 
   const selectAllSiblings = useCallback(() => {
     if (selectedIds.length === 0) {
-      const rootIds = objects.filter((o) => o.parentId === null).map((o) => o.id);
+      const rootIds = objects
+        .filter((o) => o.parentId === null)
+        .map((o) => o.id);
       setSelectedIds(rootIds);
     } else {
       const firstSelected = objects.find((o) => o.id === selectedIds[0]);
       const parentId = firstSelected?.parentId ?? null;
-      const siblingIds = objects.filter((o) => o.parentId === parentId).map((o) => o.id);
+      const siblingIds = objects
+        .filter((o) => o.parentId === parentId)
+        .map((o) => o.id);
       setSelectedIds(siblingIds);
     }
   }, [selectedIds, objects]);

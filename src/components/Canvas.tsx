@@ -20,7 +20,8 @@ import { LayersPanel } from "./LayersPanel";
 import { PropertyPanel } from "./PropertyPanel";
 
 const HANDLE_SIZE = 8;
-const HANDLES: ResizeHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+const EDGE_HIT_WIDTH = 6; // Pixels from edge to trigger edge resize
+const CORNER_HANDLES: ResizeHandle[] = ["nw", "ne", "se", "sw"];
 
 const TOOLS: {
   id: Tool;
@@ -290,6 +291,9 @@ export function Canvas() {
   // Debug mode for hitbox visualization
   const [debugMode, setDebugMode] = useState(false);
 
+  // Hovered resize handle for cursor
+  const [hoveredHandle, setHoveredHandle] = useState<ResizeHandle | null>(null);
+
   // Draw interaction layer
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -383,60 +387,6 @@ export function Canvas() {
             guide.endBound !== undefined ? toScreenX(guide.endBound) : width;
           drawLine(startX, screenY, endX, screenY);
         } else if (
-          guide.type === "width" &&
-          selectionBounds &&
-          guide.refFrame
-        ) {
-          const frameX = toScreenX(selectionBounds.x);
-          const frameY = toScreenY(selectionBounds.y);
-          const frameW = selectionBounds.width * transform.scale;
-          const refX = toScreenX(guide.refFrame.x);
-          const refY = toScreenY(guide.refFrame.y);
-          const refW = guide.refFrame.width * transform.scale;
-
-          drawLine(frameX, frameY - 16, frameX + frameW, frameY - 16);
-          drawLine(refX, refY - 16, refX + refW, refY - 16);
-          drawLine(
-            frameX + frameW / 2,
-            frameY - 16,
-            refX + refW / 2,
-            refY - 16,
-            true
-          );
-          ctx.setLineDash([]);
-          ctx.fillText(
-            `${Math.round(guide.position ?? 0)}px`,
-            frameX + frameW / 2 - 16,
-            frameY - 20
-          );
-        } else if (
-          guide.type === "height" &&
-          selectionBounds &&
-          guide.refFrame
-        ) {
-          const frameX = toScreenX(selectionBounds.x);
-          const frameY = toScreenY(selectionBounds.y);
-          const frameH = selectionBounds.height * transform.scale;
-          const refX = toScreenX(guide.refFrame.x);
-          const refY = toScreenY(guide.refFrame.y);
-          const refH = guide.refFrame.height * transform.scale;
-
-          drawLine(frameX - 16, frameY, frameX - 16, frameY + frameH);
-          drawLine(refX - 16, refY, refX - 16, refY + refH);
-          drawLine(
-            frameX - 16,
-            frameY + frameH / 2,
-            refX - 16,
-            refY + refH / 2,
-            true
-          );
-          ctx.setLineDash([]);
-          ctx.save();
-          ctx.translate(frameX - 20, frameY + frameH / 2 + 4);
-          ctx.rotate(-Math.PI / 2);
-          ctx.fillText(`${Math.round(guide.position ?? 0)}px`, 0, 0);
-          ctx.restore();
-        } else if (
           guide.type === "gap" &&
           guide.distance !== undefined &&
           guide.gapStart !== undefined &&
@@ -504,24 +454,19 @@ export function Canvas() {
       ctx.lineWidth = 1;
       ctx.strokeRect(x, y, w, h);
 
-      // 2. Resize handles
+      // 2. Resize handles (corners only)
       ctx.fillStyle = "#fff";
       ctx.strokeStyle = "#3b82f6";
       const hs = HANDLE_SIZE;
 
-      const handlePositions: Record<ResizeHandle, [number, number]> = {
-        nw: [x - hs / 2, y - hs / 2],
-        n: [x + w / 2 - hs / 2, y - hs / 2],
-        ne: [x + w - hs / 2, y - hs / 2],
-        e: [x + w - hs / 2, y + h / 2 - hs / 2],
-        se: [x + w - hs / 2, y + h - hs / 2],
-        s: [x + w / 2 - hs / 2, y + h - hs / 2],
-        sw: [x - hs / 2, y + h - hs / 2],
-        w: [x - hs / 2, y + h / 2 - hs / 2],
-      };
+      const cornerPositions: [number, number][] = [
+        [x - hs / 2, y - hs / 2], // nw
+        [x + w - hs / 2, y - hs / 2], // ne
+        [x + w - hs / 2, y + h - hs / 2], // se
+        [x - hs / 2, y + h - hs / 2], // sw
+      ];
 
-      HANDLES.forEach((handle) => {
-        const [hx, hy] = handlePositions[handle];
+      cornerPositions.forEach(([hx, hy]) => {
         ctx.fillRect(hx, hy, hs, hs);
         ctx.strokeRect(hx, hy, hs, hs);
       });
@@ -584,7 +529,7 @@ export function Canvas() {
     return () => container.removeEventListener("wheel", onWheel);
   }, [handleWheel]);
 
-  // Hit test resize handles on selection bounds
+  // Hit test resize handles and edges on selection bounds
   const hitTestHandle = useCallback(
     (screenX: number, screenY: number): ResizeHandle | null => {
       if (!selectionBounds) return null;
@@ -594,19 +539,16 @@ export function Canvas() {
       const h = selectionBounds.height * transform.scale;
       const hs = HANDLE_SIZE;
 
-      const handlePositions: Record<ResizeHandle, [number, number]> = {
+      // Test corner handles first
+      const cornerPositions: Record<string, [number, number]> = {
         nw: [x - hs / 2, y - hs / 2],
-        n: [x + w / 2 - hs / 2, y - hs / 2],
         ne: [x + w - hs / 2, y - hs / 2],
-        e: [x + w - hs / 2, y + h / 2 - hs / 2],
         se: [x + w - hs / 2, y + h - hs / 2],
-        s: [x + w / 2 - hs / 2, y + h - hs / 2],
         sw: [x - hs / 2, y + h - hs / 2],
-        w: [x - hs / 2, y + h / 2 - hs / 2],
       };
 
-      for (const handle of HANDLES) {
-        const [hx, hy] = handlePositions[handle];
+      for (const handle of CORNER_HANDLES) {
+        const [hx, hy] = cornerPositions[handle];
         if (
           screenX >= hx &&
           screenX <= hx + hs &&
@@ -616,6 +558,47 @@ export function Canvas() {
           return handle;
         }
       }
+
+      // Test edges (selection border)
+      const edgeHit = EDGE_HIT_WIDTH;
+
+      // North edge
+      if (
+        screenX >= x + hs &&
+        screenX <= x + w - hs &&
+        screenY >= y - edgeHit &&
+        screenY <= y + edgeHit
+      ) {
+        return "n";
+      }
+      // South edge
+      if (
+        screenX >= x + hs &&
+        screenX <= x + w - hs &&
+        screenY >= y + h - edgeHit &&
+        screenY <= y + h + edgeHit
+      ) {
+        return "s";
+      }
+      // West edge
+      if (
+        screenX >= x - edgeHit &&
+        screenX <= x + edgeHit &&
+        screenY >= y + hs &&
+        screenY <= y + h - hs
+      ) {
+        return "w";
+      }
+      // East edge
+      if (
+        screenX >= x + w - edgeHit &&
+        screenX <= x + w + edgeHit &&
+        screenY >= y + hs &&
+        screenY <= y + h - hs
+      ) {
+        return "e";
+      }
+
       return null;
     },
     [selectionBounds, transform]
@@ -692,6 +675,7 @@ export function Canvas() {
       // Check resize handles first (only for single selection)
       const handle = hitTestHandle(screenX, screenY);
       if (handle) {
+        setHoveredHandle(handle);
         startResize(handle, canvasPoint);
         return;
       }
@@ -737,11 +721,16 @@ export function Canvas() {
     } else if (isCreating) {
       updateCreate(canvasPoint);
     } else if (isDragging) {
-      updateDrag(canvasPoint);
+      updateDrag(canvasPoint, e.shiftKey);
     } else if (isResizing) {
-      updateResize(canvasPoint);
+      updateResize(canvasPoint, e.shiftKey, e.altKey);
     } else if (isMarqueeSelecting) {
       updateMarquee(canvasPoint);
+    } else if (tool === "select") {
+      // Check for handle hover when idle
+      setHoveredHandle(hitTestHandle(screenX, screenY));
+    } else {
+      setHoveredHandle(null);
     }
   };
 
@@ -749,7 +738,10 @@ export function Canvas() {
     if (isPanning) endPan();
     if (isCreating) endCreate();
     if (isDragging) endDrag();
-    if (isResizing) endResize();
+    if (isResizing) {
+      endResize();
+      setHoveredHandle(null);
+    }
     if (isMarqueeSelecting) endMarquee();
   };
 
@@ -852,12 +844,37 @@ export function Canvas() {
     [screenToCanvas, addImage]
   );
 
+  // Get cursor for resize handle
+  const getHandleCursor = (handle: ResizeHandle | null): string => {
+    if (!handle) return "default";
+    switch (handle) {
+      case "nw":
+      case "se":
+        return "nwse-resize";
+      case "ne":
+      case "sw":
+        return "nesw-resize";
+      case "n":
+      case "s":
+        return "ns-resize";
+      case "e":
+      case "w":
+        return "ew-resize";
+      default:
+        return "default";
+    }
+  };
+
   const cursor = isPanning
     ? "grabbing"
+    : isResizing
+    ? getHandleCursor(hoveredHandle)
     : tool === "hand" || spaceHeld
     ? "grab"
     : tool === "frame" || tool === "rectangle" || tool === "text"
     ? "crosshair"
+    : hoveredHandle
+    ? getHandleCursor(hoveredHandle)
     : "default";
 
   return (
@@ -900,11 +917,7 @@ export function Canvas() {
                 {!obj.parentId && (
                   <div
                     className={`absolute whitespace-nowrap pointer-events-none select-none ${
-                      isSelected
-                        ? "text-blue-400"
-                        : isPotentialParent
-                        ? "text-green-400"
-                        : "text-zinc-500"
+                      isSelected ? "text-blue-400" : "text-zinc-500"
                     }`}
                     style={{
                       bottom: "100%",
@@ -922,7 +935,7 @@ export function Canvas() {
                   <div
                     className={`transition-shadow duration-150 ${
                       isPotentialParent
-                        ? "shadow-[inset_0_0_0_2px_#22c55e]"
+                        ? "shadow-[inset_0_0_0_2px_#3b82f6]"
                         : ""
                     }`}
                     style={{
