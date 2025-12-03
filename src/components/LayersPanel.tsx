@@ -87,7 +87,7 @@ export function LayersPanel({
   return (
     <div
       ref={panelRef}
-      className="absolute left-4 top-1/2 -translate-y-1/2 p-3 -m-3"
+      className="absolute left-4 top-1/2 -translate-y-1/2 p-3 -m-3 select-none"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
