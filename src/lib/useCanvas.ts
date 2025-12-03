@@ -670,14 +670,11 @@ export function useCanvas() {
 
       // Determine new selection
       let newSelectedIds: string[];
-      if (isAlreadySelected) {
-        // Clicking selected frame without shift = drag all selected
-        newSelectedIds = selectedIds;
-      } else if (addToSelection) {
+      if (addToSelection) {
         // Shift+click unselected = add to selection
         newSelectedIds = [...selectedIds, frameId];
       } else {
-        // Click unselected without shift = select only this one
+        // Click without shift = select only this one (deselect others)
         newSelectedIds = [frameId];
       }
 
