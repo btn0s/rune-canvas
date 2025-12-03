@@ -82,16 +82,15 @@ export function LayersPanel({
               }
             }}
           >
-            {/* Collapsed line (visible when not hovered) */}
-            <div
-              className={`
-                absolute inset-0 rounded-full transition-opacity duration-300 ease-out
-                ${isSelected ? "bg-blue-400" : "bg-zinc-500"}
-              `}
-              style={{
-                opacity: isHovered ? 0 : 1,
-              }}
-            />
+            {/* Collapsed line (visible when not hovered) - no transition to avoid ghosts */}
+            {!isHovered && (
+              <div
+                className={`
+                  absolute inset-0 rounded-full
+                  ${isSelected ? "bg-blue-400" : "bg-zinc-500"}
+                `}
+              />
+            )}
             {/* Expanded name */}
             <span
               className={`
