@@ -230,12 +230,14 @@ export function Canvas() {
   const {
     transform,
     frames,
-    selectedFrame,
+    selectedFrames,
     tool,
     isCreating,
     isDragging,
     isResizing,
     isPanning,
+    isMarqueeSelecting,
+    marqueeRect,
     guides,
     setTool,
     screenToCanvas,
@@ -253,6 +255,9 @@ export function Canvas() {
     updatePan,
     endPan,
     select,
+    startMarquee,
+    updateMarquee,
+    endMarquee,
     copySelected,
     pasteClipboard,
     duplicateSelected,
@@ -355,10 +360,15 @@ export function Canvas() {
           const endX =
             guide.endBound !== undefined ? toScreenX(guide.endBound) : width;
           drawLine(startX, screenY, endX, screenY);
-        } else if (guide.type === "width" && selectedFrame && guide.refFrame) {
-          const frameX = toScreenX(selectedFrame.x);
-          const frameY = toScreenY(selectedFrame.y);
-          const frameW = selectedFrame.width * transform.scale;
+        } else if (
+          guide.type === "width" &&
+          selectedFrames[0] &&
+          guide.refFrame
+        ) {
+          const sf = selectedFrames[0];
+          const frameX = toScreenX(sf.x);
+          const frameY = toScreenY(sf.y);
+          const frameW = sf.width * transform.scale;
           const refX = toScreenX(guide.refFrame.x);
           const refY = toScreenY(guide.refFrame.y);
           const refW = guide.refFrame.width * transform.scale;
@@ -378,10 +388,15 @@ export function Canvas() {
             frameX + frameW / 2 - 16,
             frameY - 20
           );
-        } else if (guide.type === "height" && selectedFrame && guide.refFrame) {
-          const frameX = toScreenX(selectedFrame.x);
-          const frameY = toScreenY(selectedFrame.y);
-          const frameH = selectedFrame.height * transform.scale;
+        } else if (
+          guide.type === "height" &&
+          selectedFrames[0] &&
+          guide.refFrame
+        ) {
+          const sf = selectedFrames[0];
+          const frameX = toScreenX(sf.x);
+          const frameY = toScreenY(sf.y);
+          const frameH = sf.height * transform.scale;
           const refX = toScreenX(guide.refFrame.x);
           const refY = toScreenY(guide.refFrame.y);
           const refH = guide.refFrame.height * transform.scale;
@@ -457,19 +472,25 @@ export function Canvas() {
       ctx.setLineDash([]);
     }
 
-    // Draw selection + handles
-    if (selectedFrame) {
-      const x = selectedFrame.x * transform.scale + transform.x;
-      const y = selectedFrame.y * transform.scale + transform.y;
-      const w = selectedFrame.width * transform.scale;
-      const h = selectedFrame.height * transform.scale;
-
-      // Selection outline
-      ctx.strokeStyle = "#3b82f6";
-      ctx.lineWidth = 1;
+    // Draw selection outlines for all selected frames
+    ctx.strokeStyle = "#3b82f6";
+    ctx.lineWidth = 1;
+    for (const sf of selectedFrames) {
+      const x = sf.x * transform.scale + transform.x;
+      const y = sf.y * transform.scale + transform.y;
+      const w = sf.width * transform.scale;
+      const h = sf.height * transform.scale;
       ctx.strokeRect(x, y, w, h);
+    }
 
-      // Resize handles
+    // Draw resize handles only for single selection
+    if (selectedFrames.length === 1) {
+      const sf = selectedFrames[0];
+      const x = sf.x * transform.scale + transform.x;
+      const y = sf.y * transform.scale + transform.y;
+      const w = sf.width * transform.scale;
+      const h = sf.height * transform.scale;
+
       ctx.fillStyle = "#fff";
       ctx.strokeStyle = "#3b82f6";
       const hs = HANDLE_SIZE;
@@ -492,9 +513,7 @@ export function Canvas() {
       });
 
       // Dimension badge below selection
-      const dimLabel = `${Math.round(selectedFrame.width)} × ${Math.round(
-        selectedFrame.height
-      )}`;
+      const dimLabel = `${Math.round(sf.width)} × ${Math.round(sf.height)}`;
       ctx.font = "11px system-ui";
       const dimTextWidth = ctx.measureText(dimLabel).width;
       const dimPillWidth = dimTextWidth + 12;
@@ -510,7 +529,23 @@ export function Canvas() {
       ctx.fillStyle = "#fff";
       ctx.fillText(dimLabel, x + w / 2 - dimTextWidth / 2, dimPillY + 13);
     }
-  }, [transform, selectedFrame, guides]);
+
+    // Draw marquee selection rectangle
+    if (marqueeRect && isMarqueeSelecting) {
+      const mx = marqueeRect.x * transform.scale + transform.x;
+      const my = marqueeRect.y * transform.scale + transform.y;
+      const mw = marqueeRect.width * transform.scale;
+      const mh = marqueeRect.height * transform.scale;
+
+      ctx.strokeStyle = "#3b82f6";
+      ctx.fillStyle = "rgba(59, 130, 246, 0.1)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.fillRect(mx, my, mw, mh);
+      ctx.strokeRect(mx, my, mw, mh);
+      ctx.setLineDash([]);
+    }
+  }, [transform, selectedFrames, guides, marqueeRect, isMarqueeSelecting]);
 
   useEffect(() => {
     draw();
@@ -535,14 +570,15 @@ export function Canvas() {
     return () => container.removeEventListener("wheel", onWheel);
   }, [handleWheel]);
 
-  // Hit test resize handles
+  // Hit test resize handles (only for single selection)
   const hitTestHandle = useCallback(
     (screenX: number, screenY: number): ResizeHandle | null => {
-      if (!selectedFrame) return null;
-      const x = selectedFrame.x * transform.scale + transform.x;
-      const y = selectedFrame.y * transform.scale + transform.y;
-      const w = selectedFrame.width * transform.scale;
-      const h = selectedFrame.height * transform.scale;
+      if (selectedFrames.length !== 1) return null;
+      const sf = selectedFrames[0];
+      const x = sf.x * transform.scale + transform.x;
+      const y = sf.y * transform.scale + transform.y;
+      const w = sf.width * transform.scale;
+      const h = sf.height * transform.scale;
       const hs = HANDLE_SIZE;
 
       const handlePositions: Record<ResizeHandle, [number, number]> = {
@@ -569,7 +605,7 @@ export function Canvas() {
       }
       return null;
     },
-    [selectedFrame, transform]
+    [selectedFrames, transform]
   );
 
   // Hit test frames
@@ -604,7 +640,7 @@ export function Canvas() {
     }
 
     if (tool === "select") {
-      // Check resize handles first
+      // Check resize handles first (only for single selection)
       const handle = hitTestHandle(screenX, screenY);
       if (handle) {
         startResize(handle, canvasPoint);
@@ -618,10 +654,15 @@ export function Canvas() {
         if (e.altKey) {
           startDuplicateDrag(frameId, canvasPoint);
         } else {
-          startDrag(frameId, canvasPoint);
+          // Shift+click to add/remove from selection
+          startDrag(frameId, canvasPoint, e.shiftKey);
         }
       } else {
-        select(null);
+        // Clicked on empty space - start marquee selection or clear selection
+        if (!e.shiftKey) {
+          select(null);
+        }
+        startMarquee(canvasPoint);
       }
     } else if (tool === "frame" || tool === "rectangle") {
       startCreate(canvasPoint);
@@ -642,6 +683,8 @@ export function Canvas() {
       updateDrag(canvasPoint);
     } else if (isResizing) {
       updateResize(canvasPoint);
+    } else if (isMarqueeSelecting) {
+      updateMarquee(canvasPoint);
     }
   };
 
@@ -650,6 +693,7 @@ export function Canvas() {
     if (isCreating) endCreate();
     if (isDragging) endDrag();
     if (isResizing) endResize();
+    if (isMarqueeSelecting) endMarquee();
   };
 
   // Keyboard shortcuts

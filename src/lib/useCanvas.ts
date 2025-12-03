@@ -502,20 +502,28 @@ export function useCanvas() {
     scale: 1,
   });
   const [frames, setFrames] = useState<Frame[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [tool, setTool] = useState<Tool>("frame");
 
   const [isCreating, setIsCreating] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
+  const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
+  const [marqueeRect, setMarqueeRect] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
   const [guides, setGuides] = useState<Guide[]>([]);
 
   const createStart = useRef<Point | null>(null);
   const dragStart = useRef<Point | null>(null);
-  const dragFrameStart = useRef<{ x: number; y: number } | null>(null);
+  const dragFramesStart = useRef<{ id: string; x: number; y: number }[]>([]);
   const resizeHandle = useRef<ResizeHandle | null>(null);
   const resizeStart = useRef<{ frame: Frame; point: Point } | null>(null);
+  const marqueeStart = useRef<Point | null>(null);
 
   const screenToCanvas = useCallback(
     (screenX: number, screenY: number): Point => ({
@@ -567,12 +575,13 @@ export function useCanvas() {
         fill: "#ffffff",
       },
     ]);
-    setSelectedId(id);
+    setSelectedIds([id]);
   }, []);
 
   const updateCreate = useCallback(
     (canvasPoint: Point) => {
-      if (!isCreating || !createStart.current || !selectedId) return;
+      const creatingId = selectedIds[0];
+      if (!isCreating || !createStart.current || !creatingId) return;
       const start = createStart.current;
 
       let x = Math.min(start.x, canvasPoint.x);
@@ -580,7 +589,7 @@ export function useCanvas() {
       let width = Math.abs(canvasPoint.x - start.x);
       let height = Math.abs(canvasPoint.y - start.y);
 
-      const otherFrames = frames.filter((f) => f.id !== selectedId);
+      const otherFrames = frames.filter((f) => f.id !== creatingId);
       const snapped = calculateSnapping(
         { x, y, width, height },
         otherFrames,
@@ -590,7 +599,7 @@ export function useCanvas() {
       setGuides(snapped.guides);
       setFrames((prev) =>
         prev.map((f) =>
-          f.id === selectedId
+          f.id === creatingId
             ? {
                 ...f,
                 x: snapped.x,
@@ -602,16 +611,17 @@ export function useCanvas() {
         )
       );
     },
-    [isCreating, selectedId, frames]
+    [isCreating, selectedIds, frames]
   );
 
   const endCreate = useCallback(() => {
-    if (!selectedId) return;
+    const creatingId = selectedIds[0];
+    if (!creatingId) return;
     setFrames((prev) => {
-      const frame = prev.find((f) => f.id === selectedId);
+      const frame = prev.find((f) => f.id === creatingId);
       if (frame && frame.width < 10 && frame.height < 10) {
-        setSelectedId(null);
-        return prev.filter((f) => f.id !== selectedId);
+        setSelectedIds([]);
+        return prev.filter((f) => f.id !== creatingId);
       }
       return prev;
     });
@@ -619,18 +629,34 @@ export function useCanvas() {
     setGuides([]);
     createStart.current = null;
     setTool("select");
-  }, [selectedId]);
+  }, [selectedIds]);
 
   const startDrag = useCallback(
-    (frameId: string, canvasPoint: Point) => {
+    (frameId: string, canvasPoint: Point, addToSelection = false) => {
       const frame = frames.find((f) => f.id === frameId);
       if (!frame) return;
+
+      // If clicking a selected frame, drag all selected
+      // If clicking an unselected frame, select it (or add to selection with shift)
+      let newSelectedIds: string[];
+      if (selectedIds.includes(frameId)) {
+        newSelectedIds = selectedIds;
+      } else if (addToSelection) {
+        newSelectedIds = [...selectedIds, frameId];
+      } else {
+        newSelectedIds = [frameId];
+      }
+
+      setSelectedIds(newSelectedIds);
       setIsDragging(true);
-      setSelectedId(frameId);
       dragStart.current = canvasPoint;
-      dragFrameStart.current = { x: frame.x, y: frame.y };
+
+      // Store starting positions for all selected frames
+      dragFramesStart.current = frames
+        .filter((f) => newSelectedIds.includes(f.id))
+        .map((f) => ({ id: f.id, x: f.x, y: f.y }));
     },
-    [frames]
+    [frames, selectedIds]
   );
 
   const updateDrag = useCallback(
@@ -638,62 +664,80 @@ export function useCanvas() {
       if (
         !isDragging ||
         !dragStart.current ||
-        !dragFrameStart.current ||
-        !selectedId
+        dragFramesStart.current.length === 0
       )
         return;
 
       const dx = canvasPoint.x - dragStart.current.x;
       const dy = canvasPoint.y - dragStart.current.y;
-      const newX = dragFrameStart.current.x + dx;
-      const newY = dragFrameStart.current.y + dy;
 
-      const draggedFrame = frames.find((f) => f.id === selectedId);
-      if (!draggedFrame) return;
+      // For snapping, use the first selected frame as reference
+      const primaryId = selectedIds[0];
+      const primaryStart = dragFramesStart.current.find(
+        (f) => f.id === primaryId
+      );
+      const primaryFrame = frames.find((f) => f.id === primaryId);
 
-      const otherFrames = frames.filter((f) => f.id !== selectedId);
+      if (!primaryStart || !primaryFrame) return;
+
+      const newX = primaryStart.x + dx;
+      const newY = primaryStart.y + dy;
+
+      const otherFrames = frames.filter((f) => !selectedIds.includes(f.id));
       const snapped = calculateSnapping(
         {
           x: newX,
           y: newY,
-          width: draggedFrame.width,
-          height: draggedFrame.height,
+          width: primaryFrame.width,
+          height: primaryFrame.height,
         },
         otherFrames,
         "move"
       );
 
+      // Calculate the snap delta
+      const snapDx = snapped.x - newX;
+      const snapDy = snapped.y - newY;
+
       setGuides(snapped.guides);
       setFrames((prev) =>
-        prev.map((f) =>
-          f.id === selectedId ? { ...f, x: snapped.x, y: snapped.y } : f
-        )
+        prev.map((f) => {
+          const startPos = dragFramesStart.current.find((s) => s.id === f.id);
+          if (!startPos) return f;
+          return {
+            ...f,
+            x: startPos.x + dx + snapDx,
+            y: startPos.y + dy + snapDy,
+          };
+        })
       );
     },
-    [isDragging, selectedId, frames]
+    [isDragging, selectedIds, frames]
   );
 
   const endDrag = useCallback(() => {
     setIsDragging(false);
     setGuides([]);
     dragStart.current = null;
-    dragFrameStart.current = null;
+    dragFramesStart.current = [];
   }, []);
 
   const startResize = useCallback(
     (handle: ResizeHandle, canvasPoint: Point) => {
-      const frame = frames.find((f) => f.id === selectedId);
+      const primaryId = selectedIds[0];
+      const frame = frames.find((f) => f.id === primaryId);
       if (!frame) return;
       setIsResizing(true);
       resizeHandle.current = handle;
       resizeStart.current = { frame: { ...frame }, point: canvasPoint };
     },
-    [frames, selectedId]
+    [frames, selectedIds]
   );
 
   const updateResize = useCallback(
     (canvasPoint: Point) => {
-      if (!isResizing || !resizeStart.current || !selectedId) return;
+      const primaryId = selectedIds[0];
+      if (!isResizing || !resizeStart.current || !primaryId) return;
       const { frame: orig, point: start } = resizeStart.current;
       const handle = resizeHandle.current!;
       const dx = canvasPoint.x - start.x;
@@ -725,7 +769,7 @@ export function useCanvas() {
         if (handle.includes("n")) y = orig.y + orig.height - 1;
       }
 
-      const otherFrames = frames.filter((f) => f.id !== selectedId);
+      const otherFrames = frames.filter((f) => f.id !== primaryId);
       const snapped = calculateSnapping(
         { x, y, width, height },
         otherFrames,
@@ -736,7 +780,7 @@ export function useCanvas() {
       setGuides(snapped.guides);
       setFrames((prev) =>
         prev.map((f) =>
-          f.id === selectedId
+          f.id === primaryId
             ? {
                 ...f,
                 x: snapped.x,
@@ -748,7 +792,7 @@ export function useCanvas() {
         )
       );
     },
-    [isResizing, selectedId, frames]
+    [isResizing, selectedIds, frames]
   );
 
   const endResize = useCallback(() => {
@@ -779,85 +823,146 @@ export function useCanvas() {
     dragStart.current = null;
   }, []);
 
-  const select = useCallback((id: string | null) => {
-    setSelectedId(id);
+  const select = useCallback((ids: string[] | null, addToSelection = false) => {
+    if (ids === null) {
+      setSelectedIds([]);
+    } else if (addToSelection) {
+      setSelectedIds((prev) => {
+        const newIds = ids.filter((id) => !prev.includes(id));
+        const removedIds = ids.filter((id) => prev.includes(id));
+        if (removedIds.length > 0) {
+          return prev.filter((id) => !removedIds.includes(id));
+        }
+        return [...prev, ...newIds];
+      });
+    } else {
+      setSelectedIds(ids);
+    }
   }, []);
 
+  // Marquee selection
+  const startMarquee = useCallback((canvasPoint: Point) => {
+    setIsMarqueeSelecting(true);
+    marqueeStart.current = canvasPoint;
+    setMarqueeRect({ x: canvasPoint.x, y: canvasPoint.y, width: 0, height: 0 });
+  }, []);
+
+  const updateMarquee = useCallback(
+    (canvasPoint: Point) => {
+      if (!isMarqueeSelecting || !marqueeStart.current) return;
+      const start = marqueeStart.current;
+      const x = Math.min(start.x, canvasPoint.x);
+      const y = Math.min(start.y, canvasPoint.y);
+      const width = Math.abs(canvasPoint.x - start.x);
+      const height = Math.abs(canvasPoint.y - start.y);
+      setMarqueeRect({ x, y, width, height });
+    },
+    [isMarqueeSelecting]
+  );
+
+  const endMarquee = useCallback(() => {
+    if (marqueeRect && marqueeRect.width > 5 && marqueeRect.height > 5) {
+      // Find frames that intersect with marquee
+      const intersecting = frames.filter((f) => {
+        return !(
+          f.x + f.width < marqueeRect.x ||
+          f.x > marqueeRect.x + marqueeRect.width ||
+          f.y + f.height < marqueeRect.y ||
+          f.y > marqueeRect.y + marqueeRect.height
+        );
+      });
+      setSelectedIds(intersecting.map((f) => f.id));
+    }
+    setIsMarqueeSelecting(false);
+    setMarqueeRect(null);
+    marqueeStart.current = null;
+  }, [marqueeRect, frames]);
+
   // Clipboard for copy/paste
-  const clipboard = useRef<Frame | null>(null);
+  const clipboard = useRef<Frame[]>([]);
 
   const copySelected = useCallback(() => {
-    if (!selectedId) return;
-    const frame = frames.find((f) => f.id === selectedId);
-    if (frame) {
-      clipboard.current = { ...frame };
-    }
-  }, [selectedId, frames]);
+    if (selectedIds.length === 0) return;
+    clipboard.current = frames
+      .filter((f) => selectedIds.includes(f.id))
+      .map((f) => ({ ...f }));
+  }, [selectedIds, frames]);
 
   const pasteClipboard = useCallback(() => {
-    if (!clipboard.current) return;
-    const newId = `frame-${Date.now()}`;
-    const newFrame: Frame = {
-      ...clipboard.current,
-      id: newId,
-      x: clipboard.current.x + 20,
-      y: clipboard.current.y + 20,
-    };
-    setFrames((prev) => [...prev, newFrame]);
-    setSelectedId(newId);
+    if (clipboard.current.length === 0) return;
+    const newFrames: Frame[] = clipboard.current.map((f) => ({
+      ...f,
+      id: `frame-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      x: f.x + 20,
+      y: f.y + 20,
+    }));
+    setFrames((prev) => [...prev, ...newFrames]);
+    setSelectedIds(newFrames.map((f) => f.id));
   }, []);
 
   const duplicateSelected = useCallback(() => {
-    if (!selectedId) return;
-    const frame = frames.find((f) => f.id === selectedId);
-    if (!frame) return;
-    const newId = `frame-${Date.now()}`;
-    const newFrame: Frame = {
-      ...frame,
-      id: newId,
-      x: frame.x + 20,
-      y: frame.y + 20,
-    };
-    setFrames((prev) => [...prev, newFrame]);
-    setSelectedId(newId);
-  }, [selectedId, frames]);
+    if (selectedIds.length === 0) return;
+    const newFrames: Frame[] = frames
+      .filter((f) => selectedIds.includes(f.id))
+      .map((f) => ({
+        ...f,
+        id: `frame-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        x: f.x + 20,
+        y: f.y + 20,
+      }));
+    setFrames((prev) => [...prev, ...newFrames]);
+    setSelectedIds(newFrames.map((f) => f.id));
+  }, [selectedIds, frames]);
 
   // Alt+drag to duplicate
   const startDuplicateDrag = useCallback(
     (frameId: string, canvasPoint: Point) => {
-      const frame = frames.find((f) => f.id === frameId);
-      if (!frame) return;
-      // Create duplicate
-      const newId = `frame-${Date.now()}`;
-      const newFrame: Frame = { ...frame, id: newId };
-      setFrames((prev) => [...prev, newFrame]);
-      setSelectedId(newId);
-      // Start dragging the new frame
+      // Duplicate all selected frames if the clicked one is selected, otherwise just the clicked one
+      const toDuplicate = selectedIds.includes(frameId)
+        ? selectedIds
+        : [frameId];
+      const framesToDupe = frames.filter((f) => toDuplicate.includes(f.id));
+
+      const newFrames: Frame[] = framesToDupe.map((f) => ({
+        ...f,
+        id: `frame-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      }));
+
+      setFrames((prev) => [...prev, ...newFrames]);
+      setSelectedIds(newFrames.map((f) => f.id));
+
+      // Start dragging the new frames
       setIsDragging(true);
       dragStart.current = canvasPoint;
-      dragFrameStart.current = { x: frame.x, y: frame.y };
+      dragFramesStart.current = newFrames.map((f) => ({
+        id: f.id,
+        x: f.x,
+        y: f.y,
+      }));
     },
-    [frames]
+    [frames, selectedIds]
   );
 
   const deleteSelected = useCallback(() => {
-    if (!selectedId) return;
-    setFrames((prev) => prev.filter((f) => f.id !== selectedId));
-    setSelectedId(null);
-  }, [selectedId]);
+    if (selectedIds.length === 0) return;
+    setFrames((prev) => prev.filter((f) => !selectedIds.includes(f.id)));
+    setSelectedIds([]);
+  }, [selectedIds]);
 
-  const selectedFrame = frames.find((f) => f.id === selectedId) || null;
+  const selectedFrames = frames.filter((f) => selectedIds.includes(f.id));
 
   return {
     transform,
     frames,
-    selectedId,
-    selectedFrame,
+    selectedIds,
+    selectedFrames,
     tool,
     isCreating,
     isDragging,
     isResizing,
     isPanning,
+    isMarqueeSelecting,
+    marqueeRect,
     guides,
     setTool,
     screenToCanvas,
@@ -875,6 +980,9 @@ export function useCanvas() {
     updatePan,
     endPan,
     select,
+    startMarquee,
+    updateMarquee,
+    endMarquee,
     copySelected,
     pasteClipboard,
     duplicateSelected,
