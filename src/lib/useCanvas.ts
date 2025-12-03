@@ -519,6 +519,7 @@ export function useCanvas() {
   const [guides, setGuides] = useState<Guide[]>([]);
 
   const createStart = useRef<Point | null>(null);
+  const frameCounter = useRef(1);
   const dragStart = useRef<Point | null>(null);
   const dragFramesStart = useRef<{ id: string; x: number; y: number }[]>([]);
   const resizeHandle = useRef<ResizeHandle | null>(null);
@@ -564,10 +565,12 @@ export function useCanvas() {
     setIsCreating(true);
     createStart.current = canvasPoint;
     const id = `frame-${Date.now()}`;
+    const name = `Frame ${frameCounter.current++}`;
     setFrames((prev) => [
       ...prev,
       {
         id,
+        name,
         x: canvasPoint.x,
         y: canvasPoint.y,
         width: 0,
@@ -787,7 +790,7 @@ export function useCanvas() {
       setIsResizing(true);
       resizeHandle.current = handle;
       resizeStart.current = { 
-        frame: { id: '', x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, fill: '' }, 
+        frame: { id: '', name: '', x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, fill: '' }, 
         point: canvasPoint 
       };
       resizeBoundsStart.current = {
@@ -966,6 +969,7 @@ export function useCanvas() {
     const newFrames: Frame[] = clipboard.current.map((f) => ({
       ...f,
       id: `frame-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name: `${f.name} copy`,
       x: f.x + 20,
       y: f.y + 20,
     }));
@@ -980,6 +984,7 @@ export function useCanvas() {
       .map((f) => ({
         ...f,
         id: `frame-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: `${f.name} copy`,
         x: f.x + 20,
         y: f.y + 20,
       }));
@@ -999,6 +1004,7 @@ export function useCanvas() {
       const newFrames: Frame[] = framesToDupe.map((f) => ({
         ...f,
         id: `frame-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: `${f.name} copy`,
       }));
 
       setFrames((prev) => [...prev, ...newFrames]);

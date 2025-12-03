@@ -776,6 +776,19 @@ export function Canvas() {
                 transform: `translate(${frame.x}px, ${frame.y}px)`,
               }}
             >
+              {/* Frame label */}
+              <div
+                className="absolute text-zinc-500 text-sm whitespace-nowrap pointer-events-none select-none"
+                style={{
+                  bottom: "100%",
+                  left: 0,
+                  marginBottom: 4,
+                  fontSize: `${Math.max(12, 14 / transform.scale)}px`,
+                }}
+              >
+                {frame.name}
+              </div>
+              {/* Frame content */}
               <div
                 style={{
                   width: frame.width,
