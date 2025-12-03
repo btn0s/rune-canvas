@@ -8,6 +8,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { LayersPanel } from "./LayersPanel";
 
 const HANDLE_SIZE = 8;
 const HANDLES: ResizeHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
@@ -230,6 +231,7 @@ export function Canvas() {
   const {
     transform,
     frames,
+    selectedIds,
     selectionBounds,
     tool,
     isCreating,
@@ -829,6 +831,13 @@ export function Canvas() {
             </Tooltip>
           ))}
         </div>
+
+        {/* Layers panel */}
+        <LayersPanel
+          frames={frames}
+          selectedIds={selectedIds}
+          onSelect={select}
+        />
 
         {/* Zoom indicator */}
         <div className="absolute bottom-4 left-4 px-3 py-1.5 bg-card border border-border rounded-md text-xs font-mono text-muted-foreground">
