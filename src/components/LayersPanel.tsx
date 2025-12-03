@@ -87,16 +87,19 @@ export function LayersPanel({
   return (
     <div
       ref={panelRef}
-      className={`
-        absolute left-4 top-1/2 -translate-y-1/2 flex flex-col transition-all duration-200
-        ${showGlassyBg ? "bg-zinc-900/70 backdrop-blur-sm rounded-lg p-2 -m-2" : ""}
-      `}
-      style={{
-        gap: isHovered ? 4 : 3,
-      }}
+      className="absolute left-4 top-1/2 -translate-y-1/2 p-3 -m-3"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
+      <div
+        className={`
+          flex flex-col transition-all duration-200 rounded-lg
+          ${showGlassyBg ? "bg-zinc-900/70 backdrop-blur-sm p-2 -m-2" : ""}
+        `}
+        style={{
+          gap: isHovered ? 4 : 3,
+        }}
+      >
       {reversedFrames.map((frame) => {
         const isSelected = selectedIds.includes(frame.id);
         const isNew = animatedIds.has(frame.id);
@@ -146,6 +149,7 @@ export function LayersPanel({
           </div>
         );
       })}
+      </div>
       <style>{`
         @keyframes slideIn {
           from {
