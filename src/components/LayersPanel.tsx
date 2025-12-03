@@ -27,7 +27,6 @@ function getChildren(items: LayerItem[], parentId: string): LayerItem[] {
   return [...items.filter((item) => item.parentId === parentId)].reverse();
 }
 
-// Recursive tree item component
 function LayerTreeItem({
   item,
   items,
@@ -66,7 +65,6 @@ function LayerTreeItem({
   };
 
   if (!hasKids) {
-    // Leaf node - no collapsible needed
     return (
       <div
         className={`
@@ -84,7 +82,6 @@ function LayerTreeItem({
         }}
         onClick={handleClick}
       >
-        {/* Collapsed line */}
         {!isHovered && (
           <div
             className={`h-[2px] rounded-full ${
@@ -93,7 +90,6 @@ function LayerTreeItem({
             style={{ width: depth > 0 ? 12 : 20 }}
           />
         )}
-        {/* Expanded name */}
         {isHovered && (
           <span
             className={`text-xs whitespace-nowrap ${
@@ -107,7 +103,6 @@ function LayerTreeItem({
     );
   }
 
-  // Parent node with children - use Collapsible
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <div
@@ -126,7 +121,6 @@ function LayerTreeItem({
         }}
         onClick={handleClick}
       >
-        {/* Collapsed line */}
         {!isHovered && (
           <div
             className={`h-[2px] rounded-full ${
@@ -135,7 +129,6 @@ function LayerTreeItem({
             style={{ width: depth > 0 ? 12 : 20 }}
           />
         )}
-        {/* Expanded: chevron + name */}
         {isHovered && (
           <>
             <CollapsibleTrigger asChild onClick={handleChevronClick}>

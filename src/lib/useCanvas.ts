@@ -1324,7 +1324,6 @@ export function useCanvas() {
       offset: { x: number; y: number } = { x: 20, y: 20 },
       appendCopy: boolean = true
     ): CanvasObject[] => {
-      // Create ID mapping: old ID -> new ID
       const idMap = new Map<string, string>();
       objectsToDupe.forEach((o, index) => {
         idMap.set(
@@ -1335,7 +1334,6 @@ export function useCanvas() {
         );
       });
 
-      // Create new objects with remapped IDs and parents
       return objectsToDupe.map((o) => {
         const isRoot = !o.parentId || !idMap.has(o.parentId);
         return {
@@ -1356,7 +1354,6 @@ export function useCanvas() {
 
   const copySelected = useCallback(() => {
     if (selectedIds.length === 0) return;
-    // Get selected objects and all their descendants
     const selected = objects.filter((o) => selectedIds.includes(o.id));
     const descendants = getDescendants(selectedIds, objects);
     clipboard.current = [...selected, ...descendants].map((o) => ({ ...o }));
@@ -1370,7 +1367,6 @@ export function useCanvas() {
       false
     );
     setObjects((prev) => [...prev, ...newObjects]);
-    // Select only the root-level pasted objects
     const newRootIds = newObjects
       .filter(
         (o) => !o.parentId || !newObjects.some((c) => c.id === o.parentId)
@@ -1381,13 +1377,11 @@ export function useCanvas() {
 
   const duplicateSelected = useCallback(() => {
     if (selectedIds.length === 0) return;
-    // Get selected objects and all their descendants
     const selected = objects.filter((o) => selectedIds.includes(o.id));
     const descendants = getDescendants(selectedIds, objects);
     const allToDupe = [...selected, ...descendants];
     const newObjects = duplicateTree(allToDupe);
     setObjects((prev) => [...prev, ...newObjects]);
-    // Select only the root-level duplicated objects
     const newRootIds = newObjects
       .filter(
         (o) => !o.parentId || !newObjects.some((c) => c.id === o.parentId)
@@ -1399,7 +1393,6 @@ export function useCanvas() {
   // Alt+drag to duplicate
   const startDuplicateDrag = useCallback(
     (objectId: string, canvasPoint: Point) => {
-      // Duplicate all selected objects if the clicked one is selected, otherwise just the clicked one
       const toDuplicate = selectedIds.includes(objectId)
         ? selectedIds
         : [objectId];
@@ -1410,16 +1403,12 @@ export function useCanvas() {
       const newObjects = duplicateTree(allToDupe, { x: 0, y: 0 }, true);
 
       setObjects((prev) => [...prev, ...newObjects]);
-
-      // Select only the root-level duplicated objects
       const newRootIds = newObjects
         .filter(
           (o) => !o.parentId || !newObjects.some((c) => c.id === o.parentId)
         )
         .map((o) => o.id);
       setSelectedIds(newRootIds);
-
-      // Start dragging the new root objects
       setIsDragging(true);
       dragStart.current = canvasPoint;
       const rootObjects = newObjects.filter((o) => newRootIds.includes(o.id));
@@ -1438,7 +1427,6 @@ export function useCanvas() {
 
   const deleteSelected = useCallback(() => {
     if (selectedIds.length === 0) return;
-    // Delete selected and all their descendants
     const descendants = getDescendants(selectedIds, objects);
     const toDelete = new Set([...selectedIds, ...descendants.map((d) => d.id)]);
     setObjects((prev) => prev.filter((o) => !toDelete.has(o.id)));
@@ -1446,22 +1434,14 @@ export function useCanvas() {
     setEditingTextId(null);
   }, [selectedIds, objects, getDescendants]);
 
-  // Select all siblings within the current parent
   const selectAllSiblings = useCallback(() => {
     if (selectedIds.length === 0) {
-      // Nothing selected - select all root objects
-      const rootIds = objects
-        .filter((o) => o.parentId === null)
-        .map((o) => o.id);
+      const rootIds = objects.filter((o) => o.parentId === null).map((o) => o.id);
       setSelectedIds(rootIds);
     } else {
-      // Get the parent of the first selected object
       const firstSelected = objects.find((o) => o.id === selectedIds[0]);
       const parentId = firstSelected?.parentId ?? null;
-      // Select all siblings with the same parent
-      const siblingIds = objects
-        .filter((o) => o.parentId === parentId)
-        .map((o) => o.id);
+      const siblingIds = objects.filter((o) => o.parentId === parentId).map((o) => o.id);
       setSelectedIds(siblingIds);
     }
   }, [selectedIds, objects]);
