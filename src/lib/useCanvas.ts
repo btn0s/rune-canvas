@@ -923,27 +923,26 @@ export function useCanvas() {
       const width = Math.abs(canvasPoint.x - start.x);
       const height = Math.abs(canvasPoint.y - start.y);
       setMarqueeRect({ x, y, width, height });
-    },
-    [isMarqueeSelecting]
-  );
 
-  const endMarquee = useCallback(() => {
-    if (marqueeRect && marqueeRect.width > 5 && marqueeRect.height > 5) {
-      // Find frames that intersect with marquee
+      // Live selection: find frames that intersect with marquee
       const intersecting = frames.filter((f) => {
         return !(
-          f.x + f.width < marqueeRect.x ||
-          f.x > marqueeRect.x + marqueeRect.width ||
-          f.y + f.height < marqueeRect.y ||
-          f.y > marqueeRect.y + marqueeRect.height
+          f.x + f.width < x ||
+          f.x > x + width ||
+          f.y + f.height < y ||
+          f.y > y + height
         );
       });
       setSelectedIds(intersecting.map((f) => f.id));
-    }
+    },
+    [isMarqueeSelecting, frames]
+  );
+
+  const endMarquee = useCallback(() => {
     setIsMarqueeSelecting(false);
     setMarqueeRect(null);
     marqueeStart.current = null;
-  }, [marqueeRect, frames]);
+  }, []);
 
   // Clipboard for copy/paste
   const clipboard = useRef<Frame[]>([]);
