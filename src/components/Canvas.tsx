@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useCanvas } from "../lib/useCanvas";
-import type { ResizeHandle, Tool } from "../lib/types";
+import type {
+  ResizeHandle,
+  Tool,
+  CanvasObject,
+  FrameObject,
+  ImageObject,
+  TextObject,
+} from "../lib/types";
 import { Toggle } from "@/components/ui/toggle";
 import {
   Tooltip,
@@ -9,6 +16,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { LayersPanel } from "./LayersPanel";
+import { PropertyPanel } from "./PropertyPanel";
 
 const HANDLE_SIZE = 8;
 const HANDLES: ResizeHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
@@ -230,10 +238,13 @@ export function Canvas() {
 
   const {
     transform,
-    frames,
+    objects,
     selectedIds,
+    selectedObjects,
     selectionBounds,
     tool,
+    editingTextId,
+    potentialParentId,
     isCreating,
     isDragging,
     isResizing,
@@ -242,6 +253,7 @@ export function Canvas() {
     marqueeRect,
     guides,
     setTool,
+    setEditingTextId,
     screenToCanvas,
     handleWheel,
     startCreate,
@@ -265,6 +277,9 @@ export function Canvas() {
     duplicateSelected,
     startDuplicateDrag,
     deleteSelected,
+    addImage,
+    updateTextContent,
+    updateObject,
   } = useCanvas();
 
   // Space key held for temporary pan
@@ -507,7 +522,9 @@ export function Canvas() {
       });
 
       // 3. Dimension badge
-      const dimLabel = `${Math.round(selectionBounds.width)} × ${Math.round(selectionBounds.height)}`;
+      const dimLabel = `${Math.round(selectionBounds.width)} × ${Math.round(
+        selectionBounds.height
+      )}`;
       ctx.font = "11px system-ui";
       const dimTextWidth = ctx.measureText(dimLabel).width;
       const dimPillWidth = dimTextWidth + 12;
@@ -599,23 +616,59 @@ export function Canvas() {
     [selectionBounds, transform]
   );
 
-  // Hit test frames
-  const hitTestFrame = useCallback(
+  // Helper to get canvas position (accounting for parent)
+  const getCanvasPosition = useCallback(
+    (obj: CanvasObject): { x: number; y: number } => {
+      let x = obj.x;
+      let y = obj.y;
+      let parentId = obj.parentId;
+
+      while (parentId) {
+        const parent = objects.find((o) => o.id === parentId);
+        if (!parent) break;
+        x += parent.x;
+        y += parent.y;
+        parentId = parent.parentId;
+      }
+
+      return { x, y };
+    },
+    [objects]
+  );
+
+  // Hit test objects (canvas space) - includes label area for root objects
+  const hitTestObject = useCallback(
     (canvasX: number, canvasY: number): string | null => {
-      for (let i = frames.length - 1; i >= 0; i--) {
-        const f = frames[i];
-        if (
-          canvasX >= f.x &&
-          canvasX <= f.x + f.width &&
-          canvasY >= f.y &&
-          canvasY <= f.y + f.height
-        ) {
-          return f.id;
+      for (let i = objects.length - 1; i >= 0; i--) {
+        const obj = objects[i];
+        const canvasPos = getCanvasPosition(obj);
+
+        // Check object bounds
+        const inObject =
+          canvasX >= canvasPos.x &&
+          canvasX <= canvasPos.x + obj.width &&
+          canvasY >= canvasPos.y &&
+          canvasY <= canvasPos.y + obj.height;
+
+        // Check label bounds (only for root objects - those without a parent)
+        // Label is above the object with margin. Use generous bounds.
+        const labelHeight = 16; // canvas units - generous estimate
+        const labelMargin = 6; // canvas units
+        const labelWidth = Math.max(obj.width, obj.name.length * 8); // canvas units
+        const inLabel =
+          !obj.parentId &&
+          canvasX >= canvasPos.x &&
+          canvasX <= canvasPos.x + labelWidth &&
+          canvasY >= canvasPos.y - labelMargin - labelHeight &&
+          canvasY <= canvasPos.y;
+
+        if (inObject || inLabel) {
+          return obj.id;
         }
       }
       return null;
     },
-    [frames]
+    [objects, getCanvasPosition]
   );
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -638,15 +691,23 @@ export function Canvas() {
         return;
       }
 
-      // Check frame hit
-      const frameId = hitTestFrame(canvasPoint.x, canvasPoint.y);
-      if (frameId) {
-        // Alt+click on frame = duplicate and drag
+      // Check object hit
+      const objectId = hitTestObject(canvasPoint.x, canvasPoint.y);
+      if (objectId) {
+        // Double-click on text object = edit
+        if (e.detail === 2) {
+          const obj = objects.find((o) => o.id === objectId);
+          if (obj && obj.type === "text") {
+            setEditingTextId(objectId);
+            return;
+          }
+        }
+        // Alt+click on object = duplicate and drag
         if (e.altKey) {
-          startDuplicateDrag(frameId, canvasPoint);
+          startDuplicateDrag(objectId, canvasPoint);
         } else {
           // Shift+click to add/remove from selection
-          startDrag(frameId, canvasPoint, e.shiftKey);
+          startDrag(objectId, canvasPoint, e.shiftKey);
         }
       } else {
         // Clicked on empty space - start marquee selection or clear selection
@@ -655,7 +716,7 @@ export function Canvas() {
         }
         startMarquee(canvasPoint);
       }
-    } else if (tool === "frame" || tool === "rectangle") {
+    } else if (tool === "frame" || tool === "rectangle" || tool === "text") {
       startCreate(canvasPoint);
     }
   };
@@ -743,11 +804,48 @@ export function Canvas() {
     deleteSelected,
   ]);
 
+  // Image drop handlers
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const files = Array.from(e.dataTransfer.files);
+      const imageFiles = files.filter((file) => file.type.startsWith("image/"));
+
+      if (imageFiles.length > 0) {
+        const rect = containerRef.current!.getBoundingClientRect();
+        const screenX = e.clientX - rect.left;
+        const screenY = e.clientY - rect.top;
+        const canvasPoint = screenToCanvas(screenX, screenY);
+
+        imageFiles.forEach((file) => {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const src = event.target?.result as string;
+            const img = new Image();
+            img.onload = () => {
+              addImage(src, img.naturalWidth, img.naturalHeight, canvasPoint);
+            };
+            img.src = src;
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+    },
+    [screenToCanvas, addImage]
+  );
+
   const cursor = isPanning
     ? "grabbing"
     : tool === "hand" || spaceHeld
     ? "grab"
-    : tool === "frame" || tool === "rectangle"
+    : tool === "frame" || tool === "rectangle" || tool === "text"
     ? "crosshair"
     : "default";
 
@@ -760,48 +858,117 @@ export function Canvas() {
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
         style={{ cursor }}
       >
-        {/* DOM layer - frames */}
+        {/* DOM layer - objects */}
         <div
           className="absolute top-0 left-0 origin-top-left pointer-events-none"
           style={{
             transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
           }}
         >
-          {frames.map((frame) => {
-            const isSelected = selectedIds.includes(frame.id);
+          {objects.map((obj) => {
+            const isSelected = selectedIds.includes(obj.id);
+            const isEditing = editingTextId === obj.id;
+            const isPotentialParent = potentialParentId === obj.id;
+            const canvasPos = getCanvasPosition(obj);
+
             return (
               <div
-                key={frame.id}
-                data-frame-id={frame.id}
+                key={obj.id}
+                data-object-id={obj.id}
                 className="absolute left-0 top-0"
                 style={{
-                  transform: `translate(${frame.x}px, ${frame.y}px)`,
+                  transform: `translate(${canvasPos.x}px, ${canvasPos.y}px)`,
+                  opacity: obj.opacity,
                 }}
               >
-                {/* Frame label */}
-                <div
-                  className={`absolute whitespace-nowrap pointer-events-none select-none ${
-                    isSelected ? "text-blue-400" : "text-zinc-500"
-                  }`}
-                  style={{
-                    bottom: "100%",
-                    left: 0,
-                    marginBottom: 4,
-                    fontSize: `${Math.max(10, 11 / transform.scale)}px`,
-                  }}
-                >
-                  {frame.name}
-                </div>
-                {/* Frame content */}
-                <div
-                  style={{
-                    width: frame.width,
-                    height: frame.height,
-                    backgroundColor: frame.fill,
-                  }}
-                />
+                {/* Object label - hidden for nested objects */}
+                {!obj.parentId && (
+                  <div
+                    className={`absolute whitespace-nowrap pointer-events-none select-none ${
+                      isSelected
+                        ? "text-blue-400"
+                        : isPotentialParent
+                        ? "text-green-400"
+                        : "text-zinc-500"
+                    }`}
+                    style={{
+                      bottom: "100%",
+                      left: 0,
+                      marginBottom: 4,
+                      fontSize: `${Math.max(10, 11 / transform.scale)}px`,
+                    }}
+                  >
+                    {obj.name}
+                  </div>
+                )}
+
+                {/* Render based on object type */}
+                {obj.type === "frame" && (
+                  <div
+                    className={`transition-shadow duration-150 ${
+                      isPotentialParent
+                        ? "shadow-[inset_0_0_0_2px_#22c55e]"
+                        : ""
+                    }`}
+                    style={{
+                      width: obj.width,
+                      height: obj.height,
+                      backgroundColor: (obj as FrameObject).fill,
+                      borderRadius: (obj as FrameObject).radius,
+                      overflow: (obj as FrameObject).clipContent
+                        ? "hidden"
+                        : "visible",
+                    }}
+                  />
+                )}
+
+                {obj.type === "image" && (
+                  <img
+                    src={(obj as ImageObject).src}
+                    alt={obj.name}
+                    style={{
+                      width: obj.width,
+                      height: obj.height,
+                      objectFit: "contain",
+                      display: "block",
+                    }}
+                  />
+                )}
+
+                {obj.type === "text" && (
+                  <div
+                    contentEditable={isEditing}
+                    suppressContentEditableWarning
+                    onBlur={(e) => {
+                      updateTextContent(
+                        obj.id,
+                        e.currentTarget.textContent || ""
+                      );
+                      setEditingTextId(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    style={{
+                      width: obj.width,
+                      minHeight: obj.height,
+                      color: (obj as TextObject).fill,
+                      fontSize: (obj as TextObject).fontSize,
+                      fontFamily: (obj as TextObject).fontFamily,
+                      outline: isEditing ? "1px solid #3b82f6" : "none",
+                      whiteSpace: "pre-wrap",
+                      wordWrap: "break-word",
+                    }}
+                  >
+                    {(obj as TextObject).content}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -839,11 +1006,25 @@ export function Canvas() {
 
         {/* Layers panel */}
         <LayersPanel
-          frames={frames}
+          items={objects
+            .filter((o) => o.type === "frame")
+            .map((o) => ({
+              id: o.id,
+              name: o.name,
+              parentId: o.parentId,
+            }))}
           selectedIds={selectedIds}
           transform={transform}
           containerRef={containerRef as React.RefObject<HTMLDivElement>}
           onSelect={select}
+        />
+
+        {/* Property panel */}
+        <PropertyPanel
+          selectedObjects={selectedObjects}
+          transform={transform}
+          containerRef={containerRef as React.RefObject<HTMLDivElement>}
+          onUpdate={updateObject}
         />
 
         {/* Zoom indicator */}

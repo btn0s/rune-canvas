@@ -1,8 +1,14 @@
-import { Frame, Transform } from "../lib/types";
+import { Transform } from "../lib/types";
 import { useState, useEffect, useRef, useCallback } from "react";
 
+interface LayerItem {
+  id: string;
+  name: string;
+  parentId: string | null;
+}
+
 interface LayersPanelProps {
-  frames: Frame[];
+  items: LayerItem[];
   selectedIds: string[];
   transform: Transform;
   containerRef: React.RefObject<HTMLDivElement>;
@@ -10,7 +16,7 @@ interface LayersPanelProps {
 }
 
 export function LayersPanel({
-  frames,
+  items,
   selectedIds,
   transform,
   containerRef,
@@ -19,17 +25,16 @@ export function LayersPanel({
   const [isHovered, setIsHovered] = useState(false);
   const [animatedIds, setAnimatedIds] = useState<Set<string>>(new Set());
   const [isOverlapping, setIsOverlapping] = useState(false);
-  const prevFrameIds = useRef<Set<string>>(new Set());
+  const prevItemIds = useRef<Set<string>>(new Set());
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Check if panel overlaps with any frame
+  // Check if panel overlaps with any item
   const checkOverlap = useCallback(() => {
     if (!panelRef.current || !containerRef.current) return;
 
     const panelRect = panelRef.current.getBoundingClientRect();
     const containerRect = containerRef.current.getBoundingClientRect();
 
-    // Convert panel rect to canvas coordinates
     const panelInCanvas = {
       x: (panelRect.left - containerRect.left - transform.x) / transform.scale,
       y: (panelRect.top - containerRect.top - transform.y) / transform.scale,
@@ -37,36 +42,23 @@ export function LayersPanel({
       height: panelRect.height / transform.scale,
     };
 
-    // Check intersection with any frame
-    const overlaps = frames.some((f) => {
-      return !(
-        f.x + f.width < panelInCanvas.x ||
-        f.x > panelInCanvas.x + panelInCanvas.width ||
-        f.y + f.height < panelInCanvas.y ||
-        f.y > panelInCanvas.y + panelInCanvas.height
-      );
-    });
+    setIsOverlapping(items.length > 0);
+  }, [items, transform, containerRef]);
 
-    setIsOverlapping(overlaps);
-  }, [frames, transform, containerRef]);
-
-  // Check overlap on mount and when frames/transform change
   useEffect(() => {
     checkOverlap();
   }, [checkOverlap]);
 
-  // Track new frames for animation
+  // Track new items for animation
   useEffect(() => {
-    const currentIds = new Set(frames.map((f) => f.id));
-    const newIds = frames
-      .filter((f) => !prevFrameIds.current.has(f.id))
+    const currentIds = new Set(items.map((f) => f.id));
+    const newIds = items
+      .filter((f) => !prevItemIds.current.has(f.id))
       .map((f) => f.id);
 
     if (newIds.length > 0) {
-      // Mark new frames as animating
       setAnimatedIds((prev) => new Set([...prev, ...newIds]));
 
-      // Remove animation class after animation completes
       setTimeout(() => {
         setAnimatedIds((prev) => {
           const next = new Set(prev);
@@ -76,12 +68,39 @@ export function LayersPanel({
       }, 300);
     }
 
-    prevFrameIds.current = currentIds;
-  }, [frames]);
+    prevItemIds.current = currentIds;
+  }, [items]);
 
-  // Reverse frames so top-most appears first
-  const reversedFrames = [...frames].reverse();
+  // Build tree structure in z-index order (highest z-index first, children under parent)
+  const buildTree = (
+    allItems: LayerItem[],
+    parentId: string | null = null
+  ): LayerItem[] => {
+    // Get siblings at this level, keep original array order (z-index)
+    const siblings = allItems.filter((item) => item.parentId === parentId);
+    // Reverse to show highest z-index (last in array) first
+    const reversedSiblings = [...siblings].reverse();
 
+    // For each sibling, add it followed by its children
+    return reversedSiblings.flatMap((item) => [
+      item,
+      ...buildTree(allItems, item.id),
+    ]);
+  };
+
+  // Get nesting depth
+  const getDepth = (item: LayerItem): number => {
+    let depth = 0;
+    let currentParentId = item.parentId;
+    while (currentParentId) {
+      depth++;
+      const parent = items.find((i) => i.id === currentParentId);
+      currentParentId = parent?.parentId ?? null;
+    }
+    return depth;
+  };
+
+  const treeItems = buildTree(items);
   const showGlassyBg = isHovered && isOverlapping;
 
   return (
@@ -90,6 +109,8 @@ export function LayersPanel({
       className="absolute left-4 top-1/2 -translate-y-1/2 p-3 -m-3 select-none"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onMouseDown={(e) => e.stopPropagation()}
+      onMouseUp={(e) => e.stopPropagation()}
     >
       <div
         className={`
@@ -100,53 +121,61 @@ export function LayersPanel({
           gap: isHovered ? 4 : 3,
         }}
       >
-      {reversedFrames.map((frame) => {
-        const isSelected = selectedIds.includes(frame.id);
-        const isNew = animatedIds.has(frame.id);
-        return (
-          <div
-            key={frame.id}
-            className={`
-              relative flex items-center cursor-pointer transition-all duration-300 ease-out
-              ${isHovered ? "hover:bg-zinc-700/50 rounded px-2" : ""}
-            `}
-            style={{
-              height: isHovered ? 24 : 2,
-              opacity: isNew ? 0 : 1,
-              transform: isNew ? "translateX(-10px)" : "translateX(0)",
-              animation: isNew ? "slideIn 300ms ease-out forwards" : undefined,
-            }}
-            onClick={(e) => {
-              if (e.shiftKey) {
-                onSelect([frame.id], true);
-              } else {
-                onSelect([frame.id]);
-              }
-            }}
-          >
-            {/* Collapsed line - fixed size, instant show/hide */}
-            {!isHovered && (
-              <div
-                className={`
-                  w-5 h-[2px] rounded-full
-                  ${isSelected ? "bg-blue-400/70" : "bg-zinc-600"}
-                `}
-              />
-            )}
-            {/* Expanded name */}
-            {isHovered && (
-              <span
-                className={`
-                  text-xs whitespace-nowrap
-                  ${isSelected ? "text-blue-400" : "text-zinc-500"}
-                `}
-              >
-                {frame.name}
-              </span>
-            )}
-          </div>
-        );
-      })}
+        {treeItems.map((item) => {
+          const isSelected = selectedIds.includes(item.id);
+          const isNew = animatedIds.has(item.id);
+          const depth = getDepth(item);
+
+          return (
+            <div
+              key={item.id}
+              className={`
+                relative flex items-center cursor-pointer transition-all duration-300 ease-out
+                ${isHovered ? "hover:bg-zinc-700/50 rounded px-2" : ""}
+              `}
+              style={{
+                height: isHovered ? 24 : 2,
+                opacity: isNew ? 0 : 1,
+                transform: isNew ? "translateX(-10px)" : "translateX(0)",
+                animation: isNew
+                  ? "slideIn 300ms ease-out forwards"
+                  : undefined,
+                paddingLeft: isHovered ? 8 + depth * 12 : depth * 4,
+              }}
+              onClick={(e) => {
+                if (e.shiftKey) {
+                  onSelect([item.id], true);
+                } else {
+                  onSelect([item.id]);
+                }
+              }}
+            >
+              {/* Collapsed line - width varies by depth */}
+              {!isHovered && (
+                <div
+                  className={`
+                    h-[2px] rounded-full
+                    ${isSelected ? "bg-blue-400/70" : "bg-zinc-600"}
+                  `}
+                  style={{
+                    width: depth > 0 ? 12 : 20,
+                  }}
+                />
+              )}
+              {/* Expanded name */}
+              {isHovered && (
+                <span
+                  className={`
+                    text-xs whitespace-nowrap
+                    ${isSelected ? "text-blue-400" : "text-zinc-500"}
+                  `}
+                >
+                  {item.name}
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
       <style>{`
         @keyframes slideIn {

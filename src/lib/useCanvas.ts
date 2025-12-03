@@ -1,6 +1,9 @@
 import { useCallback, useRef, useState } from "react";
 import type {
-  Frame,
+  CanvasObject,
+  FrameObject,
+  ImageObject,
+  TextObject,
   Guide,
   Point,
   ResizeHandle,
@@ -15,23 +18,43 @@ const SNAP_THRESHOLD = 8;
 
 interface SnapTarget {
   value: number;
-  frameId: string;
-  frame: Frame;
+  objectId: string;
+  object: { x: number; y: number; width: number; height: number };
+}
+
+// Helper to get canvas-space position (accounting for parent transforms)
+function getCanvasPosition(
+  obj: CanvasObject,
+  objects: CanvasObject[]
+): { x: number; y: number } {
+  let x = obj.x;
+  let y = obj.y;
+  let parentId = obj.parentId;
+
+  while (parentId) {
+    const parent = objects.find((o) => o.id === parentId);
+    if (!parent) break;
+    x += parent.x;
+    y += parent.y;
+    parentId = parent.parentId;
+  }
+
+  return { x, y };
 }
 
 // Helper to create a vertical guide with proper bounds
 function createVerticalGuide(
   position: number,
-  currentFrame: { y: number; height: number },
-  snapFrame: Frame
+  currentObj: { y: number; height: number },
+  snapObj: { y: number; height: number }
 ): Guide {
   return {
     type: "vertical",
     position,
-    startBound: Math.min(currentFrame.y, snapFrame.y),
+    startBound: Math.min(currentObj.y, snapObj.y),
     endBound: Math.max(
-      currentFrame.y + currentFrame.height,
-      snapFrame.y + snapFrame.height
+      currentObj.y + currentObj.height,
+      snapObj.y + snapObj.height
     ),
   };
 }
@@ -39,23 +62,24 @@ function createVerticalGuide(
 // Helper to create a horizontal guide with proper bounds
 function createHorizontalGuide(
   position: number,
-  currentFrame: { x: number; width: number },
-  snapFrame: Frame
+  currentObj: { x: number; width: number },
+  snapObj: { x: number; width: number }
 ): Guide {
   return {
     type: "horizontal",
     position,
-    startBound: Math.min(currentFrame.x, snapFrame.x),
+    startBound: Math.min(currentObj.x, snapObj.x),
     endBound: Math.max(
-      currentFrame.x + currentFrame.width,
-      snapFrame.x + snapFrame.width
+      currentObj.x + currentObj.width,
+      snapObj.x + snapObj.width
     ),
   };
 }
 
 function calculateSnapping(
-  frame: { x: number; y: number; width: number; height: number },
-  otherFrames: Frame[],
+  obj: { x: number; y: number; width: number; height: number },
+  otherObjects: CanvasObject[],
+  allObjects: CanvasObject[],
   mode: "move" | "create" | "resize",
   resizeHandle?: ResizeHandle
 ): {
@@ -65,39 +89,48 @@ function calculateSnapping(
   height: number;
   guides: Guide[];
 } {
-  let { x, y, width, height } = frame;
+  let { x, y, width, height } = obj;
   const guides: Guide[] = [];
 
-  if (otherFrames.length === 0) {
+  if (otherObjects.length === 0) {
     return { x, y, width, height, guides };
   }
 
-  // Collect snap targets with frame references
+  // Collect snap targets with object references (using canvas-space positions)
   const xTargets: SnapTarget[] = [];
   const yTargets: SnapTarget[] = [];
 
-  for (const other of otherFrames) {
-    xTargets.push({ value: other.x, frameId: other.id, frame: other });
+  for (const other of otherObjects) {
+    const canvasPos = getCanvasPosition(other, allObjects);
     xTargets.push({
-      value: other.x + other.width,
-      frameId: other.id,
-      frame: other,
+      value: canvasPos.x,
+      objectId: other.id,
+      object: { ...canvasPos, width: other.width, height: other.height },
     });
     xTargets.push({
-      value: other.x + other.width / 2,
-      frameId: other.id,
-      frame: other,
+      value: canvasPos.x + other.width,
+      objectId: other.id,
+      object: { ...canvasPos, width: other.width, height: other.height },
     });
-    yTargets.push({ value: other.y, frameId: other.id, frame: other });
-    yTargets.push({
-      value: other.y + other.height,
-      frameId: other.id,
-      frame: other,
+    xTargets.push({
+      value: canvasPos.x + other.width / 2,
+      objectId: other.id,
+      object: { ...canvasPos, width: other.width, height: other.height },
     });
     yTargets.push({
-      value: other.y + other.height / 2,
-      frameId: other.id,
-      frame: other,
+      value: canvasPos.y,
+      objectId: other.id,
+      object: { ...canvasPos, width: other.width, height: other.height },
+    });
+    yTargets.push({
+      value: canvasPos.y + other.height,
+      objectId: other.id,
+      object: { ...canvasPos, width: other.width, height: other.height },
+    });
+    yTargets.push({
+      value: canvasPos.y + other.height / 2,
+      objectId: other.id,
+      object: { ...canvasPos, width: other.width, height: other.height },
     });
   }
 
@@ -115,7 +148,7 @@ function calculateSnapping(
         applySnap(target.value);
         snappedX = true;
         guides.push(
-          createVerticalGuide(target.value, { y, height }, target.frame)
+          createVerticalGuide(target.value, { y, height }, target.object)
         );
         break;
       }
@@ -133,7 +166,7 @@ function calculateSnapping(
         applySnap(target.value);
         snappedY = true;
         guides.push(
-          createHorizontalGuide(target.value, { x, width }, target.frame)
+          createHorizontalGuide(target.value, { x, width }, target.object)
         );
         break;
       }
@@ -180,25 +213,26 @@ function calculateSnapping(
         (resizeHandle.includes("n") || resizeHandle.includes("s")));
 
     if (isChangingWidth) {
-      const matchingWidthFrames = otherFrames.filter(
-        (f) => Math.abs(f.width - width) < SNAP_THRESHOLD
+      const matchingWidthObjects = otherObjects.filter(
+        (o) => Math.abs(o.width - width) < SNAP_THRESHOLD
       );
-      if (matchingWidthFrames.length > 0) {
-        const targetWidth = matchingWidthFrames[0].width;
+      if (matchingWidthObjects.length > 0) {
+        const targetWidth = matchingWidthObjects[0].width;
         const oldWidth = width;
         width = targetWidth;
         if (resizeHandle?.includes("w")) {
           x += oldWidth - width;
         }
-        for (const matchFrame of matchingWidthFrames) {
+        for (const matchObj of matchingWidthObjects) {
+          const canvasPos = getCanvasPosition(matchObj, allObjects);
           guides.push({
             type: "width",
             position: targetWidth,
             refFrame: {
-              x: matchFrame.x,
-              y: matchFrame.y,
-              width: matchFrame.width,
-              height: matchFrame.height,
+              x: canvasPos.x,
+              y: canvasPos.y,
+              width: matchObj.width,
+              height: matchObj.height,
             },
           });
         }
@@ -206,25 +240,26 @@ function calculateSnapping(
     }
 
     if (isChangingHeight) {
-      const matchingHeightFrames = otherFrames.filter(
-        (f) => Math.abs(f.height - height) < SNAP_THRESHOLD
+      const matchingHeightObjects = otherObjects.filter(
+        (o) => Math.abs(o.height - height) < SNAP_THRESHOLD
       );
-      if (matchingHeightFrames.length > 0) {
-        const targetHeight = matchingHeightFrames[0].height;
+      if (matchingHeightObjects.length > 0) {
+        const targetHeight = matchingHeightObjects[0].height;
         const oldHeight = height;
         height = targetHeight;
         if (resizeHandle?.includes("n")) {
           y += oldHeight - height;
         }
-        for (const matchFrame of matchingHeightFrames) {
+        for (const matchObj of matchingHeightObjects) {
+          const canvasPos = getCanvasPosition(matchObj, allObjects);
           guides.push({
             type: "height",
             position: targetHeight,
             refFrame: {
-              x: matchFrame.x,
-              y: matchFrame.y,
-              width: matchFrame.width,
-              height: matchFrame.height,
+              x: canvasPos.x,
+              y: canvasPos.y,
+              width: matchObj.width,
+              height: matchObj.height,
             },
           });
         }
@@ -260,18 +295,19 @@ function calculateSnapping(
 
   // Gap snapping for move mode
   if (mode === "move") {
-    const allGaps = calculateAllGaps(otherFrames);
+    const allGaps = calculateAllGaps(otherObjects, allObjects);
 
     // Try horizontal gap snapping
     for (const gap of allGaps.horizontal) {
       if (snappedX) break;
-      for (const other of otherFrames) {
-        const gapToRight = other.x - (x + width);
+      for (const other of otherObjects) {
+        const otherCanvasPos = getCanvasPosition(other, allObjects);
+        const gapToRight = otherCanvasPos.x - (x + width);
         if (
           gapToRight > 0 &&
           Math.abs(gapToRight - gap.distance) < SNAP_THRESHOLD
         ) {
-          x = other.x - width - gap.distance;
+          x = otherCanvasPos.x - width - gap.distance;
           snappedX = true;
           // Add guide for the new gap being created
           guides.push({
@@ -279,9 +315,9 @@ function calculateSnapping(
             distance: gap.distance,
             orientation: "vertical",
             gapStart: x + width,
-            gapEnd: other.x,
-            gapTopY: Math.max(y, other.y),
-            gapBottomY: Math.min(y + height, other.y + other.height),
+            gapEnd: otherCanvasPos.x,
+            gapTopY: Math.max(y, otherCanvasPos.y),
+            gapBottomY: Math.min(y + height, otherCanvasPos.y + other.height),
           });
           // Add guides for ALL existing gaps with this distance
           for (const existingGap of allGaps.horizontal) {
@@ -299,21 +335,21 @@ function calculateSnapping(
           }
           break;
         }
-        const gapToLeft = x - (other.x + other.width);
+        const gapToLeft = x - (otherCanvasPos.x + other.width);
         if (
           gapToLeft > 0 &&
           Math.abs(gapToLeft - gap.distance) < SNAP_THRESHOLD
         ) {
-          x = other.x + other.width + gap.distance;
+          x = otherCanvasPos.x + other.width + gap.distance;
           snappedX = true;
           guides.push({
             type: "gap",
             distance: gap.distance,
             orientation: "vertical",
-            gapStart: other.x + other.width,
+            gapStart: otherCanvasPos.x + other.width,
             gapEnd: x,
-            gapTopY: Math.max(y, other.y),
-            gapBottomY: Math.min(y + height, other.y + other.height),
+            gapTopY: Math.max(y, otherCanvasPos.y),
+            gapBottomY: Math.min(y + height, otherCanvasPos.y + other.height),
           });
           for (const existingGap of allGaps.horizontal) {
             if (existingGap.distance === gap.distance) {
@@ -336,22 +372,23 @@ function calculateSnapping(
     // Try vertical gap snapping
     for (const gap of allGaps.vertical) {
       if (snappedY) break;
-      for (const other of otherFrames) {
-        const gapBelow = other.y - (y + height);
+      for (const other of otherObjects) {
+        const otherCanvasPos = getCanvasPosition(other, allObjects);
+        const gapBelow = otherCanvasPos.y - (y + height);
         if (
           gapBelow > 0 &&
           Math.abs(gapBelow - gap.distance) < SNAP_THRESHOLD
         ) {
-          y = other.y - height - gap.distance;
+          y = otherCanvasPos.y - height - gap.distance;
           snappedY = true;
           guides.push({
             type: "gap",
             distance: gap.distance,
             orientation: "horizontal",
             gapStart: y + height,
-            gapEnd: other.y,
-            gapLeftX: Math.max(x, other.x),
-            gapRightX: Math.min(x + width, other.x + other.width),
+            gapEnd: otherCanvasPos.y,
+            gapLeftX: Math.max(x, otherCanvasPos.x),
+            gapRightX: Math.min(x + width, otherCanvasPos.x + other.width),
           });
           for (const existingGap of allGaps.vertical) {
             if (existingGap.distance === gap.distance) {
@@ -368,21 +405,21 @@ function calculateSnapping(
           }
           break;
         }
-        const gapAbove = y - (other.y + other.height);
+        const gapAbove = y - (otherCanvasPos.y + other.height);
         if (
           gapAbove > 0 &&
           Math.abs(gapAbove - gap.distance) < SNAP_THRESHOLD
         ) {
-          y = other.y + other.height + gap.distance;
+          y = otherCanvasPos.y + other.height + gap.distance;
           snappedY = true;
           guides.push({
             type: "gap",
             distance: gap.distance,
             orientation: "horizontal",
-            gapStart: other.y + other.height,
+            gapStart: otherCanvasPos.y + other.height,
             gapEnd: y,
-            gapLeftX: Math.max(x, other.x),
-            gapRightX: Math.min(x + width, other.x + other.width),
+            gapLeftX: Math.max(x, otherCanvasPos.x),
+            gapRightX: Math.min(x + width, otherCanvasPos.x + other.width),
           });
           for (const existingGap of allGaps.vertical) {
             if (existingGap.distance === gap.distance) {
@@ -416,24 +453,29 @@ interface GapInfo {
   rightX?: number; // for vertical gaps (horizontal orientation) - right of overlapping area
 }
 
-function calculateAllGaps(frames: Frame[]): {
+function calculateAllGaps(
+  objects: CanvasObject[],
+  allObjects: CanvasObject[]
+): {
   horizontal: GapInfo[];
   vertical: GapInfo[];
 } {
   const horizontal: GapInfo[] = [];
   const vertical: GapInfo[] = [];
 
-  for (let i = 0; i < frames.length; i++) {
-    for (let j = i + 1; j < frames.length; j++) {
-      const a = frames[i];
-      const b = frames[j];
+  for (let i = 0; i < objects.length; i++) {
+    for (let j = i + 1; j < objects.length; j++) {
+      const a = objects[i];
+      const b = objects[j];
+      const aPos = getCanvasPosition(a, allObjects);
+      const bPos = getCanvasPosition(b, allObjects);
 
-      // Horizontal gap (frames side by side)
-      if (a.x + a.width < b.x) {
-        const gapStart = a.x + a.width;
-        const gapEnd = b.x;
-        const overlapTop = Math.max(a.y, b.y);
-        const overlapBottom = Math.min(a.y + a.height, b.y + b.height);
+      // Horizontal gap (objects side by side)
+      if (aPos.x + a.width < bPos.x) {
+        const gapStart = aPos.x + a.width;
+        const gapEnd = bPos.x;
+        const overlapTop = Math.max(aPos.y, bPos.y);
+        const overlapBottom = Math.min(aPos.y + a.height, bPos.y + b.height);
         if (overlapBottom > overlapTop) {
           horizontal.push({
             distance: Math.round(gapEnd - gapStart),
@@ -443,11 +485,11 @@ function calculateAllGaps(frames: Frame[]): {
             bottomY: overlapBottom,
           });
         }
-      } else if (b.x + b.width < a.x) {
-        const gapStart = b.x + b.width;
-        const gapEnd = a.x;
-        const overlapTop = Math.max(a.y, b.y);
-        const overlapBottom = Math.min(a.y + a.height, b.y + b.height);
+      } else if (bPos.x + b.width < aPos.x) {
+        const gapStart = bPos.x + b.width;
+        const gapEnd = aPos.x;
+        const overlapTop = Math.max(aPos.y, bPos.y);
+        const overlapBottom = Math.min(aPos.y + a.height, bPos.y + b.height);
         if (overlapBottom > overlapTop) {
           horizontal.push({
             distance: Math.round(gapEnd - gapStart),
@@ -459,12 +501,12 @@ function calculateAllGaps(frames: Frame[]): {
         }
       }
 
-      // Vertical gap (frames stacked)
-      if (a.y + a.height < b.y) {
-        const gapStart = a.y + a.height;
-        const gapEnd = b.y;
-        const overlapLeft = Math.max(a.x, b.x);
-        const overlapRight = Math.min(a.x + a.width, b.x + b.width);
+      // Vertical gap (objects stacked)
+      if (aPos.y + a.height < bPos.y) {
+        const gapStart = aPos.y + a.height;
+        const gapEnd = bPos.y;
+        const overlapLeft = Math.max(aPos.x, bPos.x);
+        const overlapRight = Math.min(aPos.x + a.width, bPos.x + b.width);
         if (overlapRight > overlapLeft) {
           vertical.push({
             distance: Math.round(gapEnd - gapStart),
@@ -474,11 +516,11 @@ function calculateAllGaps(frames: Frame[]): {
             rightX: overlapRight,
           });
         }
-      } else if (b.y + b.height < a.y) {
-        const gapStart = b.y + b.height;
-        const gapEnd = a.y;
-        const overlapLeft = Math.max(a.x, b.x);
-        const overlapRight = Math.min(a.x + a.width, b.x + b.width);
+      } else if (bPos.y + b.height < aPos.y) {
+        const gapStart = bPos.y + b.height;
+        const gapEnd = aPos.y;
+        const overlapLeft = Math.max(aPos.x, bPos.x);
+        const overlapRight = Math.min(aPos.x + a.width, bPos.x + b.width);
         if (overlapRight > overlapLeft) {
           vertical.push({
             distance: Math.round(gapEnd - gapStart),
@@ -501,9 +543,10 @@ export function useCanvas() {
     y: 0,
     scale: 1,
   });
-  const [frames, setFrames] = useState<Frame[]>([]);
+  const [objects, setObjects] = useState<CanvasObject[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [tool, setTool] = useState<Tool>("frame");
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
 
   const [isCreating, setIsCreating] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -517,13 +560,19 @@ export function useCanvas() {
     height: number;
   } | null>(null);
   const [guides, setGuides] = useState<Guide[]>([]);
+  const [potentialParentId, setPotentialParentId] = useState<string | null>(
+    null
+  );
 
   const createStart = useRef<Point | null>(null);
-  const frameCounter = useRef(1);
+  const objectCounter = useRef(1);
   const dragStart = useRef<Point | null>(null);
-  const dragFramesStart = useRef<{ id: string; x: number; y: number }[]>([]);
+  const dragObjectsStart = useRef<{ id: string; x: number; y: number }[]>([]);
   const resizeHandle = useRef<ResizeHandle | null>(null);
-  const resizeStart = useRef<{ frame: Frame; point: Point } | null>(null);
+  const resizeStart = useRef<{
+    object: { x: number; y: number; width: number; height: number };
+    point: Point;
+  } | null>(null);
   const marqueeStart = useRef<Point | null>(null);
 
   const screenToCanvas = useCallback(
@@ -561,94 +610,178 @@ export function useCanvas() {
     [transform]
   );
 
-  const startCreate = useCallback((canvasPoint: Point) => {
-    setIsCreating(true);
-    createStart.current = canvasPoint;
-    const id = `frame-${Date.now()}`;
-    const name = `Frame ${frameCounter.current++}`;
-    setFrames((prev) => [
-      ...prev,
-      {
-        id,
-        name,
-        x: canvasPoint.x,
-        y: canvasPoint.y,
-        width: 0,
-        height: 0,
-        fill: "#ffffff",
-      },
-    ]);
-    setSelectedIds([id]);
-  }, []);
+  const startCreate = useCallback(
+    (canvasPoint: Point) => {
+      // Find the smallest frame that contains this point (for auto-nesting)
+      const frames = objects.filter((o) => o.type === "frame");
+      let targetParent: CanvasObject | null = null;
+      let smallestArea = Infinity;
+
+      for (const frame of frames) {
+        const frameCanvasPos = getCanvasPosition(frame, objects);
+        const inBounds =
+          canvasPoint.x >= frameCanvasPos.x &&
+          canvasPoint.x <= frameCanvasPos.x + frame.width &&
+          canvasPoint.y >= frameCanvasPos.y &&
+          canvasPoint.y <= frameCanvasPos.y + frame.height;
+
+        if (inBounds) {
+          const area = frame.width * frame.height;
+          if (area < smallestArea) {
+            smallestArea = area;
+            targetParent = frame;
+          }
+        }
+      }
+
+      const parentId = targetParent?.id ?? null;
+
+      // Convert canvas point to relative position if nested
+      let relativePoint = canvasPoint;
+      if (targetParent) {
+        const parentCanvasPos = getCanvasPosition(targetParent, objects);
+        relativePoint = {
+          x: canvasPoint.x - parentCanvasPos.x,
+          y: canvasPoint.y - parentCanvasPos.y,
+        };
+      }
+
+      setIsCreating(true);
+      createStart.current = canvasPoint; // Store canvas point for drag calculation
+
+      if (tool === "frame" || tool === "rectangle") {
+        const id = `frame-${Date.now()}`;
+        const name = `Frame ${objectCounter.current++}`;
+        const newFrame: FrameObject = {
+          id,
+          name,
+          type: "frame",
+          parentId,
+          x: relativePoint.x,
+          y: relativePoint.y,
+          width: 0,
+          height: 0,
+          opacity: 1,
+          fill: "#ffffff",
+          radius: 0,
+          clipContent: false,
+        };
+        setObjects((prev) => [...prev, newFrame]);
+        setSelectedIds([id]);
+      } else if (tool === "text") {
+        const id = `text-${Date.now()}`;
+        const name = `Text ${objectCounter.current++}`;
+        const newText: TextObject = {
+          id,
+          name,
+          type: "text",
+          parentId,
+          x: relativePoint.x,
+          y: relativePoint.y,
+          width: 100,
+          height: 24,
+          opacity: 1,
+          content: "Text",
+          fontSize: 16,
+          fontFamily: "system-ui",
+          fill: "#000000",
+        };
+        setObjects((prev) => [...prev, newText]);
+        setSelectedIds([id]);
+        setEditingTextId(id);
+      }
+    },
+    [tool, objects]
+  );
 
   const updateCreate = useCallback(
     (canvasPoint: Point) => {
       const creatingId = selectedIds[0];
       if (!isCreating || !createStart.current || !creatingId) return;
       const start = createStart.current;
+      const creatingObj = objects.find((o) => o.id === creatingId);
+      if (!creatingObj) return;
 
+      // Calculate in canvas space
       let x = Math.min(start.x, canvasPoint.x);
       let y = Math.min(start.y, canvasPoint.y);
       let width = Math.abs(canvasPoint.x - start.x);
       let height = Math.abs(canvasPoint.y - start.y);
 
-      const otherFrames = frames.filter((f) => f.id !== creatingId);
+      const otherObjects = objects.filter((o) => o.id !== creatingId);
       const snapped = calculateSnapping(
         { x, y, width, height },
-        otherFrames,
+        otherObjects,
+        objects,
         "create"
       );
 
+      // Convert snapped position to relative if object has a parent
+      let finalX = snapped.x;
+      let finalY = snapped.y;
+      if (creatingObj.parentId) {
+        const parent = objects.find((o) => o.id === creatingObj.parentId);
+        if (parent) {
+          const parentCanvasPos = getCanvasPosition(parent, objects);
+          finalX = snapped.x - parentCanvasPos.x;
+          finalY = snapped.y - parentCanvasPos.y;
+        }
+      }
+
       setGuides(snapped.guides);
-      setFrames((prev) =>
-        prev.map((f) =>
-          f.id === creatingId
+      setObjects((prev) =>
+        prev.map((o) =>
+          o.id === creatingId
             ? {
-                ...f,
-                x: snapped.x,
-                y: snapped.y,
+                ...o,
+                x: finalX,
+                y: finalY,
                 width: snapped.width,
                 height: snapped.height,
               }
-            : f
+            : o
         )
       );
     },
-    [isCreating, selectedIds, frames]
+    [isCreating, selectedIds, objects]
   );
 
   const endCreate = useCallback(() => {
     const creatingId = selectedIds[0];
     if (!creatingId) return;
-    setFrames((prev) => {
-      const frame = prev.find((f) => f.id === creatingId);
-      if (frame && frame.width < 10 && frame.height < 10) {
+    setObjects((prev) => {
+      const obj = prev.find((o) => o.id === creatingId);
+      // For text, don't delete if small. For frames/rectangles, delete if too small
+      if (obj && obj.type !== "text" && obj.width < 10 && obj.height < 10) {
         setSelectedIds([]);
-        return prev.filter((f) => f.id !== creatingId);
+        return prev.filter((o) => o.id !== creatingId);
       }
       return prev;
     });
     setIsCreating(false);
     setGuides([]);
     createStart.current = null;
-    setTool("select");
-  }, [selectedIds]);
+    if (tool !== "text") {
+      setTool("select");
+    }
+  }, [selectedIds, tool]);
 
-  // Compute bounding box of selected frames
+  // Compute bounding box of selected objects (in canvas space)
   const getSelectionBounds = useCallback(
-    (framesList: Frame[], ids: string[]) => {
-      const selected = framesList.filter((f) => ids.includes(f.id));
+    (objectsList: CanvasObject[], ids: string[]) => {
+      const selected = objectsList.filter((o) => ids.includes(o.id));
       if (selected.length === 0) return null;
 
       let minX = Infinity,
         minY = Infinity,
         maxX = -Infinity,
         maxY = -Infinity;
-      for (const f of selected) {
-        minX = Math.min(minX, f.x);
-        minY = Math.min(minY, f.y);
-        maxX = Math.max(maxX, f.x + f.width);
-        maxY = Math.max(maxY, f.y + f.height);
+      for (const obj of selected) {
+        const canvasPos = getCanvasPosition(obj, objectsList);
+        minX = Math.min(minX, canvasPos.x);
+        minY = Math.min(minY, canvasPos.y);
+        maxX = Math.max(maxX, canvasPos.x + obj.width);
+        maxY = Math.max(maxY, canvasPos.y + obj.height);
       }
       return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
     },
@@ -662,54 +795,54 @@ export function useCanvas() {
   const didDrag = useRef(false);
 
   const startDrag = useCallback(
-    (frameId: string, canvasPoint: Point, addToSelection = false) => {
-      const frame = frames.find((f) => f.id === frameId);
-      if (!frame) return;
+    (objectId: string, canvasPoint: Point, addToSelection = false) => {
+      const obj = objects.find((o) => o.id === objectId);
+      if (!obj) return;
 
-      const isAlreadySelected = selectedIds.includes(frameId);
+      const isAlreadySelected = selectedIds.includes(objectId);
 
-      // Shift+click on selected frame = deselect it (no drag)
+      // Shift+click on selected object = deselect it (no drag)
       if (addToSelection && isAlreadySelected) {
-        setSelectedIds(selectedIds.filter((id) => id !== frameId));
+        setSelectedIds(selectedIds.filter((id) => id !== objectId));
         return;
       }
 
       // Reset drag tracking
-      clickedFrameId.current = frameId;
+      clickedFrameId.current = objectId;
       didDrag.current = false;
 
       // Determine new selection
       let newSelectedIds: string[];
       if (addToSelection) {
         // Shift+click unselected = add to selection
-        newSelectedIds = [...selectedIds, frameId];
+        newSelectedIds = [...selectedIds, objectId];
       } else if (isAlreadySelected) {
-        // Click on already-selected frame = keep all selected (might deselect on mouseup)
+        // Click on already-selected object = keep all selected (might deselect on mouseup)
         newSelectedIds = selectedIds;
       } else {
         // Click unselected without shift = select only this one
-        newSelectedIds = [frameId];
+        newSelectedIds = [objectId];
       }
 
       setSelectedIds(newSelectedIds);
       setIsDragging(true);
       dragStart.current = canvasPoint;
 
-      // Store starting positions for all selected frames
-      const selectedFramesList = frames.filter((f) =>
-        newSelectedIds.includes(f.id)
+      // Store starting positions for all selected objects (relative positions)
+      const selectedObjectsList = objects.filter((o) =>
+        newSelectedIds.includes(o.id)
       );
-      dragFramesStart.current = selectedFramesList.map((f) => ({
-        id: f.id,
-        x: f.x,
-        y: f.y,
+      dragObjectsStart.current = selectedObjectsList.map((o) => ({
+        id: o.id,
+        x: o.x,
+        y: o.y,
       }));
 
-      // Store initial bounding box position
-      const bounds = getSelectionBounds(frames, newSelectedIds);
+      // Store initial bounding box position (canvas space)
+      const bounds = getSelectionBounds(objects, newSelectedIds);
       dragBoundsStart.current = bounds ? { x: bounds.x, y: bounds.y } : null;
     },
-    [frames, selectedIds, getSelectionBounds]
+    [objects, selectedIds, getSelectionBounds]
   );
 
   const updateDrag = useCallback(
@@ -717,7 +850,7 @@ export function useCanvas() {
       if (
         !isDragging ||
         !dragStart.current ||
-        dragFramesStart.current.length === 0 ||
+        dragObjectsStart.current.length === 0 ||
         !dragBoundsStart.current
       )
         return;
@@ -730,28 +863,32 @@ export function useCanvas() {
         didDrag.current = true;
       }
 
-      // Compute current bounding box dimensions from starting frames
-      const startingFrames = dragFramesStart.current;
+      // Compute current bounding box dimensions from starting objects (canvas space)
+      const startingObjects = dragObjectsStart.current;
       let minX = Infinity,
         minY = Infinity,
         maxX = -Infinity,
         maxY = -Infinity;
-      for (const sf of startingFrames) {
-        const frame = frames.find((f) => f.id === sf.id);
-        if (!frame) continue;
-        minX = Math.min(minX, sf.x);
-        minY = Math.min(minY, sf.y);
-        maxX = Math.max(maxX, sf.x + frame.width);
-        maxY = Math.max(maxY, sf.y + frame.height);
+      for (const so of startingObjects) {
+        const obj = objects.find((o) => o.id === so.id);
+        if (!obj) continue;
+        const canvasPos = getCanvasPosition(
+          { ...obj, x: so.x, y: so.y },
+          objects
+        );
+        minX = Math.min(minX, canvasPos.x);
+        minY = Math.min(minY, canvasPos.y);
+        maxX = Math.max(maxX, canvasPos.x + obj.width);
+        maxY = Math.max(maxY, canvasPos.y + obj.height);
       }
       const boundsWidth = maxX - minX;
       const boundsHeight = maxY - minY;
 
-      // New bounding box position
+      // New bounding box position (canvas space)
       const newBoundsX = dragBoundsStart.current.x + dx;
       const newBoundsY = dragBoundsStart.current.y + dy;
 
-      const otherFrames = frames.filter((f) => !selectedIds.includes(f.id));
+      const otherObjects = objects.filter((o) => !selectedIds.includes(o.id));
       const snapped = calculateSnapping(
         {
           x: newBoundsX,
@@ -759,7 +896,8 @@ export function useCanvas() {
           width: boundsWidth,
           height: boundsHeight,
         },
-        otherFrames,
+        otherObjects,
+        objects,
         "move"
       );
 
@@ -768,23 +906,76 @@ export function useCanvas() {
       const snapDy = snapped.y - newBoundsY;
 
       setGuides(snapped.guides);
-      setFrames((prev) =>
-        prev.map((f) => {
-          const startPos = dragFramesStart.current.find((s) => s.id === f.id);
-          if (!startPos) return f;
+      setObjects((prev) =>
+        prev.map((o) => {
+          const startPos = dragObjectsStart.current.find((s) => s.id === o.id);
+          if (!startPos) return o;
+          // Update relative position
           return {
-            ...f,
+            ...o,
             x: startPos.x + dx + snapDx,
             y: startPos.y + dy + snapDy,
           };
         })
       );
+
+      // Calculate potential parent for nesting feedback
+      if (selectedIds.length === 1) {
+        const dragged = objects.find((o) => o.id === selectedIds[0]);
+        if (dragged) {
+          const draggedCenter = {
+            x: snapped.x + boundsWidth / 2,
+            y: snapped.y + boundsHeight / 2,
+          };
+
+          const frames = objects.filter(
+            (o) => o.type === "frame" && !selectedIds.includes(o.id)
+          );
+
+          let targetFrame: CanvasObject | null = null;
+          let smallestArea = Infinity;
+
+          for (const frame of frames) {
+            // Don't nest into own children
+            let isDescendant = false;
+            let checkId: string | null = frame.id;
+            while (checkId) {
+              const check = objects.find((o) => o.id === checkId);
+              if (check?.parentId === dragged.id) {
+                isDescendant = true;
+                break;
+              }
+              checkId = check?.parentId ?? null;
+            }
+            if (isDescendant) continue;
+
+            const frameCanvasPos = getCanvasPosition(frame, objects);
+            const inBounds =
+              draggedCenter.x >= frameCanvasPos.x &&
+              draggedCenter.x <= frameCanvasPos.x + frame.width &&
+              draggedCenter.y >= frameCanvasPos.y &&
+              draggedCenter.y <= frameCanvasPos.y + frame.height;
+
+            if (inBounds) {
+              const area = frame.width * frame.height;
+              if (area < smallestArea) {
+                smallestArea = area;
+                targetFrame = frame;
+              }
+            }
+          }
+
+          setPotentialParentId(targetFrame?.id ?? null);
+        }
+      } else {
+        setPotentialParentId(null);
+      }
     },
-    [isDragging, selectedIds, frames]
+    [isDragging, selectedIds, objects]
   );
 
   const endDrag = useCallback(() => {
-    // If clicked on a selected frame but didn't drag, deselect others
+    // If clicked on a selected object but didn't drag, deselect others
     if (
       clickedFrameId.current &&
       !didDrag.current &&
@@ -794,10 +985,98 @@ export function useCanvas() {
       setSelectedIds([clickedFrameId.current]);
     }
 
+    // Auto-nesting: check if dragged objects should be nested into a frame
+    if (didDrag.current && selectedIds.length > 0) {
+      setObjects((prev) => {
+        const draggedObjects = prev.filter((o) => selectedIds.includes(o.id));
+        const frames = prev.filter(
+          (o) => o.type === "frame" && !selectedIds.includes(o.id)
+        );
+
+        // For each dragged object, check if it should be nested
+        let updated = [...prev];
+        for (const dragged of draggedObjects) {
+          const draggedCanvasPos = getCanvasPosition(dragged, prev);
+          const draggedCenter = {
+            x: draggedCanvasPos.x + dragged.width / 2,
+            y: draggedCanvasPos.y + dragged.height / 2,
+          };
+
+          // Find the smallest frame that contains the dragged object's center
+          let targetFrame: CanvasObject | null = null;
+          let smallestArea = Infinity;
+
+          for (const frame of frames) {
+            // Don't nest into own children
+            let isDescendant = false;
+            let checkId: string | null = frame.id;
+            while (checkId) {
+              const check = prev.find((o) => o.id === checkId);
+              if (check?.parentId === dragged.id) {
+                isDescendant = true;
+                break;
+              }
+              checkId = check?.parentId ?? null;
+            }
+            if (isDescendant) continue;
+
+            const frameCanvasPos = getCanvasPosition(frame, prev);
+            const inBounds =
+              draggedCenter.x >= frameCanvasPos.x &&
+              draggedCenter.x <= frameCanvasPos.x + frame.width &&
+              draggedCenter.y >= frameCanvasPos.y &&
+              draggedCenter.y <= frameCanvasPos.y + frame.height;
+
+            if (inBounds) {
+              const area = frame.width * frame.height;
+              if (area < smallestArea) {
+                smallestArea = area;
+                targetFrame = frame;
+              }
+            }
+          }
+
+          // Update parent if needed
+          const currentParentId = dragged.parentId;
+          const newParentId = targetFrame?.id ?? null;
+
+          if (currentParentId !== newParentId) {
+            const objIndex = updated.findIndex((o) => o.id === dragged.id);
+            if (objIndex !== -1) {
+              const obj = updated[objIndex];
+              if (newParentId && targetFrame) {
+                // Nesting into a frame
+                const canvasPos = getCanvasPosition(obj, updated);
+                const parentCanvasPos = getCanvasPosition(targetFrame, updated);
+                updated[objIndex] = {
+                  ...obj,
+                  parentId: newParentId,
+                  x: canvasPos.x - parentCanvasPos.x,
+                  y: canvasPos.y - parentCanvasPos.y,
+                };
+              } else {
+                // Unnesting to root
+                const canvasPos = getCanvasPosition(obj, updated);
+                updated[objIndex] = {
+                  ...obj,
+                  parentId: null,
+                  x: canvasPos.x,
+                  y: canvasPos.y,
+                };
+              }
+            }
+          }
+        }
+
+        return updated;
+      });
+    }
+
     setIsDragging(false);
     setGuides([]);
+    setPotentialParentId(null);
     dragStart.current = null;
-    dragFramesStart.current = [];
+    dragObjectsStart.current = [];
     dragBoundsStart.current = null;
     clickedFrameId.current = null;
     didDrag.current = false;
@@ -806,33 +1085,42 @@ export function useCanvas() {
   // Store resize starting state
   const resizeBoundsStart = useRef<{
     bounds: { x: number; y: number; width: number; height: number };
-    frames: Frame[];
+    frames: CanvasObject[];
   } | null>(null);
 
   const startResize = useCallback(
     (handle: ResizeHandle, canvasPoint: Point) => {
-      const bounds = getSelectionBounds(frames, selectedIds);
+      const bounds = getSelectionBounds(objects, selectedIds);
       if (!bounds) return;
-      
+
       setIsResizing(true);
       resizeHandle.current = handle;
-      resizeStart.current = { 
-        frame: { id: '', name: '', x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, fill: '' }, 
-        point: canvasPoint 
+      resizeStart.current = {
+        object: {
+          x: bounds.x,
+          y: bounds.y,
+          width: bounds.width,
+          height: bounds.height,
+        },
+        point: canvasPoint,
       };
       resizeBoundsStart.current = {
         bounds: { ...bounds },
-        frames: frames.filter((f) => selectedIds.includes(f.id)).map((f) => ({ ...f })),
+        frames: objects
+          .filter((o) => selectedIds.includes(o.id))
+          .map((o) => ({ ...o })),
       };
     },
-    [frames, selectedIds, getSelectionBounds]
+    [objects, selectedIds, getSelectionBounds]
   );
 
   const updateResize = useCallback(
     (canvasPoint: Point) => {
-      if (!isResizing || !resizeStart.current || !resizeBoundsStart.current) return;
+      if (!isResizing || !resizeStart.current || !resizeBoundsStart.current)
+        return;
       const { point: start } = resizeStart.current;
-      const { bounds: origBounds, frames: origFrames } = resizeBoundsStart.current;
+      const { bounds: origBounds, frames: origObjects } =
+        resizeBoundsStart.current;
       const handle = resizeHandle.current!;
       const dx = canvasPoint.x - start.x;
       const dy = canvasPoint.y - start.y;
@@ -863,39 +1151,64 @@ export function useCanvas() {
         if (handle.includes("n")) y = origBounds.y + origBounds.height - 1;
       }
 
-      const otherFrames = frames.filter((f) => !selectedIds.includes(f.id));
+      const otherObjects = objects.filter((o) => !selectedIds.includes(o.id));
       const snapped = calculateSnapping(
         { x, y, width, height },
-        otherFrames,
+        otherObjects,
+        objects,
         "resize",
         handle
       );
 
       // Calculate scale factors
-      const scaleX = origBounds.width > 0 ? snapped.width / origBounds.width : 1;
-      const scaleY = origBounds.height > 0 ? snapped.height / origBounds.height : 1;
+      const scaleX =
+        origBounds.width > 0 ? snapped.width / origBounds.width : 1;
+      const scaleY =
+        origBounds.height > 0 ? snapped.height / origBounds.height : 1;
 
       setGuides(snapped.guides);
-      setFrames((prev) =>
-        prev.map((f) => {
-          const origFrame = origFrames.find((of) => of.id === f.id);
-          if (!origFrame) return f;
-          
-          // Scale position and size relative to bounds origin
-          const relX = origFrame.x - origBounds.x;
-          const relY = origFrame.y - origBounds.y;
-          
+      setObjects((prev) =>
+        prev.map((o) => {
+          const origObj = origObjects.find((oo) => oo.id === o.id);
+          if (!origObj) return o;
+
+          // Get original canvas position
+          const origCanvasPos = getCanvasPosition(origObj, objects);
+          // Calculate relative position from bounds origin
+          const relX = origCanvasPos.x - origBounds.x;
+          const relY = origCanvasPos.y - origBounds.y;
+
+          // New canvas position
+          const newCanvasX = snapped.x + relX * scaleX;
+          const newCanvasY = snapped.y + relY * scaleY;
+
+          // Convert back to relative position
+          const parentId = origObj.parentId;
+          if (parentId) {
+            const parent = objects.find((p) => p.id === parentId);
+            if (parent) {
+              const parentCanvasPos = getCanvasPosition(parent, objects);
+              return {
+                ...o,
+                x: newCanvasX - parentCanvasPos.x,
+                y: newCanvasY - parentCanvasPos.y,
+                width: origObj.width * scaleX,
+                height: origObj.height * scaleY,
+              };
+            }
+          }
+
           return {
-            ...f,
-            x: snapped.x + relX * scaleX,
-            y: snapped.y + relY * scaleY,
-            width: origFrame.width * scaleX,
-            height: origFrame.height * scaleY,
+            ...o,
+            x: newCanvasX,
+            y: newCanvasY,
+            width: origObj.width * scaleX,
+            height: origObj.height * scaleY,
           };
         })
       );
     },
-    [isResizing, selectedIds, frames]
+    [isResizing, selectedIds, objects]
   );
 
   const endResize = useCallback(() => {
@@ -961,18 +1274,19 @@ export function useCanvas() {
       const height = Math.abs(canvasPoint.y - start.y);
       setMarqueeRect({ x, y, width, height });
 
-      // Live selection: find frames that intersect with marquee
-      const intersecting = frames.filter((f) => {
+      // Live selection: find objects that intersect with marquee (canvas space)
+      const intersecting = objects.filter((o) => {
+        const canvasPos = getCanvasPosition(o, objects);
         return !(
-          f.x + f.width < x ||
-          f.x > x + width ||
-          f.y + f.height < y ||
-          f.y > y + height
+          canvasPos.x + o.width < x ||
+          canvasPos.x > x + width ||
+          canvasPos.y + o.height < y ||
+          canvasPos.y > y + height
         );
       });
-      setSelectedIds(intersecting.map((f) => f.id));
+      setSelectedIds(intersecting.map((o) => o.id));
     },
-    [isMarqueeSelecting, frames]
+    [isMarqueeSelecting, objects]
   );
 
   const endMarquee = useCallback(() => {
@@ -982,93 +1296,189 @@ export function useCanvas() {
   }, []);
 
   // Clipboard for copy/paste
-  const clipboard = useRef<Frame[]>([]);
+  const clipboard = useRef<CanvasObject[]>([]);
 
   const copySelected = useCallback(() => {
     if (selectedIds.length === 0) return;
-    clipboard.current = frames
-      .filter((f) => selectedIds.includes(f.id))
-      .map((f) => ({ ...f }));
-  }, [selectedIds, frames]);
+    clipboard.current = objects
+      .filter((o) => selectedIds.includes(o.id))
+      .map((o) => ({ ...o }));
+  }, [selectedIds, objects]);
 
   const pasteClipboard = useCallback(() => {
     if (clipboard.current.length === 0) return;
-    const newFrames: Frame[] = clipboard.current.map((f) => ({
-      ...f,
-      id: `frame-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      name: `${f.name} copy`,
-      x: f.x + 20,
-      y: f.y + 20,
+    const newObjects: CanvasObject[] = clipboard.current.map((o) => ({
+      ...o,
+      id: `${o.type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name: `${o.name} copy`,
+      x: o.x + 20,
+      y: o.y + 20,
     }));
-    setFrames((prev) => [...prev, ...newFrames]);
-    setSelectedIds(newFrames.map((f) => f.id));
+    setObjects((prev) => [...prev, ...newObjects]);
+    setSelectedIds(newObjects.map((o) => o.id));
   }, []);
 
   const duplicateSelected = useCallback(() => {
     if (selectedIds.length === 0) return;
-    const newFrames: Frame[] = frames
-      .filter((f) => selectedIds.includes(f.id))
-      .map((f) => ({
-        ...f,
-        id: `frame-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        name: `${f.name} copy`,
-        x: f.x + 20,
-        y: f.y + 20,
+    const newObjects: CanvasObject[] = objects
+      .filter((o) => selectedIds.includes(o.id))
+      .map((o) => ({
+        ...o,
+        id: `${o.type}-${Date.now()}-${Math.random()
+          .toString(36)
+          .substr(2, 9)}`,
+        name: `${o.name} copy`,
+        x: o.x + 20,
+        y: o.y + 20,
       }));
-    setFrames((prev) => [...prev, ...newFrames]);
-    setSelectedIds(newFrames.map((f) => f.id));
-  }, [selectedIds, frames]);
+    setObjects((prev) => [...prev, ...newObjects]);
+    setSelectedIds(newObjects.map((o) => o.id));
+  }, [selectedIds, objects]);
 
   // Alt+drag to duplicate
   const startDuplicateDrag = useCallback(
-    (frameId: string, canvasPoint: Point) => {
-      // Duplicate all selected frames if the clicked one is selected, otherwise just the clicked one
-      const toDuplicate = selectedIds.includes(frameId)
+    (objectId: string, canvasPoint: Point) => {
+      // Duplicate all selected objects if the clicked one is selected, otherwise just the clicked one
+      const toDuplicate = selectedIds.includes(objectId)
         ? selectedIds
-        : [frameId];
-      const framesToDupe = frames.filter((f) => toDuplicate.includes(f.id));
+        : [objectId];
+      const objectsToDupe = objects.filter((o) => toDuplicate.includes(o.id));
 
-      const newFrames: Frame[] = framesToDupe.map((f) => ({
-        ...f,
-        id: `frame-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        name: `${f.name} copy`,
+      const newObjects: CanvasObject[] = objectsToDupe.map((o) => ({
+        ...o,
+        id: `${o.type}-${Date.now()}-${Math.random()
+          .toString(36)
+          .substr(2, 9)}`,
+        name: `${o.name} copy`,
       }));
 
-      setFrames((prev) => [...prev, ...newFrames]);
-      setSelectedIds(newFrames.map((f) => f.id));
+      setObjects((prev) => [...prev, ...newObjects]);
+      setSelectedIds(newObjects.map((o) => o.id));
 
-      // Start dragging the new frames
+      // Start dragging the new objects
       setIsDragging(true);
       dragStart.current = canvasPoint;
-      dragFramesStart.current = newFrames.map((f) => ({
-        id: f.id,
-        x: f.x,
-        y: f.y,
+      dragObjectsStart.current = newObjects.map((o) => ({
+        id: o.id,
+        x: o.x,
+        y: o.y,
       }));
 
       // Set initial bounds for snapping
-      const bounds = getSelectionBounds(newFrames, newFrames.map((f) => f.id));
+      const bounds = getSelectionBounds(
+        newObjects,
+        newObjects.map((o) => o.id)
+      );
       dragBoundsStart.current = bounds ? { x: bounds.x, y: bounds.y } : null;
     },
-    [frames, selectedIds, getSelectionBounds]
+    [objects, selectedIds, getSelectionBounds]
   );
 
   const deleteSelected = useCallback(() => {
     if (selectedIds.length === 0) return;
-    setFrames((prev) => prev.filter((f) => !selectedIds.includes(f.id)));
+    setObjects((prev) => prev.filter((o) => !selectedIds.includes(o.id)));
     setSelectedIds([]);
+    setEditingTextId(null);
   }, [selectedIds]);
 
-  const selectedFrames = frames.filter((f) => selectedIds.includes(f.id));
-  const selectionBounds = getSelectionBounds(frames, selectedIds);
+  // Add image object
+  const addImage = useCallback(
+    (
+      src: string,
+      naturalWidth: number,
+      naturalHeight: number,
+      position: Point,
+      parentId: string | null = null
+    ) => {
+      const id = `image-${Date.now()}`;
+      const name = `Image ${objectCounter.current++}`;
+      const newImage: ImageObject = {
+        id,
+        name,
+        type: "image",
+        parentId,
+        x: position.x,
+        y: position.y,
+        width: naturalWidth,
+        height: naturalHeight,
+        opacity: 1,
+        src,
+        naturalWidth,
+        naturalHeight,
+      };
+      setObjects((prev) => [...prev, newImage]);
+      setSelectedIds([id]);
+    },
+    []
+  );
+
+  // Update object properties
+  const updateObject = useCallback(
+    (id: string, updates: Partial<CanvasObject>) => {
+      setObjects((prev) =>
+        prev.map((o) =>
+          o.id === id ? ({ ...o, ...updates } as CanvasObject) : o
+        )
+      );
+    },
+    []
+  );
+
+  // Update text content
+  const updateTextContent = useCallback((id: string, content: string) => {
+    setObjects((prev) =>
+      prev.map((o) =>
+        o.id === id && o.type === "text" ? { ...o, content } : o
+      )
+    );
+  }, []);
+
+  // Set parent for nesting
+  const setParent = useCallback((childId: string, parentId: string | null) => {
+    setObjects((prev) =>
+      prev.map((o) => {
+        if (o.id === childId) {
+          // When nesting, convert position to relative to parent
+          if (parentId) {
+            const parent = prev.find((p) => p.id === parentId);
+            if (parent) {
+              const canvasPos = getCanvasPosition(o, prev);
+              const parentCanvasPos = getCanvasPosition(parent, prev);
+              return {
+                ...o,
+                parentId,
+                x: canvasPos.x - parentCanvasPos.x,
+                y: canvasPos.y - parentCanvasPos.y,
+              };
+            }
+          } else {
+            // Unnesting - convert to canvas space
+            const canvasPos = getCanvasPosition(o, prev);
+            return {
+              ...o,
+              parentId: null,
+              x: canvasPos.x,
+              y: canvasPos.y,
+            };
+          }
+        }
+        return o;
+      })
+    );
+  }, []);
+
+  const selectedObjects = objects.filter((o) => selectedIds.includes(o.id));
+  const selectionBounds = getSelectionBounds(objects, selectedIds);
 
   return {
     transform,
-    frames,
+    objects,
     selectedIds,
-    selectedFrames,
+    selectedObjects,
     selectionBounds,
     tool,
+    editingTextId,
+    potentialParentId,
     isCreating,
     isDragging,
     isResizing,
@@ -1077,6 +1487,7 @@ export function useCanvas() {
     marqueeRect,
     guides,
     setTool,
+    setEditingTextId,
     screenToCanvas,
     handleWheel,
     startCreate,
@@ -1100,6 +1511,10 @@ export function useCanvas() {
     duplicateSelected,
     startDuplicateDrag,
     deleteSelected,
+    addImage,
+    updateObject,
+    updateTextContent,
+    setParent,
   };
 }
 

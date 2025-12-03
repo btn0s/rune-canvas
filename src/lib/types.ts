@@ -26,6 +26,42 @@ export interface Frame {
   fill: string;
 }
 
+// Canvas object types with parent-child support
+export interface BaseObject {
+  id: string;
+  name: string;
+  parentId: string | null; // null = root level
+  x: number; // relative to parent (or canvas if root)
+  y: number; // relative to parent (or canvas if root)
+  width: number;
+  height: number;
+  opacity: number;
+}
+
+export interface FrameObject extends BaseObject {
+  type: "frame";
+  fill: string;
+  radius: number;
+  clipContent: boolean; // toggle for overflow hidden
+}
+
+export interface ImageObject extends BaseObject {
+  type: "image";
+  src: string;
+  naturalWidth: number;
+  naturalHeight: number;
+}
+
+export interface TextObject extends BaseObject {
+  type: "text";
+  content: string;
+  fontSize: number;
+  fontFamily: string;
+  fill: string;
+}
+
+export type CanvasObject = FrameObject | ImageObject | TextObject;
+
 export type Tool =
   | "select"
   | "hand"
