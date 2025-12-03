@@ -230,7 +230,6 @@ export function Canvas() {
   const {
     transform,
     frames,
-    selectedFrames,
     selectionBounds,
     tool,
     isCreating,
@@ -363,13 +362,12 @@ export function Canvas() {
           drawLine(startX, screenY, endX, screenY);
         } else if (
           guide.type === "width" &&
-          selectedFrames[0] &&
+          selectionBounds &&
           guide.refFrame
         ) {
-          const sf = selectedFrames[0];
-          const frameX = toScreenX(sf.x);
-          const frameY = toScreenY(sf.y);
-          const frameW = sf.width * transform.scale;
+          const frameX = toScreenX(selectionBounds.x);
+          const frameY = toScreenY(selectionBounds.y);
+          const frameW = selectionBounds.width * transform.scale;
           const refX = toScreenX(guide.refFrame.x);
           const refY = toScreenY(guide.refFrame.y);
           const refW = guide.refFrame.width * transform.scale;
@@ -391,13 +389,12 @@ export function Canvas() {
           );
         } else if (
           guide.type === "height" &&
-          selectedFrames[0] &&
+          selectionBounds &&
           guide.refFrame
         ) {
-          const sf = selectedFrames[0];
-          const frameX = toScreenX(sf.x);
-          const frameY = toScreenY(sf.y);
-          const frameH = sf.height * transform.scale;
+          const frameX = toScreenX(selectionBounds.x);
+          const frameY = toScreenY(selectionBounds.y);
+          const frameH = selectionBounds.height * transform.scale;
           const refX = toScreenX(guide.refFrame.x);
           const refY = toScreenY(guide.refFrame.y);
           const refH = guide.refFrame.height * transform.scale;
@@ -473,58 +470,41 @@ export function Canvas() {
       ctx.setLineDash([]);
     }
 
-    // Draw selection outlines for all selected frames
-    ctx.strokeStyle = "#3b82f6";
-    ctx.lineWidth = 1;
-    for (const sf of selectedFrames) {
-      const x = sf.x * transform.scale + transform.x;
-      const y = sf.y * transform.scale + transform.y;
-      const w = sf.width * transform.scale;
-      const h = sf.height * transform.scale;
-      ctx.strokeRect(x, y, w, h);
-    }
-
-    // Draw bounding box, handles, and dimensions for selection
+    // Draw selection: outline, handles, dimensions (same for single or multi)
     if (selectionBounds) {
       const x = selectionBounds.x * transform.scale + transform.x;
       const y = selectionBounds.y * transform.scale + transform.y;
       const w = selectionBounds.width * transform.scale;
       const h = selectionBounds.height * transform.scale;
 
-      // Draw bounding box for multi-selection
-      if (selectedFrames.length > 1) {
-        ctx.strokeStyle = "#3b82f6";
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 4]);
-        ctx.strokeRect(x, y, w, h);
-        ctx.setLineDash([]);
-      }
+      // 1. Blue outline
+      ctx.strokeStyle = "#3b82f6";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, w, h);
 
-      // Resize handles (only for single selection for now)
-      if (selectedFrames.length === 1) {
-        ctx.fillStyle = "#fff";
-        ctx.strokeStyle = "#3b82f6";
-        const hs = HANDLE_SIZE;
+      // 2. Resize handles
+      ctx.fillStyle = "#fff";
+      ctx.strokeStyle = "#3b82f6";
+      const hs = HANDLE_SIZE;
 
-        const handlePositions: Record<ResizeHandle, [number, number]> = {
-          nw: [x - hs / 2, y - hs / 2],
-          n: [x + w / 2 - hs / 2, y - hs / 2],
-          ne: [x + w - hs / 2, y - hs / 2],
-          e: [x + w - hs / 2, y + h / 2 - hs / 2],
-          se: [x + w - hs / 2, y + h - hs / 2],
-          s: [x + w / 2 - hs / 2, y + h - hs / 2],
-          sw: [x - hs / 2, y + h - hs / 2],
-          w: [x - hs / 2, y + h / 2 - hs / 2],
-        };
+      const handlePositions: Record<ResizeHandle, [number, number]> = {
+        nw: [x - hs / 2, y - hs / 2],
+        n: [x + w / 2 - hs / 2, y - hs / 2],
+        ne: [x + w - hs / 2, y - hs / 2],
+        e: [x + w - hs / 2, y + h / 2 - hs / 2],
+        se: [x + w - hs / 2, y + h - hs / 2],
+        s: [x + w / 2 - hs / 2, y + h - hs / 2],
+        sw: [x - hs / 2, y + h - hs / 2],
+        w: [x - hs / 2, y + h / 2 - hs / 2],
+      };
 
-        HANDLES.forEach((handle) => {
-          const [hx, hy] = handlePositions[handle];
-          ctx.fillRect(hx, hy, hs, hs);
-          ctx.strokeRect(hx, hy, hs, hs);
-        });
-      }
+      HANDLES.forEach((handle) => {
+        const [hx, hy] = handlePositions[handle];
+        ctx.fillRect(hx, hy, hs, hs);
+        ctx.strokeRect(hx, hy, hs, hs);
+      });
 
-      // Dimension badge below selection bounds
+      // 3. Dimension badge
       const dimLabel = `${Math.round(selectionBounds.width)} × ${Math.round(selectionBounds.height)}`;
       ctx.font = "11px system-ui";
       const dimTextWidth = ctx.measureText(dimLabel).width;
@@ -552,12 +532,10 @@ export function Canvas() {
       ctx.strokeStyle = "#3b82f6";
       ctx.fillStyle = "rgba(59, 130, 246, 0.1)";
       ctx.lineWidth = 1;
-      ctx.setLineDash([4, 4]);
       ctx.fillRect(mx, my, mw, mh);
       ctx.strokeRect(mx, my, mw, mh);
-      ctx.setLineDash([]);
     }
-  }, [transform, selectedFrames, selectionBounds, guides, marqueeRect, isMarqueeSelecting]);
+  }, [transform, selectionBounds, guides, marqueeRect, isMarqueeSelecting]);
 
   useEffect(() => {
     draw();
@@ -582,15 +560,14 @@ export function Canvas() {
     return () => container.removeEventListener("wheel", onWheel);
   }, [handleWheel]);
 
-  // Hit test resize handles (only for single selection)
+  // Hit test resize handles on selection bounds
   const hitTestHandle = useCallback(
     (screenX: number, screenY: number): ResizeHandle | null => {
-      if (selectedFrames.length !== 1) return null;
-      const sf = selectedFrames[0];
-      const x = sf.x * transform.scale + transform.x;
-      const y = sf.y * transform.scale + transform.y;
-      const w = sf.width * transform.scale;
-      const h = sf.height * transform.scale;
+      if (!selectionBounds) return null;
+      const x = selectionBounds.x * transform.scale + transform.x;
+      const y = selectionBounds.y * transform.scale + transform.y;
+      const w = selectionBounds.width * transform.scale;
+      const h = selectionBounds.height * transform.scale;
       const hs = HANDLE_SIZE;
 
       const handlePositions: Record<ResizeHandle, [number, number]> = {
@@ -617,7 +594,7 @@ export function Canvas() {
       }
       return null;
     },
-    [selectedFrames, transform]
+    [selectionBounds, transform]
   );
 
   // Hit test frames

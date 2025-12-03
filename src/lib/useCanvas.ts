@@ -766,54 +766,67 @@ export function useCanvas() {
     dragBoundsStart.current = null;
   }, []);
 
+  // Store resize starting state
+  const resizeBoundsStart = useRef<{
+    bounds: { x: number; y: number; width: number; height: number };
+    frames: Frame[];
+  } | null>(null);
+
   const startResize = useCallback(
     (handle: ResizeHandle, canvasPoint: Point) => {
-      const primaryId = selectedIds[0];
-      const frame = frames.find((f) => f.id === primaryId);
-      if (!frame) return;
+      const bounds = getSelectionBounds(frames, selectedIds);
+      if (!bounds) return;
+      
       setIsResizing(true);
       resizeHandle.current = handle;
-      resizeStart.current = { frame: { ...frame }, point: canvasPoint };
+      resizeStart.current = { 
+        frame: { id: '', x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, fill: '' }, 
+        point: canvasPoint 
+      };
+      resizeBoundsStart.current = {
+        bounds: { ...bounds },
+        frames: frames.filter((f) => selectedIds.includes(f.id)).map((f) => ({ ...f })),
+      };
     },
-    [frames, selectedIds]
+    [frames, selectedIds, getSelectionBounds]
   );
 
   const updateResize = useCallback(
     (canvasPoint: Point) => {
-      const primaryId = selectedIds[0];
-      if (!isResizing || !resizeStart.current || !primaryId) return;
-      const { frame: orig, point: start } = resizeStart.current;
+      if (!isResizing || !resizeStart.current || !resizeBoundsStart.current) return;
+      const { point: start } = resizeStart.current;
+      const { bounds: origBounds, frames: origFrames } = resizeBoundsStart.current;
       const handle = resizeHandle.current!;
       const dx = canvasPoint.x - start.x;
       const dy = canvasPoint.y - start.y;
 
-      let { x, y, width, height } = orig;
+      let { x, y, width, height } = origBounds;
 
       if (handle.includes("w")) {
-        x = orig.x + dx;
-        width = orig.width - dx;
+        x = origBounds.x + dx;
+        width = origBounds.width - dx;
       }
       if (handle.includes("e")) {
-        width = orig.width + dx;
+        width = origBounds.width + dx;
       }
       if (handle.includes("n")) {
-        y = orig.y + dy;
-        height = orig.height - dy;
+        y = origBounds.y + dy;
+        height = origBounds.height - dy;
       }
       if (handle.includes("s")) {
-        height = orig.height + dy;
+        height = origBounds.height + dy;
       }
 
       if (width < 1) {
         width = 1;
-        if (handle.includes("w")) x = orig.x + orig.width - 1;
+        if (handle.includes("w")) x = origBounds.x + origBounds.width - 1;
       }
       if (height < 1) {
         height = 1;
-        if (handle.includes("n")) y = orig.y + orig.height - 1;
+        if (handle.includes("n")) y = origBounds.y + origBounds.height - 1;
       }
 
-      const otherFrames = frames.filter((f) => f.id !== primaryId);
+      const otherFrames = frames.filter((f) => !selectedIds.includes(f.id));
       const snapped = calculateSnapping(
         { x, y, width, height },
         otherFrames,
@@ -821,19 +834,28 @@ export function useCanvas() {
         handle
       );
 
+      // Calculate scale factors
+      const scaleX = origBounds.width > 0 ? snapped.width / origBounds.width : 1;
+      const scaleY = origBounds.height > 0 ? snapped.height / origBounds.height : 1;
+
       setGuides(snapped.guides);
       setFrames((prev) =>
-        prev.map((f) =>
-          f.id === primaryId
-            ? {
-                ...f,
-                x: snapped.x,
-                y: snapped.y,
-                width: snapped.width,
-                height: snapped.height,
-              }
-            : f
-        )
+        prev.map((f) => {
+          const origFrame = origFrames.find((of) => of.id === f.id);
+          if (!origFrame) return f;
+          
+          // Scale position and size relative to bounds origin
+          const relX = origFrame.x - origBounds.x;
+          const relY = origFrame.y - origBounds.y;
+          
+          return {
+            ...f,
+            x: snapped.x + relX * scaleX,
+            y: snapped.y + relY * scaleY,
+            width: origFrame.width * scaleX,
+            height: origFrame.height * scaleY,
+          };
+        })
       );
     },
     [isResizing, selectedIds, frames]
@@ -844,6 +866,7 @@ export function useCanvas() {
     setGuides([]);
     resizeHandle.current = null;
     resizeStart.current = null;
+    resizeBoundsStart.current = null;
   }, []);
 
   const startPan = useCallback((screenPoint: Point) => {
