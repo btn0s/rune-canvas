@@ -769,37 +769,42 @@ export function Canvas() {
             transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
           }}
         >
-          {frames.map((frame) => (
-            <div
-              key={frame.id}
-              data-frame-id={frame.id}
-              className="absolute left-0 top-0"
-              style={{
-                transform: `translate(${frame.x}px, ${frame.y}px)`,
-              }}
-            >
-              {/* Frame label */}
+          {frames.map((frame) => {
+            const isSelected = selectedIds.includes(frame.id);
+            return (
               <div
-                className="absolute text-zinc-500 text-sm whitespace-nowrap pointer-events-none select-none"
+                key={frame.id}
+                data-frame-id={frame.id}
+                className="absolute left-0 top-0"
                 style={{
-                  bottom: "100%",
-                  left: 0,
-                  marginBottom: 4,
-                  fontSize: `${Math.max(12, 14 / transform.scale)}px`,
+                  transform: `translate(${frame.x}px, ${frame.y}px)`,
                 }}
               >
-                {frame.name}
+                {/* Frame label */}
+                <div
+                  className={`absolute whitespace-nowrap pointer-events-none select-none ${
+                    isSelected ? "text-blue-400" : "text-zinc-500"
+                  }`}
+                  style={{
+                    bottom: "100%",
+                    left: 0,
+                    marginBottom: 4,
+                    fontSize: `${Math.max(10, 11 / transform.scale)}px`,
+                  }}
+                >
+                  {frame.name}
+                </div>
+                {/* Frame content */}
+                <div
+                  style={{
+                    width: frame.width,
+                    height: frame.height,
+                    backgroundColor: frame.fill,
+                  }}
+                />
               </div>
-              {/* Frame content */}
-              <div
-                style={{
-                  width: frame.width,
-                  height: frame.height,
-                  backgroundColor: frame.fill,
-                }}
-              />
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Canvas layer - selection + handles */}
