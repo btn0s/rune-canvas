@@ -647,8 +647,11 @@ export function useCanvas() {
       let endY = canvasPoint.y;
       const guides: Guide[] = [];
 
-      // Collect snap targets from other objects
-      const otherObjects = objects.filter((o) => o.id !== creatingId);
+      // Collect snap targets from sibling objects (same parent scope)
+      const parentId = creatingObj.parentId ?? null;
+      const otherObjects = objects.filter(
+        (o) => o.id !== creatingId && o.parentId === parentId
+      );
       const xTargets: number[] = [];
       const yTargets: number[] = [];
 
@@ -769,6 +772,8 @@ export function useCanvas() {
   const didDrag = useRef(false);
   // Track if shift was held on mousedown (for deselect on mouseup)
   const shiftOnMouseDown = useRef(false);
+  // Track if clicked object was already selected (for shift+click deselect)
+  const wasAlreadySelected = useRef(false);
   // Track locked axis for shift-drag constraint
   const dragLockedAxis = useRef<"x" | "y" | null>(null);
 
@@ -782,7 +787,10 @@ export function useCanvas() {
       // Reset drag tracking
       clickedFrameId.current = objectId;
       didDrag.current = false;
+      // Track if shift was held (to prevent "click = select only this" behavior)
       shiftOnMouseDown.current = addToSelection;
+      // Track if object was already selected (for shift+click deselect)
+      wasAlreadySelected.current = isAlreadySelected;
 
       // Determine new selection
       let newSelectedIds: string[];
@@ -887,7 +895,13 @@ export function useCanvas() {
         ...selectedIds,
         ...descendants.map((d) => d.id),
       ]);
-      const otherObjects = objects.filter((o) => !excludeIds.has(o.id));
+
+      // Scope snapping to siblings (same parent) only
+      const firstSelected = objects.find((o) => o.id === selectedIds[0]);
+      const parentId = firstSelected?.parentId ?? null;
+      const otherObjects = objects.filter(
+        (o) => !excludeIds.has(o.id) && o.parentId === parentId
+      );
       const snapped = calculateSnapping(
         {
           x: newBoundsX,
@@ -1046,9 +1060,10 @@ export function useCanvas() {
     if (clickedFrameId.current && !didDrag.current) {
       if (
         shiftOnMouseDown.current &&
+        wasAlreadySelected.current &&
         selectedIds.includes(clickedFrameId.current)
       ) {
-        // Shift+click on selected object without dragging = deselect it
+        // Shift+click on already-selected object without dragging = deselect it
         setSelectedIds(
           selectedIds.filter((id) => id !== clickedFrameId.current)
         );
@@ -1120,6 +1135,7 @@ export function useCanvas() {
     clickedFrameId.current = null;
     didDrag.current = false;
     shiftOnMouseDown.current = false;
+    wasAlreadySelected.current = false;
     dragLockedAxis.current = null;
     lastDragPoint.current = null;
   }, [selectedIds]);
@@ -1264,7 +1280,12 @@ export function useCanvas() {
         if (handle.includes("n")) y = origBounds.y + origBounds.height - 1;
       }
 
-      const otherObjects = objects.filter((o) => !selectedIds.includes(o.id));
+      // Scope snapping to siblings (same parent) only
+      const firstSelected = objects.find((o) => o.id === selectedIds[0]);
+      const parentId = firstSelected?.parentId ?? null;
+      const otherObjects = objects.filter(
+        (o) => !selectedIds.includes(o.id) && o.parentId === parentId
+      );
       const snapped = calculateSnapping(
         { x, y, width, height },
         otherObjects,
@@ -1448,14 +1469,30 @@ export function useCanvas() {
       });
 
       return objectsToDupe.map((o) => {
-        const isRoot = !o.parentId || !idMap.has(o.parentId);
+        // Check if this object's parent is in the duplication set
+        const parentInSet = o.parentId && idMap.has(o.parentId);
+        // Is this a "root" of the duplication (no parent, or parent not in set)
+        const isRoot = !o.parentId || !parentInSet;
+
+        // Determine the new parent:
+        // - If parent is in the set, remap to new ID
+        // - If parent is NOT in set but exists, keep original parent (stay nested)
+        // - If no parent, stay null
+        let newParentId: string | null = null;
+        if (o.parentId) {
+          if (parentInSet) {
+            newParentId = idMap.get(o.parentId)!;
+          } else {
+            // Keep the original parent - duplicate stays in same frame
+            newParentId = o.parentId;
+          }
+        }
+
         return {
           ...o,
           id: idMap.get(o.id)!,
           name: appendCopy ? `${o.name} copy` : o.name,
-          // If parent is in the copy set, remap to new ID; otherwise set to null (not stale old ID)
-          parentId:
-            o.parentId && idMap.has(o.parentId) ? idMap.get(o.parentId)! : null,
+          parentId: newParentId,
           // Only offset root-level objects (children stay relative to parent)
           x: isRoot ? o.x + offset.x : o.x,
           y: isRoot ? o.y + offset.y : o.y,
@@ -1562,6 +1599,151 @@ export function useCanvas() {
       setSelectedIds(siblingIds);
     }
   }, [selectedIds, objects]);
+
+  // Alignment functions
+  const alignObjects = useCallback(
+    (
+      alignment: "left" | "right" | "top" | "bottom" | "centerH" | "centerV"
+    ) => {
+      if (selectedIds.length === 0) return;
+
+      const selected = objects.filter((o) => selectedIds.includes(o.id));
+
+      // Single object with parent frame: align within parent
+      if (selectedIds.length === 1) {
+        const obj = selected[0];
+        if (!obj.parentId) return; // Can't align single root object
+
+        const parent = objects.find((o) => o.id === obj.parentId);
+        if (!parent || parent.type !== "frame") return;
+
+        setObjects((prev) =>
+          prev.map((o) => {
+            if (o.id !== obj.id) return o;
+
+            let newX = o.x;
+            let newY = o.y;
+
+            switch (alignment) {
+              case "left":
+                newX = 0;
+                break;
+              case "right":
+                newX = parent.width - o.width;
+                break;
+              case "top":
+                newY = 0;
+                break;
+              case "bottom":
+                newY = parent.height - o.height;
+                break;
+              case "centerH":
+                newX = (parent.width - o.width) / 2;
+                break;
+              case "centerV":
+                newY = (parent.height - o.height) / 2;
+                break;
+            }
+
+            return { ...o, x: newX, y: newY };
+          })
+        );
+        return;
+      }
+
+      // Multiple objects: align to each other
+      const positions = selected.map((o) => ({
+        id: o.id,
+        ...getCanvasPosition(o, objects),
+        width: o.width,
+        height: o.height,
+        parentId: o.parentId,
+      }));
+
+      // Calculate bounds
+      const minX = Math.min(...positions.map((p) => p.x));
+      const maxX = Math.max(...positions.map((p) => p.x + p.width));
+      const minY = Math.min(...positions.map((p) => p.y));
+      const maxY = Math.max(...positions.map((p) => p.y + p.height));
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+
+      setObjects((prev) =>
+        prev.map((o) => {
+          if (!selectedIds.includes(o.id)) return o;
+
+          const pos = positions.find((p) => p.id === o.id)!;
+          const canvasPos = { x: pos.x, y: pos.y };
+          let newCanvasX = canvasPos.x;
+          let newCanvasY = canvasPos.y;
+
+          switch (alignment) {
+            case "left":
+              newCanvasX = minX;
+              break;
+            case "right":
+              newCanvasX = maxX - o.width;
+              break;
+            case "top":
+              newCanvasY = minY;
+              break;
+            case "bottom":
+              newCanvasY = maxY - o.height;
+              break;
+            case "centerH":
+              newCanvasX = centerX - o.width / 2;
+              break;
+            case "centerV":
+              newCanvasY = centerY - o.height / 2;
+              break;
+          }
+
+          // Convert back to relative position if has parent
+          if (o.parentId) {
+            const parent = prev.find((p) => p.id === o.parentId);
+            if (parent) {
+              const parentCanvasPos = getCanvasPosition(parent, prev);
+              return {
+                ...o,
+                x: newCanvasX - parentCanvasPos.x,
+                y: newCanvasY - parentCanvasPos.y,
+              };
+            }
+          }
+
+          return { ...o, x: newCanvasX, y: newCanvasY };
+        })
+      );
+    },
+    [selectedIds, objects]
+  );
+
+  const alignLeft = useCallback(() => alignObjects("left"), [alignObjects]);
+  const alignRight = useCallback(() => alignObjects("right"), [alignObjects]);
+  const alignTop = useCallback(() => alignObjects("top"), [alignObjects]);
+  const alignBottom = useCallback(() => alignObjects("bottom"), [alignObjects]);
+  const alignCenterH = useCallback(
+    () => alignObjects("centerH"),
+    [alignObjects]
+  );
+  const alignCenterV = useCallback(
+    () => alignObjects("centerV"),
+    [alignObjects]
+  );
+
+  // Move selected objects by delta
+  const moveSelected = useCallback(
+    (dx: number, dy: number) => {
+      if (selectedIds.length === 0) return;
+      setObjects((prev) =>
+        prev.map((o) => {
+          if (!selectedIds.includes(o.id)) return o;
+          return { ...o, x: o.x + dx, y: o.y + dy };
+        })
+      );
+    },
+    [selectedIds]
+  );
 
   // Add image object
   const addImage = useCallback(
@@ -1694,6 +1876,13 @@ export function useCanvas() {
     startDuplicateDrag,
     deleteSelected,
     selectAllSiblings,
+    alignLeft,
+    alignRight,
+    alignTop,
+    alignBottom,
+    alignCenterH,
+    alignCenterV,
+    moveSelected,
     addImage,
     updateObject,
     updateTextContent,

@@ -280,6 +280,13 @@ export function Canvas() {
     startDuplicateDrag,
     deleteSelected,
     selectAllSiblings,
+    alignLeft,
+    alignRight,
+    alignTop,
+    alignBottom,
+    alignCenterH,
+    alignCenterV,
+    moveSelected,
     addImage,
     updateTextContent,
     updateObject,
@@ -755,6 +762,40 @@ export function Canvas() {
         return;
       }
 
+      // Alt+WASD and Alt+H/V for alignment (use e.code for macOS compatibility)
+      if (e.altKey) {
+        if (e.code === "KeyW") {
+          e.preventDefault();
+          alignTop();
+          return;
+        }
+        if (e.code === "KeyA") {
+          e.preventDefault();
+          alignLeft();
+          return;
+        }
+        if (e.code === "KeyS") {
+          e.preventDefault();
+          alignBottom();
+          return;
+        }
+        if (e.code === "KeyD") {
+          e.preventDefault();
+          alignRight();
+          return;
+        }
+        if (e.code === "KeyH") {
+          e.preventDefault();
+          alignCenterH();
+          return;
+        }
+        if (e.code === "KeyV") {
+          e.preventDefault();
+          alignCenterV();
+          return;
+        }
+      }
+
       // Tool shortcuts
       if (e.key === "v" || e.key === "Escape") setTool("select");
       if (e.key === "h") setTool("hand");
@@ -784,6 +825,25 @@ export function Canvas() {
         e.preventDefault();
         deleteSelected();
       }
+
+      // Arrow keys to move selected objects
+      const moveAmount = e.shiftKey ? 10 : 1;
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        moveSelected(0, -moveAmount);
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        moveSelected(0, moveAmount);
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        moveSelected(-moveAmount, 0);
+      }
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        moveSelected(moveAmount, 0);
+      }
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
@@ -805,6 +865,13 @@ export function Canvas() {
     duplicateSelected,
     deleteSelected,
     selectAllSiblings,
+    alignLeft,
+    alignRight,
+    alignTop,
+    alignBottom,
+    alignCenterH,
+    alignCenterV,
+    moveSelected,
   ]);
 
   // Image drop handlers
