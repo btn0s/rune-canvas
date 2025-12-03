@@ -657,6 +657,9 @@ export function useCanvas() {
 
   // Store initial selection bounds for dragging
   const dragBoundsStart = useRef<{ x: number; y: number } | null>(null);
+  // Track clicked frame for potential deselect-on-mouseup
+  const clickedFrameId = useRef<string | null>(null);
+  const didDrag = useRef(false);
 
   const startDrag = useCallback(
     (frameId: string, canvasPoint: Point, addToSelection = false) => {
@@ -671,13 +674,20 @@ export function useCanvas() {
         return;
       }
 
+      // Reset drag tracking
+      clickedFrameId.current = frameId;
+      didDrag.current = false;
+
       // Determine new selection
       let newSelectedIds: string[];
       if (addToSelection) {
         // Shift+click unselected = add to selection
         newSelectedIds = [...selectedIds, frameId];
+      } else if (isAlreadySelected) {
+        // Click on already-selected frame = keep all selected (might deselect on mouseup)
+        newSelectedIds = selectedIds;
       } else {
-        // Click without shift = select only this one (deselect others)
+        // Click unselected without shift = select only this one
         newSelectedIds = [frameId];
       }
 
@@ -714,6 +724,11 @@ export function useCanvas() {
 
       const dx = canvasPoint.x - dragStart.current.x;
       const dy = canvasPoint.y - dragStart.current.y;
+
+      // Mark as dragged if moved more than 2px
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        didDrag.current = true;
+      }
 
       // Compute current bounding box dimensions from starting frames
       const startingFrames = dragFramesStart.current;
@@ -769,12 +784,24 @@ export function useCanvas() {
   );
 
   const endDrag = useCallback(() => {
+    // If clicked on a selected frame but didn't drag, deselect others
+    if (
+      clickedFrameId.current &&
+      !didDrag.current &&
+      selectedIds.length > 1 &&
+      selectedIds.includes(clickedFrameId.current)
+    ) {
+      setSelectedIds([clickedFrameId.current]);
+    }
+
     setIsDragging(false);
     setGuides([]);
     dragStart.current = null;
     dragFramesStart.current = [];
     dragBoundsStart.current = null;
-  }, []);
+    clickedFrameId.current = null;
+    didDrag.current = false;
+  }, [selectedIds]);
 
   // Store resize starting state
   const resizeBoundsStart = useRef<{
