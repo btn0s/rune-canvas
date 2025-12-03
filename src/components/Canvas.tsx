@@ -836,6 +836,8 @@ export function Canvas() {
         <LayersPanel
           frames={frames}
           selectedIds={selectedIds}
+          transform={transform}
+          containerRef={containerRef as React.RefObject<HTMLDivElement>}
           onSelect={select}
         />
 

@@ -1,20 +1,59 @@
-import { Frame } from "../lib/types";
-import { useState, useEffect, useRef } from "react";
+import { Frame, Transform } from "../lib/types";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 interface LayersPanelProps {
   frames: Frame[];
   selectedIds: string[];
+  transform: Transform;
+  containerRef: React.RefObject<HTMLDivElement>;
   onSelect: (ids: string[] | null, addToSelection?: boolean) => void;
 }
 
 export function LayersPanel({
   frames,
   selectedIds,
+  transform,
+  containerRef,
   onSelect,
 }: LayersPanelProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [animatedIds, setAnimatedIds] = useState<Set<string>>(new Set());
+  const [isOverlapping, setIsOverlapping] = useState(false);
   const prevFrameIds = useRef<Set<string>>(new Set());
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Check if panel overlaps with any frame
+  const checkOverlap = useCallback(() => {
+    if (!panelRef.current || !containerRef.current) return;
+
+    const panelRect = panelRef.current.getBoundingClientRect();
+    const containerRect = containerRef.current.getBoundingClientRect();
+
+    // Convert panel rect to canvas coordinates
+    const panelInCanvas = {
+      x: (panelRect.left - containerRect.left - transform.x) / transform.scale,
+      y: (panelRect.top - containerRect.top - transform.y) / transform.scale,
+      width: panelRect.width / transform.scale,
+      height: panelRect.height / transform.scale,
+    };
+
+    // Check intersection with any frame
+    const overlaps = frames.some((f) => {
+      return !(
+        f.x + f.width < panelInCanvas.x ||
+        f.x > panelInCanvas.x + panelInCanvas.width ||
+        f.y + f.height < panelInCanvas.y ||
+        f.y > panelInCanvas.y + panelInCanvas.height
+      );
+    });
+
+    setIsOverlapping(overlaps);
+  }, [frames, transform, containerRef]);
+
+  // Check overlap on mount and when frames/transform change
+  useEffect(() => {
+    checkOverlap();
+  }, [checkOverlap]);
 
   // Track new frames for animation
   useEffect(() => {
@@ -43,9 +82,15 @@ export function LayersPanel({
   // Reverse frames so top-most appears first
   const reversedFrames = [...frames].reverse();
 
+  const showGlassyBg = isHovered && isOverlapping;
+
   return (
     <div
-      className="absolute left-4 top-1/2 -translate-y-1/2 flex flex-col"
+      ref={panelRef}
+      className={`
+        absolute left-4 top-1/2 -translate-y-1/2 flex flex-col transition-all duration-200
+        ${showGlassyBg ? "bg-zinc-900/70 backdrop-blur-sm rounded-lg p-2 -m-2" : ""}
+      `}
       style={{
         gap: isHovered ? 4 : 3,
       }}
