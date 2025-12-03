@@ -45,11 +45,9 @@ export function LayersPanel({
 
   return (
     <div
-      className="absolute left-4 top-1/2 -translate-y-1/2 flex flex-col p-2 rounded-lg bg-zinc-900/50 backdrop-blur-sm transition-all duration-300 ease-out"
+      className="absolute left-4 top-1/2 -translate-y-1/2 flex flex-col"
       style={{
-        width: isHovered ? "auto" : "fit-content",
-        minWidth: isHovered ? 140 : 40,
-        gap: isHovered ? 4 : 2,
+        gap: isHovered ? 4 : 3,
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -60,11 +58,7 @@ export function LayersPanel({
         return (
           <div
             key={frame.id}
-            className={`
-              relative flex items-center cursor-pointer rounded
-              transition-all duration-300 ease-out overflow-hidden
-              ${isSelected ? "bg-blue-500/20" : "hover:bg-zinc-800"}
-            `}
+            className="relative flex items-center cursor-pointer transition-all duration-300 ease-out overflow-hidden"
             style={{
               width: isHovered ? "100%" : 24,
               height: isHovered ? 20 : 2,
@@ -87,7 +81,7 @@ export function LayersPanel({
               <div
                 className={`
                   absolute inset-0 rounded-full
-                  ${isSelected ? "bg-blue-400" : "bg-zinc-500"}
+                  ${isSelected ? "bg-blue-400/70" : "bg-zinc-600"}
                 `}
               />
             )}
@@ -95,7 +89,7 @@ export function LayersPanel({
             <span
               className={`
                 text-xs whitespace-nowrap transition-all duration-300 ease-out
-                ${isSelected ? "text-blue-400" : "text-zinc-400"}
+                ${isSelected ? "text-blue-400" : "text-zinc-500"}
               `}
               style={{
                 opacity: isHovered ? 1 : 0,
