@@ -1,0 +1,884 @@
+import { useCallback, useRef, useState } from "react";
+import type {
+  Frame,
+  Guide,
+  Point,
+  ResizeHandle,
+  Tool,
+  Transform,
+} from "./types";
+
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 4;
+const ZOOM_SPEED = 100; // pixels of pinch/scroll to double/halve zoom
+const SNAP_THRESHOLD = 8;
+
+interface SnapTarget {
+  value: number;
+  frameId: string;
+  frame: Frame;
+}
+
+// Helper to create a vertical guide with proper bounds
+function createVerticalGuide(
+  position: number,
+  currentFrame: { y: number; height: number },
+  snapFrame: Frame
+): Guide {
+  return {
+    type: "vertical",
+    position,
+    startBound: Math.min(currentFrame.y, snapFrame.y),
+    endBound: Math.max(
+      currentFrame.y + currentFrame.height,
+      snapFrame.y + snapFrame.height
+    ),
+  };
+}
+
+// Helper to create a horizontal guide with proper bounds
+function createHorizontalGuide(
+  position: number,
+  currentFrame: { x: number; width: number },
+  snapFrame: Frame
+): Guide {
+  return {
+    type: "horizontal",
+    position,
+    startBound: Math.min(currentFrame.x, snapFrame.x),
+    endBound: Math.max(
+      currentFrame.x + currentFrame.width,
+      snapFrame.x + snapFrame.width
+    ),
+  };
+}
+
+function calculateSnapping(
+  frame: { x: number; y: number; width: number; height: number },
+  otherFrames: Frame[],
+  mode: "move" | "create" | "resize",
+  resizeHandle?: ResizeHandle
+): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  guides: Guide[];
+} {
+  let { x, y, width, height } = frame;
+  const guides: Guide[] = [];
+
+  if (otherFrames.length === 0) {
+    return { x, y, width, height, guides };
+  }
+
+  // Collect snap targets with frame references
+  const xTargets: SnapTarget[] = [];
+  const yTargets: SnapTarget[] = [];
+
+  for (const other of otherFrames) {
+    xTargets.push({ value: other.x, frameId: other.id, frame: other });
+    xTargets.push({
+      value: other.x + other.width,
+      frameId: other.id,
+      frame: other,
+    });
+    xTargets.push({
+      value: other.x + other.width / 2,
+      frameId: other.id,
+      frame: other,
+    });
+    yTargets.push({ value: other.y, frameId: other.id, frame: other });
+    yTargets.push({
+      value: other.y + other.height,
+      frameId: other.id,
+      frame: other,
+    });
+    yTargets.push({
+      value: other.y + other.height / 2,
+      frameId: other.id,
+      frame: other,
+    });
+  }
+
+  let snappedX = false;
+  let snappedY = false;
+
+  // Helper to try snapping X position
+  const trySnapX = (
+    edgePos: number,
+    applySnap: (targetValue: number) => void
+  ) => {
+    if (snappedX) return;
+    for (const target of xTargets) {
+      if (Math.abs(edgePos - target.value) < SNAP_THRESHOLD) {
+        applySnap(target.value);
+        snappedX = true;
+        guides.push(
+          createVerticalGuide(target.value, { y, height }, target.frame)
+        );
+        break;
+      }
+    }
+  };
+
+  // Helper to try snapping Y position
+  const trySnapY = (
+    edgePos: number,
+    applySnap: (targetValue: number) => void
+  ) => {
+    if (snappedY) return;
+    for (const target of yTargets) {
+      if (Math.abs(edgePos - target.value) < SNAP_THRESHOLD) {
+        applySnap(target.value);
+        snappedY = true;
+        guides.push(
+          createHorizontalGuide(target.value, { x, width }, target.frame)
+        );
+        break;
+      }
+    }
+  };
+
+  if (mode === "move" || mode === "create") {
+    // Snap left edge
+    trySnapX(x, (v) => {
+      x = v;
+    });
+    // Snap right edge
+    trySnapX(x + width, (v) => {
+      x = v - width;
+    });
+    // Snap center X
+    trySnapX(x + width / 2, (v) => {
+      x = v - width / 2;
+    });
+
+    // Snap top edge
+    trySnapY(y, (v) => {
+      y = v;
+    });
+    // Snap bottom edge
+    trySnapY(y + height, (v) => {
+      y = v - height;
+    });
+    // Snap center Y
+    trySnapY(y + height / 2, (v) => {
+      y = v - height / 2;
+    });
+  }
+
+  // Dimension snapping (width/height matching) - only during resize/create
+  if (mode === "resize" || mode === "create") {
+    const isChangingWidth =
+      mode === "create" ||
+      (resizeHandle &&
+        (resizeHandle.includes("e") || resizeHandle.includes("w")));
+    const isChangingHeight =
+      mode === "create" ||
+      (resizeHandle &&
+        (resizeHandle.includes("n") || resizeHandle.includes("s")));
+
+    if (isChangingWidth) {
+      const matchingWidthFrames = otherFrames.filter(
+        (f) => Math.abs(f.width - width) < SNAP_THRESHOLD
+      );
+      if (matchingWidthFrames.length > 0) {
+        const targetWidth = matchingWidthFrames[0].width;
+        const oldWidth = width;
+        width = targetWidth;
+        if (resizeHandle?.includes("w")) {
+          x += oldWidth - width;
+        }
+        for (const matchFrame of matchingWidthFrames) {
+          guides.push({
+            type: "width",
+            position: targetWidth,
+            refFrame: {
+              x: matchFrame.x,
+              y: matchFrame.y,
+              width: matchFrame.width,
+              height: matchFrame.height,
+            },
+          });
+        }
+      }
+    }
+
+    if (isChangingHeight) {
+      const matchingHeightFrames = otherFrames.filter(
+        (f) => Math.abs(f.height - height) < SNAP_THRESHOLD
+      );
+      if (matchingHeightFrames.length > 0) {
+        const targetHeight = matchingHeightFrames[0].height;
+        const oldHeight = height;
+        height = targetHeight;
+        if (resizeHandle?.includes("n")) {
+          y += oldHeight - height;
+        }
+        for (const matchFrame of matchingHeightFrames) {
+          guides.push({
+            type: "height",
+            position: targetHeight,
+            refFrame: {
+              x: matchFrame.x,
+              y: matchFrame.y,
+              width: matchFrame.width,
+              height: matchFrame.height,
+            },
+          });
+        }
+      }
+    }
+
+    // Edge snapping during resize
+    if (resizeHandle) {
+      if (resizeHandle.includes("e")) {
+        trySnapX(x + width, (v) => {
+          width = v - x;
+        });
+      }
+      if (resizeHandle.includes("w")) {
+        trySnapX(x, (v) => {
+          width = width + (x - v);
+          x = v;
+        });
+      }
+      if (resizeHandle.includes("s")) {
+        trySnapY(y + height, (v) => {
+          height = v - y;
+        });
+      }
+      if (resizeHandle.includes("n")) {
+        trySnapY(y, (v) => {
+          height = height + (y - v);
+          y = v;
+        });
+      }
+    }
+  }
+
+  // Gap snapping for move mode
+  if (mode === "move") {
+    const allGaps = calculateAllGaps(otherFrames);
+
+    // Try horizontal gap snapping
+    for (const gap of allGaps.horizontal) {
+      if (snappedX) break;
+      for (const other of otherFrames) {
+        const gapToRight = other.x - (x + width);
+        if (
+          gapToRight > 0 &&
+          Math.abs(gapToRight - gap.distance) < SNAP_THRESHOLD
+        ) {
+          x = other.x - width - gap.distance;
+          snappedX = true;
+          // Add guide for the new gap being created
+          guides.push({
+            type: "gap",
+            distance: gap.distance,
+            orientation: "vertical",
+            gapStart: x + width,
+            gapEnd: other.x,
+            gapTopY: Math.max(y, other.y),
+            gapBottomY: Math.min(y + height, other.y + other.height),
+          });
+          // Add guides for ALL existing gaps with this distance
+          for (const existingGap of allGaps.horizontal) {
+            if (existingGap.distance === gap.distance) {
+              guides.push({
+                type: "gap",
+                distance: existingGap.distance,
+                orientation: "vertical",
+                gapStart: existingGap.start,
+                gapEnd: existingGap.end,
+                gapTopY: existingGap.topY,
+                gapBottomY: existingGap.bottomY,
+              });
+            }
+          }
+          break;
+        }
+        const gapToLeft = x - (other.x + other.width);
+        if (
+          gapToLeft > 0 &&
+          Math.abs(gapToLeft - gap.distance) < SNAP_THRESHOLD
+        ) {
+          x = other.x + other.width + gap.distance;
+          snappedX = true;
+          guides.push({
+            type: "gap",
+            distance: gap.distance,
+            orientation: "vertical",
+            gapStart: other.x + other.width,
+            gapEnd: x,
+            gapTopY: Math.max(y, other.y),
+            gapBottomY: Math.min(y + height, other.y + other.height),
+          });
+          for (const existingGap of allGaps.horizontal) {
+            if (existingGap.distance === gap.distance) {
+              guides.push({
+                type: "gap",
+                distance: existingGap.distance,
+                orientation: "vertical",
+                gapStart: existingGap.start,
+                gapEnd: existingGap.end,
+                gapTopY: existingGap.topY,
+                gapBottomY: existingGap.bottomY,
+              });
+            }
+          }
+          break;
+        }
+      }
+    }
+
+    // Try vertical gap snapping
+    for (const gap of allGaps.vertical) {
+      if (snappedY) break;
+      for (const other of otherFrames) {
+        const gapBelow = other.y - (y + height);
+        if (
+          gapBelow > 0 &&
+          Math.abs(gapBelow - gap.distance) < SNAP_THRESHOLD
+        ) {
+          y = other.y - height - gap.distance;
+          snappedY = true;
+          guides.push({
+            type: "gap",
+            distance: gap.distance,
+            orientation: "horizontal",
+            gapStart: y + height,
+            gapEnd: other.y,
+            gapLeftX: Math.max(x, other.x),
+            gapRightX: Math.min(x + width, other.x + other.width),
+          });
+          for (const existingGap of allGaps.vertical) {
+            if (existingGap.distance === gap.distance) {
+              guides.push({
+                type: "gap",
+                distance: existingGap.distance,
+                orientation: "horizontal",
+                gapStart: existingGap.start,
+                gapEnd: existingGap.end,
+                gapLeftX: existingGap.leftX,
+                gapRightX: existingGap.rightX,
+              });
+            }
+          }
+          break;
+        }
+        const gapAbove = y - (other.y + other.height);
+        if (
+          gapAbove > 0 &&
+          Math.abs(gapAbove - gap.distance) < SNAP_THRESHOLD
+        ) {
+          y = other.y + other.height + gap.distance;
+          snappedY = true;
+          guides.push({
+            type: "gap",
+            distance: gap.distance,
+            orientation: "horizontal",
+            gapStart: other.y + other.height,
+            gapEnd: y,
+            gapLeftX: Math.max(x, other.x),
+            gapRightX: Math.min(x + width, other.x + other.width),
+          });
+          for (const existingGap of allGaps.vertical) {
+            if (existingGap.distance === gap.distance) {
+              guides.push({
+                type: "gap",
+                distance: existingGap.distance,
+                orientation: "horizontal",
+                gapStart: existingGap.start,
+                gapEnd: existingGap.end,
+                gapLeftX: existingGap.leftX,
+                gapRightX: existingGap.rightX,
+              });
+            }
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  return { x, y, width, height, guides };
+}
+
+interface GapInfo {
+  distance: number;
+  start: number;
+  end: number;
+  topY?: number; // for horizontal gaps (vertical orientation) - top of overlapping area
+  bottomY?: number; // for horizontal gaps (vertical orientation) - bottom of overlapping area
+  leftX?: number; // for vertical gaps (horizontal orientation) - left of overlapping area
+  rightX?: number; // for vertical gaps (horizontal orientation) - right of overlapping area
+}
+
+function calculateAllGaps(frames: Frame[]): {
+  horizontal: GapInfo[];
+  vertical: GapInfo[];
+} {
+  const horizontal: GapInfo[] = [];
+  const vertical: GapInfo[] = [];
+
+  for (let i = 0; i < frames.length; i++) {
+    for (let j = i + 1; j < frames.length; j++) {
+      const a = frames[i];
+      const b = frames[j];
+
+      // Horizontal gap (frames side by side)
+      if (a.x + a.width < b.x) {
+        const gapStart = a.x + a.width;
+        const gapEnd = b.x;
+        const overlapTop = Math.max(a.y, b.y);
+        const overlapBottom = Math.min(a.y + a.height, b.y + b.height);
+        if (overlapBottom > overlapTop) {
+          horizontal.push({
+            distance: Math.round(gapEnd - gapStart),
+            start: gapStart,
+            end: gapEnd,
+            topY: overlapTop,
+            bottomY: overlapBottom,
+          });
+        }
+      } else if (b.x + b.width < a.x) {
+        const gapStart = b.x + b.width;
+        const gapEnd = a.x;
+        const overlapTop = Math.max(a.y, b.y);
+        const overlapBottom = Math.min(a.y + a.height, b.y + b.height);
+        if (overlapBottom > overlapTop) {
+          horizontal.push({
+            distance: Math.round(gapEnd - gapStart),
+            start: gapStart,
+            end: gapEnd,
+            topY: overlapTop,
+            bottomY: overlapBottom,
+          });
+        }
+      }
+
+      // Vertical gap (frames stacked)
+      if (a.y + a.height < b.y) {
+        const gapStart = a.y + a.height;
+        const gapEnd = b.y;
+        const overlapLeft = Math.max(a.x, b.x);
+        const overlapRight = Math.min(a.x + a.width, b.x + b.width);
+        if (overlapRight > overlapLeft) {
+          vertical.push({
+            distance: Math.round(gapEnd - gapStart),
+            start: gapStart,
+            end: gapEnd,
+            leftX: overlapLeft,
+            rightX: overlapRight,
+          });
+        }
+      } else if (b.y + b.height < a.y) {
+        const gapStart = b.y + b.height;
+        const gapEnd = a.y;
+        const overlapLeft = Math.max(a.x, b.x);
+        const overlapRight = Math.min(a.x + a.width, b.x + b.width);
+        if (overlapRight > overlapLeft) {
+          vertical.push({
+            distance: Math.round(gapEnd - gapStart),
+            start: gapStart,
+            end: gapEnd,
+            leftX: overlapLeft,
+            rightX: overlapRight,
+          });
+        }
+      }
+    }
+  }
+
+  return { horizontal, vertical };
+}
+
+export function useCanvas() {
+  const [transform, setTransform] = useState<Transform>({
+    x: 0,
+    y: 0,
+    scale: 1,
+  });
+  const [frames, setFrames] = useState<Frame[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [tool, setTool] = useState<Tool>("frame");
+
+  const [isCreating, setIsCreating] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const [isPanning, setIsPanning] = useState(false);
+  const [guides, setGuides] = useState<Guide[]>([]);
+
+  const createStart = useRef<Point | null>(null);
+  const dragStart = useRef<Point | null>(null);
+  const dragFrameStart = useRef<{ x: number; y: number } | null>(null);
+  const resizeHandle = useRef<ResizeHandle | null>(null);
+  const resizeStart = useRef<{ frame: Frame; point: Point } | null>(null);
+
+  const screenToCanvas = useCallback(
+    (screenX: number, screenY: number): Point => ({
+      x: (screenX - transform.x) / transform.scale,
+      y: (screenY - transform.y) / transform.scale,
+    }),
+    [transform]
+  );
+
+  const handleWheel = useCallback(
+    (e: WheelEvent, rect: DOMRect) => {
+      e.preventDefault();
+      if (e.ctrlKey) {
+        // Pinch zoom - use exponential scaling for natural feel
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        // Exponential zoom: deltaY pixels = doubling/halving of zoom
+        const zoomFactor = Math.pow(2, -e.deltaY / ZOOM_SPEED);
+        const newScale = Math.min(
+          MAX_ZOOM,
+          Math.max(MIN_ZOOM, transform.scale * zoomFactor)
+        );
+        const scaleRatio = newScale / transform.scale;
+        setTransform({
+          x: mouseX - (mouseX - transform.x) * scaleRatio,
+          y: mouseY - (mouseY - transform.y) * scaleRatio,
+          scale: newScale,
+        });
+      } else {
+        // Two-finger pan
+        setTransform((t) => ({ ...t, x: t.x - e.deltaX, y: t.y - e.deltaY }));
+      }
+    },
+    [transform]
+  );
+
+  const startCreate = useCallback((canvasPoint: Point) => {
+    setIsCreating(true);
+    createStart.current = canvasPoint;
+    const id = `frame-${Date.now()}`;
+    setFrames((prev) => [
+      ...prev,
+      {
+        id,
+        x: canvasPoint.x,
+        y: canvasPoint.y,
+        width: 0,
+        height: 0,
+        fill: "#ffffff",
+      },
+    ]);
+    setSelectedId(id);
+  }, []);
+
+  const updateCreate = useCallback(
+    (canvasPoint: Point) => {
+      if (!isCreating || !createStart.current || !selectedId) return;
+      const start = createStart.current;
+
+      let x = Math.min(start.x, canvasPoint.x);
+      let y = Math.min(start.y, canvasPoint.y);
+      let width = Math.abs(canvasPoint.x - start.x);
+      let height = Math.abs(canvasPoint.y - start.y);
+
+      const otherFrames = frames.filter((f) => f.id !== selectedId);
+      const snapped = calculateSnapping(
+        { x, y, width, height },
+        otherFrames,
+        "create"
+      );
+
+      setGuides(snapped.guides);
+      setFrames((prev) =>
+        prev.map((f) =>
+          f.id === selectedId
+            ? {
+                ...f,
+                x: snapped.x,
+                y: snapped.y,
+                width: snapped.width,
+                height: snapped.height,
+              }
+            : f
+        )
+      );
+    },
+    [isCreating, selectedId, frames]
+  );
+
+  const endCreate = useCallback(() => {
+    if (!selectedId) return;
+    setFrames((prev) => {
+      const frame = prev.find((f) => f.id === selectedId);
+      if (frame && frame.width < 10 && frame.height < 10) {
+        setSelectedId(null);
+        return prev.filter((f) => f.id !== selectedId);
+      }
+      return prev;
+    });
+    setIsCreating(false);
+    setGuides([]);
+    createStart.current = null;
+    setTool("select");
+  }, [selectedId]);
+
+  const startDrag = useCallback(
+    (frameId: string, canvasPoint: Point) => {
+      const frame = frames.find((f) => f.id === frameId);
+      if (!frame) return;
+      setIsDragging(true);
+      setSelectedId(frameId);
+      dragStart.current = canvasPoint;
+      dragFrameStart.current = { x: frame.x, y: frame.y };
+    },
+    [frames]
+  );
+
+  const updateDrag = useCallback(
+    (canvasPoint: Point) => {
+      if (
+        !isDragging ||
+        !dragStart.current ||
+        !dragFrameStart.current ||
+        !selectedId
+      )
+        return;
+
+      const dx = canvasPoint.x - dragStart.current.x;
+      const dy = canvasPoint.y - dragStart.current.y;
+      const newX = dragFrameStart.current.x + dx;
+      const newY = dragFrameStart.current.y + dy;
+
+      const draggedFrame = frames.find((f) => f.id === selectedId);
+      if (!draggedFrame) return;
+
+      const otherFrames = frames.filter((f) => f.id !== selectedId);
+      const snapped = calculateSnapping(
+        {
+          x: newX,
+          y: newY,
+          width: draggedFrame.width,
+          height: draggedFrame.height,
+        },
+        otherFrames,
+        "move"
+      );
+
+      setGuides(snapped.guides);
+      setFrames((prev) =>
+        prev.map((f) =>
+          f.id === selectedId ? { ...f, x: snapped.x, y: snapped.y } : f
+        )
+      );
+    },
+    [isDragging, selectedId, frames]
+  );
+
+  const endDrag = useCallback(() => {
+    setIsDragging(false);
+    setGuides([]);
+    dragStart.current = null;
+    dragFrameStart.current = null;
+  }, []);
+
+  const startResize = useCallback(
+    (handle: ResizeHandle, canvasPoint: Point) => {
+      const frame = frames.find((f) => f.id === selectedId);
+      if (!frame) return;
+      setIsResizing(true);
+      resizeHandle.current = handle;
+      resizeStart.current = { frame: { ...frame }, point: canvasPoint };
+    },
+    [frames, selectedId]
+  );
+
+  const updateResize = useCallback(
+    (canvasPoint: Point) => {
+      if (!isResizing || !resizeStart.current || !selectedId) return;
+      const { frame: orig, point: start } = resizeStart.current;
+      const handle = resizeHandle.current!;
+      const dx = canvasPoint.x - start.x;
+      const dy = canvasPoint.y - start.y;
+
+      let { x, y, width, height } = orig;
+
+      if (handle.includes("w")) {
+        x = orig.x + dx;
+        width = orig.width - dx;
+      }
+      if (handle.includes("e")) {
+        width = orig.width + dx;
+      }
+      if (handle.includes("n")) {
+        y = orig.y + dy;
+        height = orig.height - dy;
+      }
+      if (handle.includes("s")) {
+        height = orig.height + dy;
+      }
+
+      if (width < 1) {
+        width = 1;
+        if (handle.includes("w")) x = orig.x + orig.width - 1;
+      }
+      if (height < 1) {
+        height = 1;
+        if (handle.includes("n")) y = orig.y + orig.height - 1;
+      }
+
+      const otherFrames = frames.filter((f) => f.id !== selectedId);
+      const snapped = calculateSnapping(
+        { x, y, width, height },
+        otherFrames,
+        "resize",
+        handle
+      );
+
+      setGuides(snapped.guides);
+      setFrames((prev) =>
+        prev.map((f) =>
+          f.id === selectedId
+            ? {
+                ...f,
+                x: snapped.x,
+                y: snapped.y,
+                width: snapped.width,
+                height: snapped.height,
+              }
+            : f
+        )
+      );
+    },
+    [isResizing, selectedId, frames]
+  );
+
+  const endResize = useCallback(() => {
+    setIsResizing(false);
+    setGuides([]);
+    resizeHandle.current = null;
+    resizeStart.current = null;
+  }, []);
+
+  const startPan = useCallback((screenPoint: Point) => {
+    setIsPanning(true);
+    dragStart.current = screenPoint;
+  }, []);
+
+  const updatePan = useCallback(
+    (screenPoint: Point) => {
+      if (!isPanning || !dragStart.current) return;
+      const dx = screenPoint.x - dragStart.current.x;
+      const dy = screenPoint.y - dragStart.current.y;
+      setTransform((t) => ({ ...t, x: t.x + dx, y: t.y + dy }));
+      dragStart.current = screenPoint;
+    },
+    [isPanning]
+  );
+
+  const endPan = useCallback(() => {
+    setIsPanning(false);
+    dragStart.current = null;
+  }, []);
+
+  const select = useCallback((id: string | null) => {
+    setSelectedId(id);
+  }, []);
+
+  // Clipboard for copy/paste
+  const clipboard = useRef<Frame | null>(null);
+
+  const copySelected = useCallback(() => {
+    if (!selectedId) return;
+    const frame = frames.find((f) => f.id === selectedId);
+    if (frame) {
+      clipboard.current = { ...frame };
+    }
+  }, [selectedId, frames]);
+
+  const pasteClipboard = useCallback(() => {
+    if (!clipboard.current) return;
+    const newId = `frame-${Date.now()}`;
+    const newFrame: Frame = {
+      ...clipboard.current,
+      id: newId,
+      x: clipboard.current.x + 20,
+      y: clipboard.current.y + 20,
+    };
+    setFrames((prev) => [...prev, newFrame]);
+    setSelectedId(newId);
+  }, []);
+
+  const duplicateSelected = useCallback(() => {
+    if (!selectedId) return;
+    const frame = frames.find((f) => f.id === selectedId);
+    if (!frame) return;
+    const newId = `frame-${Date.now()}`;
+    const newFrame: Frame = {
+      ...frame,
+      id: newId,
+      x: frame.x + 20,
+      y: frame.y + 20,
+    };
+    setFrames((prev) => [...prev, newFrame]);
+    setSelectedId(newId);
+  }, [selectedId, frames]);
+
+  // Alt+drag to duplicate
+  const startDuplicateDrag = useCallback(
+    (frameId: string, canvasPoint: Point) => {
+      const frame = frames.find((f) => f.id === frameId);
+      if (!frame) return;
+      // Create duplicate
+      const newId = `frame-${Date.now()}`;
+      const newFrame: Frame = { ...frame, id: newId };
+      setFrames((prev) => [...prev, newFrame]);
+      setSelectedId(newId);
+      // Start dragging the new frame
+      setIsDragging(true);
+      dragStart.current = canvasPoint;
+      dragFrameStart.current = { x: frame.x, y: frame.y };
+    },
+    [frames]
+  );
+
+  const deleteSelected = useCallback(() => {
+    if (!selectedId) return;
+    setFrames((prev) => prev.filter((f) => f.id !== selectedId));
+    setSelectedId(null);
+  }, [selectedId]);
+
+  const selectedFrame = frames.find((f) => f.id === selectedId) || null;
+
+  return {
+    transform,
+    frames,
+    selectedId,
+    selectedFrame,
+    tool,
+    isCreating,
+    isDragging,
+    isResizing,
+    isPanning,
+    guides,
+    setTool,
+    screenToCanvas,
+    handleWheel,
+    startCreate,
+    updateCreate,
+    endCreate,
+    startDrag,
+    updateDrag,
+    endDrag,
+    startResize,
+    updateResize,
+    endResize,
+    startPan,
+    updatePan,
+    endPan,
+    select,
+    copySelected,
+    pasteClipboard,
+    duplicateSelected,
+    startDuplicateDrag,
+    deleteSelected,
+  };
+}
