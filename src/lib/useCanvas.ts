@@ -660,14 +660,24 @@ export function useCanvas() {
       const frame = frames.find((f) => f.id === frameId);
       if (!frame) return;
 
-      // If clicking a selected frame, drag all selected
-      // If clicking an unselected frame, select it (or add to selection with shift)
+      const isAlreadySelected = selectedIds.includes(frameId);
+
+      // Shift+click on selected frame = deselect it (no drag)
+      if (addToSelection && isAlreadySelected) {
+        setSelectedIds(selectedIds.filter((id) => id !== frameId));
+        return;
+      }
+
+      // Determine new selection
       let newSelectedIds: string[];
-      if (selectedIds.includes(frameId)) {
+      if (isAlreadySelected) {
+        // Clicking selected frame without shift = drag all selected
         newSelectedIds = selectedIds;
       } else if (addToSelection) {
+        // Shift+click unselected = add to selection
         newSelectedIds = [...selectedIds, frameId];
       } else {
+        // Click unselected without shift = select only this one
         newSelectedIds = [frameId];
       }
 
