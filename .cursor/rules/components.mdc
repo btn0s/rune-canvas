@@ -1,0 +1,28 @@
+---
+description: UI component design principles
+alwaysApply: true
+---
+
+# Component Design
+
+## Reusability
+
+- **Check `src/components/ui/` first.** Before building UI, see what primitives already exist. Compose from existing components when possible.
+
+- **Extract when you see duplication.** If similar UI appears twice, that's a signal. Three times is a mandate.
+
+- **Keep components focused.** A component that needs many props to configure its behavior is often multiple components in disguise.
+
+## Component Boundaries
+
+- **Separate concerns:** Data fetching, state management, and presentation should live in different places.
+
+- **Props down, events up.** Components receive data via props and communicate changes via callbacks. Avoid reaching up or sideways.
+
+- **Co-locate related code.** Styles, types, and helpers that only serve one component should live near that component.
+
+## State
+
+- **Lift state only as high as necessary.** Not everything belongs in global state. Start local, lift when needed.
+
+- **Derive don't duplicate.** If a value can be computed from other state, compute it. Don't store it separately.

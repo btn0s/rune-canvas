@@ -1,0 +1,32 @@
+---
+description: Core architecture and clean code principles
+alwaysApply: true
+---
+
+# Architecture & Clean Code
+
+## Before Writing Code
+
+1. **Look first.** Before creating anything new, search the codebase for similar patterns, components, or utilities. Reuse or extend what exists.
+
+2. **Understand the context.** Know what depends on this code and what it depends on. Changes have ripple effects.
+
+3. **Question the abstraction level.** Is this the right place for this logic? Too high = overly generic. Too low = duplicated elsewhere.
+
+## When Writing Code
+
+4. **One job per module.** Each file, component, or function should have a single clear responsibility. If you're struggling to name it, it's probably doing too much.
+
+5. **Make dependencies explicit.** No hidden coupling. If something depends on something else, that relationship should be visible and intentional.
+
+6. **Prefer composition over complexity.** Small, focused pieces that combine well beat large, configurable pieces that handle everything.
+
+7. **Name things for what they do, not how they work.** Implementation details change. Purpose doesn't.
+
+## When Reviewing Your Work
+
+8. **Find the leverage point.** What's the one thing in this change that matters most? Focus your attention there.
+
+9. **Know what you're trading off.** Every design decision trades something. Be able to articulate what you're optimizing for and what you're sacrificing.
+
+10. **Don't abstract speculatively.** Create abstractions when you see real duplication or clear reuse—not because something "might" be reused later.

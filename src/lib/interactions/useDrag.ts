@@ -18,10 +18,7 @@ interface DragActions {
 interface DragConfig {
   objects: CanvasObject[];
   selectedIds: string[];
-  getSelectionBounds: (
-    objects: CanvasObject[],
-    ids: string[]
-  ) => Rect | null;
+  getSelectionBounds: (objects: CanvasObject[], ids: string[]) => Rect | null;
   getDescendants: (ids: string[], objects: CanvasObject[]) => CanvasObject[];
   duplicateTree: (
     objects: CanvasObject[],
