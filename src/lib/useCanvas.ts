@@ -9,8 +9,6 @@ import type {
   Guide,
   Point,
   ResizeHandle,
-  Tool,
-  Transform,
 } from "./types";
 
 const MIN_ZOOM = 0.1;

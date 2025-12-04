@@ -1419,8 +1419,6 @@ export function Canvas() {
               parentId: o.parentId,
             }))}
           selectedIds={selectedIds}
-          transform={transform}
-          containerRef={containerRef as React.RefObject<HTMLDivElement>}
           onSelect={select}
           debug={debugMode}
         />

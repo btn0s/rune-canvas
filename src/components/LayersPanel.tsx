@@ -1,4 +1,3 @@
-import { Transform } from "../lib/types";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ChevronRight } from "lucide-react";
 import {
@@ -16,8 +15,6 @@ interface LayerItem {
 interface LayersPanelProps {
   items: LayerItem[];
   selectedIds: string[];
-  transform: Transform;
-  containerRef: React.RefObject<HTMLDivElement>;
   onSelect: (ids: string[] | null, addToSelection?: boolean) => void;
   debug?: boolean;
 }
@@ -176,8 +173,6 @@ function LayerTreeItem({
 export function LayersPanel({
   items,
   selectedIds,
-  transform,
-  containerRef,
   onSelect,
   debug = false,
 }: LayersPanelProps) {

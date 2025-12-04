@@ -4,24 +4,12 @@ import {
   TextObject,
   ImageObject,
   Transform,
-  SizeMode,
   BlendMode,
   BorderSide,
-  ShadowProps,
 } from "../lib/types";
 import { useState, useEffect, useRef, useCallback } from "react";
+import { SelectItem } from "./ui/select";
 import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "./ui/dropdown-menu";
-import { SelectContent, SelectItem } from "./ui/select";
-import {
-  Check,
-  MoveHorizontal,
-  Shrink,
-  ArrowLeftRight,
   ArrowRight,
   ArrowDown,
   ArrowLeft,
@@ -38,14 +26,7 @@ import {
   Grid3X3,
   Square,
   WrapText,
-  Plus,
-  Minus,
-  Eye,
-  EyeOff,
-  Copy,
 } from "lucide-react";
-import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip";
-import { Input } from "./ui/input";
 import { Slider } from "./ui/slider";
 import { Checkbox } from "./ui/checkbox";
 import {
@@ -59,107 +40,6 @@ import {
   PropertyButton,
 } from "./property-panel-components";
 
-// Size mode dropdown component - unified style
-function SizeModeDropdown({
-  axis,
-  mode,
-  value,
-  showFit,
-  showFill,
-  onChange,
-  onValueChange,
-}: {
-  axis: "width" | "height";
-  mode: SizeMode;
-  value: number;
-  showFit: boolean;
-  showFill: boolean;
-  onChange: (mode: SizeMode) => void;
-  onValueChange: (value: number) => void;
-}) {
-  const label = axis === "width" ? "W" : "H";
-  const fixedLabel = axis === "width" ? "Fixed width" : "Fixed height";
-
-  const getModeIcon = (m: SizeMode) => {
-    switch (m) {
-      case "fixed":
-        return <MoveHorizontal className="size-3" />;
-      case "fit":
-        return <Shrink className="size-3" />;
-      case "expand":
-        return <ArrowLeftRight className="size-3" />;
-    }
-  };
-
-  return (
-    <div className="flex-1 flex items-center h-7 bg-zinc-800/50 border border-zinc-700/50 rounded">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button className="flex items-center gap-1 px-2 h-full text-[10px] text-zinc-500 hover:text-zinc-300 cursor-pointer outline-none shrink-0">
-            <span>{label}</span>
-            {mode !== "fixed" && (
-              <span className="text-blue-400 text-[9px]">
-                {mode === "fit" ? "Hug" : "Fill"}
-              </span>
-            )}
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="min-w-[160px]">
-          <DropdownMenuItem
-            onClick={() => onChange("fixed")}
-            className="flex items-center gap-2"
-          >
-            {mode === "fixed" ? (
-              <Check className="size-4" />
-            ) : (
-              <span className="size-4" />
-            )}
-            {getModeIcon("fixed")}
-            <span>
-              {fixedLabel} ({value})
-            </span>
-          </DropdownMenuItem>
-          {showFit && (
-            <DropdownMenuItem
-              onClick={() => onChange("fit")}
-              className="flex items-center gap-2"
-            >
-              {mode === "fit" ? (
-                <Check className="size-4" />
-              ) : (
-                <span className="size-4" />
-              )}
-              {getModeIcon("fit")}
-              <span>Hug contents</span>
-            </DropdownMenuItem>
-          )}
-          {showFill && (
-            <DropdownMenuItem
-              onClick={() => onChange("expand")}
-              className="flex items-center gap-2"
-            >
-              {mode === "expand" ? (
-                <Check className="size-4" />
-              ) : (
-                <span className="size-4" />
-              )}
-              {getModeIcon("expand")}
-              <span>Fill container</span>
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <Input
-        type="number"
-        value={Math.round(value)}
-        onChange={(e) => onValueChange(parseFloat(e.target.value) || 0)}
-        disabled={mode !== "fixed"}
-        className="flex-1 min-w-0 h-full px-1.5 !text-[10px] font-mono text-zinc-300 bg-transparent border-0 shadow-none focus-visible:ring-0 rounded-none text-left disabled:opacity-50 disabled:cursor-not-allowed"
-      />
-    </div>
-  );
-}
-
 interface PropertyPanelProps {
   selectedObjects: CanvasObject[];
   allObjects: CanvasObject[];
@@ -170,7 +50,7 @@ interface PropertyPanelProps {
 
 export function PropertyPanel({
   selectedObjects,
-  allObjects,
+  allObjects: _allObjects,
   transform,
   containerRef,
   onUpdate,
@@ -180,23 +60,6 @@ export function PropertyPanel({
   const panelRef = useRef<HTMLDivElement>(null);
   const selectedObject =
     selectedObjects.length === 1 ? selectedObjects[0] : null;
-
-  // Check if selected object is inside a flex/grid container
-  const isInsideFlexContainer = selectedObject
-    ? (() => {
-        if (!selectedObject.parentId) return false;
-        const parent = allObjects.find((o) => o.id === selectedObject.parentId);
-        return (
-          parent?.type === "frame" &&
-          (parent as FrameObject).layoutMode !== "none"
-        );
-      })()
-    : false;
-
-  // Check if selected frame has layout enabled (for showing Hug option)
-  const hasLayoutEnabled =
-    selectedObject?.type === "frame" &&
-    (selectedObject as FrameObject).layoutMode !== "none";
 
   // Check if panel overlaps with any object
   const checkOverlap = useCallback(() => {
@@ -773,7 +636,7 @@ export function PropertyPanel({
             {/* Layout Mode */}
             <IconButtonGroup>
               <IconButton
-                active={frame.layoutMode === "none"}
+                active={(frame.layoutMode as string) === "none"}
                 onClick={() =>
                   onUpdate(selectedObject.id, {
                     layoutMode: "none",
