@@ -484,6 +484,7 @@ export function useCanvas() {
 
   const [isCreating, setIsCreating] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [hasDragMovement, setHasDragMovement] = useState(false); // True when drag has actual movement
   const [isResizing, setIsResizing] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
@@ -548,6 +549,113 @@ export function useCanvas() {
       }
     },
     [transform]
+  );
+
+  // Calculate hugged size for a frame based on its children
+  const calculateHuggedSize = useCallback(
+    (
+      frame: FrameObject,
+      allObjects: CanvasObject[]
+    ): { width: number; height: number } => {
+      const children = allObjects.filter((o) => o.parentId === frame.id);
+      const padding = frame.padding || 0;
+
+      if (children.length === 0) {
+        // No children - minimum size is just padding
+        return {
+          width: padding * 2 || 100,
+          height: padding * 2 || 100,
+        };
+      }
+
+      // For flex layout, we need to calculate based on flow direction
+      if (frame.layoutMode === "flex") {
+        const gap = frame.gap || 0;
+        const isRow =
+          frame.flexDirection === "row" ||
+          frame.flexDirection === "row-reverse";
+
+        if (isRow) {
+          // Row: sum widths + gaps, max height
+          const totalWidth = children.reduce(
+            (sum, child, i) => sum + child.width + (i > 0 ? gap : 0),
+            0
+          );
+          const maxHeight = Math.max(...children.map((c) => c.height));
+          return {
+            width: totalWidth + padding * 2,
+            height: maxHeight + padding * 2,
+          };
+        } else {
+          // Column: max width, sum heights + gaps
+          const maxWidth = Math.max(...children.map((c) => c.width));
+          const totalHeight = children.reduce(
+            (sum, child, i) => sum + child.height + (i > 0 ? gap : 0),
+            0
+          );
+          return {
+            width: maxWidth + padding * 2,
+            height: totalHeight + padding * 2,
+          };
+        }
+      }
+
+      // For absolute positioning, find bounding box
+      let maxX = 0;
+      let maxY = 0;
+      for (const child of children) {
+        maxX = Math.max(maxX, child.x + child.width);
+        maxY = Math.max(maxY, child.y + child.height);
+      }
+
+      return {
+        width: maxX + padding,
+        height: maxY + padding,
+      };
+    },
+    []
+  );
+
+  // Recalculate hug sizes for frames that have fit mode enabled
+  const recalculateHugSizes = useCallback(
+    (objectsToUpdate: CanvasObject[]): CanvasObject[] => {
+      // Find all frames with fit modes
+      const framesToUpdate = objectsToUpdate.filter(
+        (o) =>
+          o.type === "frame" &&
+          ((o as FrameObject).widthMode === "fit" ||
+            (o as FrameObject).heightMode === "fit")
+      ) as FrameObject[];
+
+      if (framesToUpdate.length === 0) return objectsToUpdate;
+
+      // Build a map for quick updates
+      const updates = new Map<string, Partial<FrameObject>>();
+
+      for (const frame of framesToUpdate) {
+        const { width, height } = calculateHuggedSize(frame, objectsToUpdate);
+        const frameUpdate: Partial<FrameObject> = {};
+
+        if (frame.widthMode === "fit") {
+          frameUpdate.width = width;
+        }
+        if (frame.heightMode === "fit") {
+          frameUpdate.height = height;
+        }
+
+        if (Object.keys(frameUpdate).length > 0) {
+          updates.set(frame.id, frameUpdate);
+        }
+      }
+
+      if (updates.size === 0) return objectsToUpdate;
+
+      return objectsToUpdate.map((o) => {
+        const update = updates.get(o.id);
+        return update ? ({ ...o, ...update } as CanvasObject) : o;
+      });
+    },
+    [calculateHuggedSize]
   );
 
   const startCreate = useCallback(
@@ -737,19 +845,23 @@ export function useCanvas() {
     const creatingId = selectedIds[0];
     if (!creatingId) return;
     setObjects((prev) => {
+      let updated = prev;
       const obj = prev.find((o) => o.id === creatingId);
-      // For text, don't delete if small. For frames/rectangles, delete if too small
-      if (obj && obj.type !== "text" && obj.width < 10 && obj.height < 10) {
-        setSelectedIds([]);
-        return prev.filter((o) => o.id !== creatingId);
+      if (!obj) return prev;
+      // For frames/rectangles that are too small, give them a default size
+      if (obj.type !== "text" && obj.width < 10 && obj.height < 10) {
+        updated = prev.map((o) =>
+          o.id === creatingId ? { ...o, width: 100, height: 100 } : o
+        );
       }
-      return prev;
+      // Recalculate hug sizes for parent frames
+      return recalculateHugSizes(updated);
     });
     setIsCreating(false);
     setGuides([]);
     createStart.current = null;
     setTool("select");
-  }, [selectedIds]);
+  }, [selectedIds, recalculateHugSizes]);
 
   // Compute bounding box of selected objects (in canvas space)
   const getSelectionBounds = useCallback(
@@ -815,6 +927,7 @@ export function useCanvas() {
 
       setSelectedIds(newSelectedIds);
       setIsDragging(true);
+      setHasDragMovement(false); // Reset - no movement yet
       dragStart.current = canvasPoint;
 
       // Store starting positions for all selected objects (relative positions)
@@ -853,6 +966,7 @@ export function useCanvas() {
       // Mark as dragged if moved more than 2px
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
         didDrag.current = true;
+        if (!hasDragMovement) setHasDragMovement(true);
       }
 
       // Shift-drag: lock to axis based on initial movement direction
@@ -1089,7 +1203,10 @@ export function useCanvas() {
     if (didDrag.current && selectedIds.length === 1) {
       setObjects((prev) => {
         const dragged = prev.find((o) => o.id === selectedIds[0]);
-        if (!dragged || !dragged.parentId) return prev;
+        if (!dragged || !dragged.parentId) {
+          // Still recalculate hug sizes even if not unnesting
+          return recalculateHugSizes(prev);
+        }
 
         const draggedCanvasPos = getCanvasPosition(dragged, prev);
         const draggedCenter = {
@@ -1118,7 +1235,7 @@ export function useCanvas() {
 
         // If outside all frames, unnest to root
         if (!insideAnyFrame) {
-          return prev.map((o) =>
+          const updated = prev.map((o) =>
             o.id === dragged.id
               ? {
                   ...o,
@@ -1128,13 +1245,18 @@ export function useCanvas() {
                 }
               : o
           );
+          return recalculateHugSizes(updated);
         }
 
-        return prev;
+        return recalculateHugSizes(prev);
       });
+    } else if (didDrag.current) {
+      // Recalculate hug sizes after multi-object drag
+      setObjects((prev) => recalculateHugSizes(prev));
     }
 
     setIsDragging(false);
+    setHasDragMovement(false);
     setGuides([]);
     setPotentialParentId(null);
     dragStart.current = null;
@@ -1354,12 +1476,14 @@ export function useCanvas() {
   );
 
   const endResize = useCallback(() => {
+    // Recalculate hug sizes for parent frames after resize
+    setObjects((prev) => recalculateHugSizes(prev));
     setIsResizing(false);
     setGuides([]);
     resizeHandle.current = null;
     resizeStart.current = null;
     resizeBoundsStart.current = null;
-  }, []);
+  }, [recalculateHugSizes]);
 
   const startPan = useCallback((screenPoint: Point) => {
     setIsPanning(true);
@@ -1587,10 +1711,14 @@ export function useCanvas() {
     if (selectedIds.length === 0) return;
     const descendants = getDescendants(selectedIds, objects);
     const toDelete = new Set([...selectedIds, ...descendants.map((d) => d.id)]);
-    setObjects((prev) => prev.filter((o) => !toDelete.has(o.id)));
+    setObjects((prev) => {
+      const filtered = prev.filter((o) => !toDelete.has(o.id));
+      // Recalculate hug sizes for parent frames after deletion
+      return recalculateHugSizes(filtered);
+    });
     setSelectedIds([]);
     setEditingTextId(null);
-  }, [selectedIds, objects, getDescendants]);
+  }, [selectedIds, objects, getDescendants, recalculateHugSizes]);
 
   const selectAllSiblings = useCallback(() => {
     if (selectedIds.length === 0) {
@@ -1787,13 +1915,15 @@ export function useCanvas() {
   // Update object properties
   const updateObject = useCallback(
     (id: string, updates: Partial<CanvasObject>) => {
-      setObjects((prev) =>
-        prev.map((o) =>
+      setObjects((prev) => {
+        const updated = prev.map((o) =>
           o.id === id ? ({ ...o, ...updates } as CanvasObject) : o
-        )
-      );
+        );
+        // Recalculate hug sizes after update
+        return recalculateHugSizes(updated);
+      });
     },
-    []
+    [recalculateHugSizes]
   );
 
   // Update text content
@@ -1806,38 +1936,43 @@ export function useCanvas() {
   }, []);
 
   // Set parent for nesting
-  const setParent = useCallback((childId: string, parentId: string | null) => {
-    setObjects((prev) =>
-      prev.map((o) => {
-        if (o.id === childId) {
-          // When nesting, convert position to relative to parent
-          if (parentId) {
-            const parent = prev.find((p) => p.id === parentId);
-            if (parent) {
+  const setParent = useCallback(
+    (childId: string, parentId: string | null) => {
+      setObjects((prev) => {
+        const updated = prev.map((o) => {
+          if (o.id === childId) {
+            // When nesting, convert position to relative to parent
+            if (parentId) {
+              const parent = prev.find((p) => p.id === parentId);
+              if (parent) {
+                const canvasPos = getCanvasPosition(o, prev);
+                const parentCanvasPos = getCanvasPosition(parent, prev);
+                return {
+                  ...o,
+                  parentId,
+                  x: canvasPos.x - parentCanvasPos.x,
+                  y: canvasPos.y - parentCanvasPos.y,
+                };
+              }
+            } else {
+              // Unnesting - convert to canvas space
               const canvasPos = getCanvasPosition(o, prev);
-              const parentCanvasPos = getCanvasPosition(parent, prev);
               return {
                 ...o,
-                parentId,
-                x: canvasPos.x - parentCanvasPos.x,
-                y: canvasPos.y - parentCanvasPos.y,
+                parentId: null,
+                x: canvasPos.x,
+                y: canvasPos.y,
               };
             }
-          } else {
-            // Unnesting - convert to canvas space
-            const canvasPos = getCanvasPosition(o, prev);
-            return {
-              ...o,
-              parentId: null,
-              x: canvasPos.x,
-              y: canvasPos.y,
-            };
           }
-        }
-        return o;
-      })
-    );
-  }, []);
+          return o;
+        });
+        // Recalculate hug sizes for affected parent frames
+        return recalculateHugSizes(updated);
+      });
+    },
+    [recalculateHugSizes]
+  );
 
   const selectedObjects = objects.filter((o) => selectedIds.includes(o.id));
   const selectionBounds = getSelectionBounds(objects, selectedIds);
@@ -1853,6 +1988,7 @@ export function useCanvas() {
     potentialParentId,
     isCreating,
     isDragging,
+    hasDragMovement,
     isResizing,
     isPanning,
     isMarqueeSelecting,

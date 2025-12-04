@@ -4,12 +4,10 @@ import {
   TextObject,
   ImageObject,
   Transform,
-  LayoutMode,
-  FlexDirection,
-  JustifyContent,
-  AlignItems,
-  FlexWrap,
   SizeMode,
+  BlendMode,
+  BorderSide,
+  ShadowProps,
 } from "../lib/types";
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -18,9 +16,50 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "./ui/dropdown-menu";
-import { Check, MoveHorizontal, Shrink, ArrowLeftRight } from "lucide-react";
+import { SelectContent, SelectItem } from "./ui/select";
+import {
+  Check,
+  MoveHorizontal,
+  Shrink,
+  ArrowLeftRight,
+  ArrowRight,
+  ArrowDown,
+  ArrowLeft,
+  ArrowUp,
+  AlignStartVertical,
+  AlignCenterVertical,
+  AlignEndVertical,
+  AlignStartHorizontal,
+  AlignCenterHorizontal,
+  AlignEndHorizontal,
+  StretchHorizontal,
+  StretchVertical,
+  Rows3,
+  Grid3X3,
+  Square,
+  WrapText,
+  Plus,
+  Minus,
+  Eye,
+  EyeOff,
+  Copy,
+} from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip";
+import { Input } from "./ui/input";
+import { Slider } from "./ui/slider";
+import { Checkbox } from "./ui/checkbox";
+import {
+  IconButton,
+  IconButtonGroup,
+  SectionLabel,
+  NumberInput,
+  ColorInput,
+  CollapsibleSection,
+  PropertySelect,
+  PropertyButton,
+} from "./property-panel-components";
 
-// Size mode dropdown component
+// Size mode dropdown component - unified style
 function SizeModeDropdown({
   axis,
   mode,
@@ -53,12 +92,16 @@ function SizeModeDropdown({
   };
 
   return (
-    <div className="flex items-center">
+    <div className="flex-1 flex items-center h-7 bg-zinc-800/50 border border-zinc-700/50 rounded">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="flex items-center gap-1 h-5 px-1 text-[10px] font-mono text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded cursor-pointer outline-none">
-            <span className="text-zinc-500">{label}</span>
-            {mode !== "fixed" && <span>{mode === "fit" ? "Hug" : "Fill"}</span>}
+          <button className="flex items-center gap-1 px-2 h-full text-[10px] text-zinc-500 hover:text-zinc-300 cursor-pointer outline-none shrink-0">
+            <span>{label}</span>
+            {mode !== "fixed" && (
+              <span className="text-blue-400 text-[9px]">
+                {mode === "fit" ? "Hug" : "Fill"}
+              </span>
+            )}
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="min-w-[160px]">
@@ -106,18 +149,13 @@ function SizeModeDropdown({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-      {mode === "fixed" ? (
-        <input
-          type="number"
-          value={value}
-          onChange={(e) => onValueChange(parseFloat(e.target.value) || 0)}
-          className="w-10 h-5 text-[10px] font-mono text-zinc-400 bg-transparent border-none outline-none text-right hover:text-zinc-200 focus:text-zinc-200"
-        />
-      ) : (
-        <span className="w-10 h-5 text-[10px] font-mono text-zinc-500 text-right leading-5">
-          {value}
-        </span>
-      )}
+      <Input
+        type="number"
+        value={Math.round(value)}
+        onChange={(e) => onValueChange(parseFloat(e.target.value) || 0)}
+        disabled={mode !== "fixed"}
+        className="flex-1 min-w-0 h-full px-1.5 !text-[10px] font-mono text-zinc-300 bg-transparent border-0 shadow-none focus-visible:ring-0 rounded-none text-left disabled:opacity-50 disabled:cursor-not-allowed"
+      />
     </div>
   );
 }
@@ -193,6 +231,8 @@ export function PropertyPanel({
   if (!selectedObject) return null;
 
   const showGlassyBg = isHovered && isOverlapping;
+  const frame =
+    selectedObject.type === "frame" ? (selectedObject as FrameObject) : null;
 
   // Get fill color for display
   const fillColor =
@@ -213,329 +253,843 @@ export function PropertyPanel({
     >
       <div
         className={`
-          flex flex-col gap-2 transition-all duration-200 rounded-lg
-          ${showGlassyBg ? "bg-zinc-900/70 backdrop-blur-sm p-2 -m-2" : ""}
-          ${isHovered ? "opacity-100" : "opacity-40"}
+          flex flex-col gap-3 transition-all duration-200 rounded-xl p-3
+          ${
+            showGlassyBg
+              ? "bg-zinc-900/80 backdrop-blur-md"
+              : "bg-zinc-900/60 backdrop-blur-sm"
+          }
+          ${isHovered ? "opacity-100" : "opacity-50"}
+          border border-zinc-800/50
         `}
+        style={{ width: 220 }}
       >
-        {/* Size */}
-        <div className="flex items-center gap-1">
-          {selectedObject.type === "frame" ? (
-            <SizeModeDropdown
-              axis="width"
-              mode={(selectedObject as FrameObject).widthMode || "fixed"}
-              value={Math.round(selectedObject.width)}
-              showFit={hasLayoutEnabled}
-              showFill={isInsideFlexContainer}
-              onChange={(mode) =>
-                onUpdate(selectedObject.id, {
-                  widthMode: mode,
-                } as Partial<FrameObject>)
-              }
-              onValueChange={(val) =>
-                onUpdate(selectedObject.id, { width: val })
-              }
-            />
-          ) : (
-            <>
-              <span className="text-[10px] text-zinc-500 w-3">W</span>
-              <input
-                type="number"
-                value={Math.round(selectedObject.width)}
-                onChange={(e) =>
-                  onUpdate(selectedObject.id, {
-                    width: parseFloat(e.target.value) || 0,
-                  })
-                }
-                className="w-10 h-5 text-[10px] font-mono text-zinc-400 bg-transparent border-none outline-none text-right hover:text-zinc-200 focus:text-zinc-200"
-              />
-            </>
-          )}
-          <span className="text-[10px] text-zinc-600">×</span>
-          {selectedObject.type === "frame" ? (
-            <SizeModeDropdown
-              axis="height"
-              mode={(selectedObject as FrameObject).heightMode || "fixed"}
-              value={Math.round(selectedObject.height)}
-              showFit={hasLayoutEnabled}
-              showFill={isInsideFlexContainer}
-              onChange={(mode) =>
-                onUpdate(selectedObject.id, {
-                  heightMode: mode,
-                } as Partial<FrameObject>)
-              }
-              onValueChange={(val) =>
-                onUpdate(selectedObject.id, { height: val })
-              }
-            />
-          ) : (
-            <>
-              <span className="text-[10px] text-zinc-500 w-3">H</span>
-              <input
-                type="number"
-                value={Math.round(selectedObject.height)}
-                onChange={(e) =>
-                  onUpdate(selectedObject.id, {
-                    height: parseFloat(e.target.value) || 0,
-                  })
-                }
-                className="w-10 h-5 text-[10px] font-mono text-zinc-400 bg-transparent border-none outline-none hover:text-zinc-200 focus:text-zinc-200"
-              />
-            </>
-          )}
-        </div>
+        {/* Layout Section */}
+        <div className="flex flex-col gap-1.5">
+          <SectionLabel>Layout</SectionLabel>
 
-        {/* Position */}
-        <div className="flex items-center gap-1">
-          <input
-            type="number"
-            value={Math.round(selectedObject.x)}
-            onChange={(e) =>
-              onUpdate(selectedObject.id, {
-                x: parseFloat(e.target.value) || 0,
-              })
-            }
-            className="w-10 h-5 text-[10px] font-mono text-zinc-500 bg-transparent border-none outline-none text-right hover:text-zinc-300 focus:text-zinc-300"
-          />
-          <span className="text-[10px] text-zinc-700">,</span>
-          <input
-            type="number"
-            value={Math.round(selectedObject.y)}
-            onChange={(e) =>
-              onUpdate(selectedObject.id, {
-                y: parseFloat(e.target.value) || 0,
-              })
-            }
-            className="w-10 h-5 text-[10px] font-mono text-zinc-500 bg-transparent border-none outline-none hover:text-zinc-300 focus:text-zinc-300"
-          />
-        </div>
-
-        {/* Opacity */}
-        <div className="flex items-center gap-1">
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={Math.round(selectedObject.opacity * 100)}
-            onChange={(e) =>
-              onUpdate(selectedObject.id, {
-                opacity: parseInt(e.target.value) / 100,
-              })
-            }
-            className="w-12 h-1 appearance-none bg-zinc-700 rounded-full cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-zinc-400"
-          />
-          <span className="text-[10px] font-mono text-zinc-500 w-6">
-            {Math.round(selectedObject.opacity * 100)}%
-          </span>
-        </div>
-
-        {/* Fill color - only for frames and text */}
-        {fillColor && (
-          <div className="flex items-center gap-1">
-            <input
-              type="color"
-              value={fillColor}
-              onChange={(e) =>
-                onUpdate(selectedObject.id, { fill: e.target.value })
-              }
-              className="w-4 h-4 rounded cursor-pointer border-none bg-transparent"
+          {/* Position & Size */}
+          <div className="grid grid-cols-2 gap-1.5">
+            <NumberInput
+              label="X"
+              value={selectedObject.x}
+              onChange={(v) => onUpdate(selectedObject.id, { x: v })}
             />
-            <span className="text-[10px] font-mono text-zinc-500 uppercase">
-              {fillColor.replace("#", "")}
-            </span>
+            <NumberInput
+              label="Y"
+              value={selectedObject.y}
+              onChange={(v) => onUpdate(selectedObject.id, { y: v })}
+            />
+            <NumberInput
+              label="W"
+              value={selectedObject.width}
+              onChange={(v) => onUpdate(selectedObject.id, { width: v })}
+            />
+            <NumberInput
+              label="H"
+              value={selectedObject.height}
+              onChange={(v) => onUpdate(selectedObject.id, { height: v })}
+            />
           </div>
-        )}
 
-        {/* Radius - only for frames */}
-        {selectedObject.type === "frame" && (
-          <div className="flex items-center gap-1">
-            <svg
-              viewBox="0 0 12 12"
-              className="w-3 h-3 text-zinc-600"
-              fill="none"
-              stroke="currentColor"
+          {/* Add flex button - only for frames */}
+          {frame && frame.layoutMode === "none" && (
+            <PropertyButton
+              onClick={() =>
+                onUpdate(selectedObject.id, {
+                  layoutMode: "flex",
+                } as Partial<FrameObject>)
+              }
             >
-              <path d="M2 8 L2 4 Q2 2 4 2 L8 2" strokeWidth="1.5" />
-            </svg>
-            <input
-              type="number"
-              value={(selectedObject as FrameObject).radius}
-              onChange={(e) =>
-                onUpdate(selectedObject.id, {
-                  radius: Math.max(0, parseFloat(e.target.value) || 0),
-                } as Partial<FrameObject>)
-              }
-              className="w-6 h-5 text-[10px] font-mono text-zinc-500 bg-transparent border-none outline-none hover:text-zinc-300 focus:text-zinc-300"
-            />
-          </div>
-        )}
+              Add flex ⇧ A
+            </PropertyButton>
+          )}
 
-        {/* Layout Mode - only for frames */}
-        {selectedObject.type === "frame" && (
-          <>
-            <div className="h-px bg-zinc-800 my-1" />
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] text-zinc-600 w-8">Layout</span>
-              <select
-                value={(selectedObject as FrameObject).layoutMode || "none"}
-                onChange={(e) =>
+          {/* Clip content toggle - only for frames */}
+          {frame && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <Checkbox
+                checked={frame.clipContent}
+                onCheckedChange={(checked) =>
                   onUpdate(selectedObject.id, {
-                    layoutMode: e.target.value as LayoutMode,
+                    clipContent: checked === true,
                   } as Partial<FrameObject>)
                 }
-                className="h-5 text-[10px] font-mono text-zinc-400 bg-zinc-800 border-none outline-none rounded cursor-pointer"
-              >
-                <option value="none">None</option>
-                <option value="flex">Flex</option>
-                <option value="grid">Grid</option>
-              </select>
+                className="w-3.5 h-3.5 rounded border-zinc-600 bg-zinc-800 data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500 data-[state=checked]:text-white"
+              />
+              <span className="text-[10px] text-zinc-500">Clip content</span>
+              <span className="text-[10px] text-zinc-600 ml-auto">⌥ C</span>
+            </label>
+          )}
+        </div>
+
+        {/* Radius Section - only for frames */}
+        {frame && (
+          <div className="flex flex-col gap-1.5">
+            <SectionLabel>Radius</SectionLabel>
+            <div className="grid grid-cols-[1fr_auto] gap-1.5 items-center">
+              <div className="w-full [&_[data-slot=slider]]:w-full [&_[data-slot=slider-track]]:bg-zinc-700 [&_[data-slot=slider-track]]:h-1.5 [&_[data-slot=slider-thumb]]:bg-zinc-300 [&_[data-slot=slider-thumb]]:border-zinc-300 [&_[data-slot=slider-thumb]]:size-3 [&_[data-slot=slider-thumb]]:border-0 [&_[data-slot=slider-thumb]]:shadow-none">
+                <Slider
+                  min={0}
+                  max={100}
+                  value={[frame.radius]}
+                  onValueChange={(values) =>
+                    onUpdate(selectedObject.id, {
+                      radius: values[0],
+                    } as Partial<FrameObject>)
+                  }
+                  className="h-1.5 w-full"
+                />
+              </div>
+              <NumberInput
+                value={frame.radius}
+                onChange={(v) =>
+                  onUpdate(selectedObject.id, {
+                    radius: Math.max(0, v),
+                  } as Partial<FrameObject>)
+                }
+                min={0}
+              />
             </div>
-
-            {/* Flex/Grid specific options */}
-            {(selectedObject as FrameObject).layoutMode === "flex" && (
-              <>
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-zinc-600 w-8">Dir</span>
-                  <select
-                    value={
-                      (selectedObject as FrameObject).flexDirection || "row"
-                    }
-                    onChange={(e) =>
-                      onUpdate(selectedObject.id, {
-                        flexDirection: e.target.value as FlexDirection,
-                      } as Partial<FrameObject>)
-                    }
-                    className="h-5 text-[10px] font-mono text-zinc-400 bg-zinc-800 border-none outline-none rounded cursor-pointer"
-                  >
-                    <option value="row">Row</option>
-                    <option value="column">Column</option>
-                    <option value="row-reverse">Row ↩</option>
-                    <option value="column-reverse">Col ↩</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-zinc-600 w-8">Justify</span>
-                  <select
-                    value={
-                      (selectedObject as FrameObject).justifyContent ||
-                      "flex-start"
-                    }
-                    onChange={(e) =>
-                      onUpdate(selectedObject.id, {
-                        justifyContent: e.target.value as JustifyContent,
-                      } as Partial<FrameObject>)
-                    }
-                    className="h-5 text-[10px] font-mono text-zinc-400 bg-zinc-800 border-none outline-none rounded cursor-pointer"
-                  >
-                    <option value="flex-start">Start</option>
-                    <option value="flex-end">End</option>
-                    <option value="center">Center</option>
-                    <option value="space-between">Between</option>
-                    <option value="space-around">Around</option>
-                    <option value="space-evenly">Evenly</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-zinc-600 w-8">Align</span>
-                  <select
-                    value={
-                      (selectedObject as FrameObject).alignItems || "flex-start"
-                    }
-                    onChange={(e) =>
-                      onUpdate(selectedObject.id, {
-                        alignItems: e.target.value as AlignItems,
-                      } as Partial<FrameObject>)
-                    }
-                    className="h-5 text-[10px] font-mono text-zinc-400 bg-zinc-800 border-none outline-none rounded cursor-pointer"
-                  >
-                    <option value="flex-start">Start</option>
-                    <option value="flex-end">End</option>
-                    <option value="center">Center</option>
-                    <option value="stretch">Stretch</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-zinc-600 w-8">Wrap</span>
-                  <select
-                    value={(selectedObject as FrameObject).flexWrap || "nowrap"}
-                    onChange={(e) =>
-                      onUpdate(selectedObject.id, {
-                        flexWrap: e.target.value as FlexWrap,
-                      } as Partial<FrameObject>)
-                    }
-                    className="h-5 text-[10px] font-mono text-zinc-400 bg-zinc-800 border-none outline-none rounded cursor-pointer"
-                  >
-                    <option value="nowrap">No Wrap</option>
-                    <option value="wrap">Wrap</option>
-                    <option value="wrap-reverse">Wrap ↩</option>
-                  </select>
-                </div>
-              </>
-            )}
-
-            {/* Gap and Padding - for flex and grid */}
-            {((selectedObject as FrameObject).layoutMode === "flex" ||
-              (selectedObject as FrameObject).layoutMode === "grid") && (
-              <>
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-zinc-600 w-8">Gap</span>
-                  <input
-                    type="number"
-                    value={(selectedObject as FrameObject).gap || 0}
-                    onChange={(e) =>
-                      onUpdate(selectedObject.id, {
-                        gap: Math.max(0, parseFloat(e.target.value) || 0),
-                      } as Partial<FrameObject>)
-                    }
-                    className="w-8 h-5 text-[10px] font-mono text-zinc-500 bg-transparent border-none outline-none hover:text-zinc-300 focus:text-zinc-300"
-                  />
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-zinc-600 w-8">Pad</span>
-                  <input
-                    type="number"
-                    value={(selectedObject as FrameObject).padding || 0}
-                    onChange={(e) =>
-                      onUpdate(selectedObject.id, {
-                        padding: Math.max(0, parseFloat(e.target.value) || 0),
-                      } as Partial<FrameObject>)
-                    }
-                    className="w-8 h-5 text-[10px] font-mono text-zinc-500 bg-transparent border-none outline-none hover:text-zinc-300 focus:text-zinc-300"
-                  />
-                </div>
-              </>
-            )}
-          </>
-        )}
-
-        {/* Font size - only for text */}
-        {selectedObject.type === "text" && (
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-zinc-600">T</span>
-            <input
-              type="number"
-              value={(selectedObject as TextObject).fontSize}
-              onChange={(e) =>
-                onUpdate(selectedObject.id, {
-                  fontSize: Math.max(8, parseFloat(e.target.value) || 16),
-                } as Partial<TextObject>)
-              }
-              className="w-6 h-5 text-[10px] font-mono text-zinc-500 bg-transparent border-none outline-none hover:text-zinc-300 focus:text-zinc-300"
-            />
-            <span className="text-[10px] text-zinc-600">px</span>
           </div>
         )}
 
-        {/* Image dimensions - read only */}
+        {/* Blending Section */}
+        <div className="flex flex-col gap-1.5">
+          <SectionLabel>Blending</SectionLabel>
+          <div className="grid grid-cols-2 gap-1.5">
+            <NumberInput
+              value={Math.round(selectedObject.opacity * 100)}
+              onChange={(v) =>
+                onUpdate(selectedObject.id, {
+                  opacity: Math.min(100, Math.max(0, v)) / 100,
+                })
+              }
+              suffix="%"
+              min={0}
+            />
+            {frame ? (
+              <PropertySelect
+                value={frame.blendMode || "normal"}
+                onValueChange={(value) =>
+                  onUpdate(selectedObject.id, {
+                    blendMode: value as BlendMode,
+                  } as Partial<FrameObject>)
+                }
+              >
+                {(
+                  [
+                    "normal",
+                    "multiply",
+                    "screen",
+                    "overlay",
+                    "darken",
+                    "lighten",
+                  ] as BlendMode[]
+                ).map((mode) => (
+                  <SelectItem
+                    key={mode}
+                    value={mode}
+                    className="capitalize text-[10px]"
+                  >
+                    {mode}
+                  </SelectItem>
+                ))}
+              </PropertySelect>
+            ) : (
+              <div />
+            )}
+          </div>
+        </div>
+
+        {/* Fill Section - for frames and text */}
+        {(selectedObject.type === "frame" ||
+          selectedObject.type === "text") && (
+          <CollapsibleSection
+            label="Fill"
+            isOpen={fillColor !== "transparent" && fillColor !== undefined}
+            onAdd={() => onUpdate(selectedObject.id, { fill: "#DDDDDD" })}
+            onRemove={() =>
+              onUpdate(selectedObject.id, { fill: "transparent" })
+            }
+            visible={(frame?.fillOpacity ?? 1) > 0}
+            onToggleVisible={
+              frame
+                ? () =>
+                    onUpdate(selectedObject.id, {
+                      fillOpacity: (frame.fillOpacity ?? 1) > 0 ? 0 : 1,
+                    } as Partial<FrameObject>)
+                : undefined
+            }
+          >
+            <ColorInput
+              color={fillColor || "#DDDDDD"}
+              opacity={frame?.fillOpacity ?? 1}
+              onChange={(color) => onUpdate(selectedObject.id, { fill: color })}
+              onOpacityChange={(opacity) =>
+                onUpdate(selectedObject.id, {
+                  fillOpacity: opacity,
+                } as Partial<FrameObject>)
+              }
+            />
+          </CollapsibleSection>
+        )}
+
+        {/* Outline Section - outside stroke (purely visual) */}
+        {frame && (
+          <CollapsibleSection
+            label="Outline"
+            isOpen={!!frame.outline}
+            onAdd={() =>
+              onUpdate(selectedObject.id, {
+                outline: "#000000",
+                outlineWidth: 1,
+                outlineOpacity: 1,
+                outlineStyle: "solid",
+                outlineOffset: 0,
+              } as Partial<FrameObject>)
+            }
+            onRemove={() =>
+              onUpdate(selectedObject.id, {
+                outline: undefined,
+                outlineWidth: undefined,
+                outlineOpacity: undefined,
+                outlineStyle: undefined,
+                outlineOffset: undefined,
+              } as Partial<FrameObject>)
+            }
+            visible={(frame.outlineOpacity ?? 1) > 0}
+            onToggleVisible={() =>
+              onUpdate(selectedObject.id, {
+                outlineOpacity: (frame.outlineOpacity ?? 1) > 0 ? 0 : 1,
+              } as Partial<FrameObject>)
+            }
+          >
+            <div className="grid grid-cols-2 gap-1.5">
+              <NumberInput
+                label="W"
+                value={frame.outlineWidth || 1}
+                onChange={(v) =>
+                  onUpdate(selectedObject.id, {
+                    outlineWidth: Math.max(0, v),
+                  } as Partial<FrameObject>)
+                }
+                min={0}
+              />
+              <NumberInput
+                label="Off"
+                value={frame.outlineOffset || 0}
+                onChange={(v) =>
+                  onUpdate(selectedObject.id, {
+                    outlineOffset: v,
+                  } as Partial<FrameObject>)
+                }
+              />
+            </div>
+            <ColorInput
+              color={frame.outline!}
+              opacity={frame.outlineOpacity ?? 1}
+              onChange={(color) =>
+                onUpdate(selectedObject.id, {
+                  outline: color,
+                } as Partial<FrameObject>)
+              }
+              onOpacityChange={(opacity) =>
+                onUpdate(selectedObject.id, {
+                  outlineOpacity: opacity,
+                } as Partial<FrameObject>)
+              }
+            />
+          </CollapsibleSection>
+        )}
+
+        {/* Border Section - inside stroke (shrinks content) */}
+        {frame && (
+          <CollapsibleSection
+            label="Border"
+            isOpen={!!frame.border}
+            onAdd={() =>
+              onUpdate(selectedObject.id, {
+                border: "#000000",
+                borderWidth: 1,
+                borderOpacity: 1,
+                borderStyle: "solid",
+                borderSide: "all",
+              } as Partial<FrameObject>)
+            }
+            onRemove={() =>
+              onUpdate(selectedObject.id, {
+                border: undefined,
+                borderWidth: undefined,
+                borderOpacity: undefined,
+                borderStyle: undefined,
+                borderSide: undefined,
+              } as Partial<FrameObject>)
+            }
+            visible={(frame.borderOpacity ?? 1) > 0}
+            onToggleVisible={() =>
+              onUpdate(selectedObject.id, {
+                borderOpacity: (frame.borderOpacity ?? 1) > 0 ? 0 : 1,
+              } as Partial<FrameObject>)
+            }
+          >
+            <div className="grid grid-cols-2 gap-1.5">
+              <NumberInput
+                label="W"
+                value={frame.borderWidth || 1}
+                onChange={(v) =>
+                  onUpdate(selectedObject.id, {
+                    borderWidth: Math.max(0, v),
+                  } as Partial<FrameObject>)
+                }
+                min={0}
+              />
+              <PropertySelect
+                value={frame.borderSide || "all"}
+                onValueChange={(value) =>
+                  onUpdate(selectedObject.id, {
+                    borderSide: value as BorderSide,
+                  } as Partial<FrameObject>)
+                }
+              >
+                {(
+                  ["all", "top", "right", "bottom", "left"] as BorderSide[]
+                ).map((side) => (
+                  <SelectItem
+                    key={side}
+                    value={side}
+                    className="capitalize text-[10px]"
+                  >
+                    {side}
+                  </SelectItem>
+                ))}
+              </PropertySelect>
+            </div>
+            <ColorInput
+              color={frame.border!}
+              opacity={frame.borderOpacity ?? 1}
+              onChange={(color) =>
+                onUpdate(selectedObject.id, {
+                  border: color,
+                } as Partial<FrameObject>)
+              }
+              onOpacityChange={(opacity) =>
+                onUpdate(selectedObject.id, {
+                  borderOpacity: opacity,
+                } as Partial<FrameObject>)
+              }
+            />
+          </CollapsibleSection>
+        )}
+
+        {/* Shadow Section */}
+        {frame && (
+          <CollapsibleSection
+            label="Shadow"
+            isOpen={!!frame.shadow}
+            onAdd={() =>
+              onUpdate(selectedObject.id, {
+                shadow: {
+                  x: 0,
+                  y: 2,
+                  blur: 4,
+                  spread: 0,
+                  color: "#000000",
+                  opacity: 0.2,
+                },
+              } as Partial<FrameObject>)
+            }
+            onRemove={() =>
+              onUpdate(selectedObject.id, {
+                shadow: undefined,
+              } as Partial<FrameObject>)
+            }
+            visible={(frame.shadow?.opacity ?? 0) > 0}
+            onToggleVisible={() =>
+              onUpdate(selectedObject.id, {
+                shadow: frame.shadow
+                  ? {
+                      ...frame.shadow,
+                      opacity: frame.shadow.opacity > 0 ? 0 : 0.2,
+                    }
+                  : undefined,
+              } as Partial<FrameObject>)
+            }
+          >
+            <div className="grid grid-cols-2 gap-1.5">
+              <NumberInput
+                label="X"
+                value={frame.shadow?.x || 0}
+                onChange={(v) =>
+                  onUpdate(selectedObject.id, {
+                    shadow: { ...frame.shadow!, x: v },
+                  } as Partial<FrameObject>)
+                }
+              />
+              <NumberInput
+                label="Y"
+                value={frame.shadow?.y || 0}
+                onChange={(v) =>
+                  onUpdate(selectedObject.id, {
+                    shadow: { ...frame.shadow!, y: v },
+                  } as Partial<FrameObject>)
+                }
+              />
+              <NumberInput
+                label="Blur"
+                value={frame.shadow?.blur || 0}
+                onChange={(v) =>
+                  onUpdate(selectedObject.id, {
+                    shadow: { ...frame.shadow!, blur: Math.max(0, v) },
+                  } as Partial<FrameObject>)
+                }
+                min={0}
+              />
+              <NumberInput
+                label="Spread"
+                value={frame.shadow?.spread || 0}
+                onChange={(v) =>
+                  onUpdate(selectedObject.id, {
+                    shadow: { ...frame.shadow!, spread: v },
+                  } as Partial<FrameObject>)
+                }
+              />
+            </div>
+            <ColorInput
+              color={frame.shadow?.color || "#000000"}
+              opacity={frame.shadow?.opacity ?? 0.2}
+              onChange={(color) =>
+                onUpdate(selectedObject.id, {
+                  shadow: { ...frame.shadow!, color },
+                } as Partial<FrameObject>)
+              }
+              onOpacityChange={(opacity) =>
+                onUpdate(selectedObject.id, {
+                  shadow: { ...frame.shadow!, opacity },
+                } as Partial<FrameObject>)
+              }
+            />
+          </CollapsibleSection>
+        )}
+
+        {/* Inner Shadow Section */}
+        {frame && (
+          <CollapsibleSection
+            label="Inner shadow"
+            isOpen={!!frame.innerShadow}
+            onAdd={() =>
+              onUpdate(selectedObject.id, {
+                innerShadow: {
+                  x: 0,
+                  y: 2,
+                  blur: 4,
+                  spread: 0,
+                  color: "#000000",
+                  opacity: 0.2,
+                },
+              } as Partial<FrameObject>)
+            }
+            onRemove={() =>
+              onUpdate(selectedObject.id, {
+                innerShadow: undefined,
+              } as Partial<FrameObject>)
+            }
+            visible={(frame.innerShadow?.opacity ?? 0) > 0}
+            onToggleVisible={() =>
+              onUpdate(selectedObject.id, {
+                innerShadow: frame.innerShadow
+                  ? {
+                      ...frame.innerShadow,
+                      opacity: frame.innerShadow.opacity > 0 ? 0 : 0.2,
+                    }
+                  : undefined,
+              } as Partial<FrameObject>)
+            }
+          >
+            <div className="grid grid-cols-2 gap-1.5">
+              <NumberInput
+                label="X"
+                value={frame.innerShadow?.x || 0}
+                onChange={(v) =>
+                  onUpdate(selectedObject.id, {
+                    innerShadow: { ...frame.innerShadow!, x: v },
+                  } as Partial<FrameObject>)
+                }
+              />
+              <NumberInput
+                label="Y"
+                value={frame.innerShadow?.y || 0}
+                onChange={(v) =>
+                  onUpdate(selectedObject.id, {
+                    innerShadow: { ...frame.innerShadow!, y: v },
+                  } as Partial<FrameObject>)
+                }
+              />
+              <NumberInput
+                label="Blur"
+                value={frame.innerShadow?.blur || 0}
+                onChange={(v) =>
+                  onUpdate(selectedObject.id, {
+                    innerShadow: {
+                      ...frame.innerShadow!,
+                      blur: Math.max(0, v),
+                    },
+                  } as Partial<FrameObject>)
+                }
+                min={0}
+              />
+              <NumberInput
+                label="Spread"
+                value={frame.innerShadow?.spread || 0}
+                onChange={(v) =>
+                  onUpdate(selectedObject.id, {
+                    innerShadow: { ...frame.innerShadow!, spread: v },
+                  } as Partial<FrameObject>)
+                }
+              />
+            </div>
+            <ColorInput
+              color={frame.innerShadow?.color || "#000000"}
+              opacity={frame.innerShadow?.opacity ?? 0.2}
+              onChange={(color) =>
+                onUpdate(selectedObject.id, {
+                  innerShadow: { ...frame.innerShadow!, color },
+                } as Partial<FrameObject>)
+              }
+              onOpacityChange={(opacity) =>
+                onUpdate(selectedObject.id, {
+                  innerShadow: { ...frame.innerShadow!, opacity },
+                } as Partial<FrameObject>)
+              }
+            />
+          </CollapsibleSection>
+        )}
+
+        {/* Flex Layout Section - only for frames with layout enabled */}
+        {frame && frame.layoutMode !== "none" && (
+          <div className="flex flex-col gap-1.5">
+            <SectionLabel>Flex</SectionLabel>
+
+            {/* Layout Mode */}
+            <IconButtonGroup>
+              <IconButton
+                active={frame.layoutMode === "none"}
+                onClick={() =>
+                  onUpdate(selectedObject.id, {
+                    layoutMode: "none",
+                  } as Partial<FrameObject>)
+                }
+                tooltip="No layout"
+              >
+                <Square className="size-4" />
+              </IconButton>
+              <IconButton
+                active={frame.layoutMode === "flex"}
+                onClick={() =>
+                  onUpdate(selectedObject.id, {
+                    layoutMode: "flex",
+                  } as Partial<FrameObject>)
+                }
+                tooltip="Flexbox"
+              >
+                <Rows3 className="size-4" />
+              </IconButton>
+              <IconButton
+                active={frame.layoutMode === "grid"}
+                onClick={() =>
+                  onUpdate(selectedObject.id, {
+                    layoutMode: "grid",
+                  } as Partial<FrameObject>)
+                }
+                tooltip="Grid"
+              >
+                <Grid3X3 className="size-4" />
+              </IconButton>
+            </IconButtonGroup>
+
+            {/* Flex options */}
+            {frame.layoutMode === "flex" && (
+              <>
+                {/* Direction */}
+                <IconButtonGroup>
+                  <IconButton
+                    active={frame.flexDirection === "row"}
+                    onClick={() =>
+                      onUpdate(selectedObject.id, {
+                        flexDirection: "row",
+                      } as Partial<FrameObject>)
+                    }
+                    tooltip="Row"
+                  >
+                    <ArrowRight className="size-4" />
+                  </IconButton>
+                  <IconButton
+                    active={frame.flexDirection === "column"}
+                    onClick={() =>
+                      onUpdate(selectedObject.id, {
+                        flexDirection: "column",
+                      } as Partial<FrameObject>)
+                    }
+                    tooltip="Column"
+                  >
+                    <ArrowDown className="size-4" />
+                  </IconButton>
+                  <IconButton
+                    active={frame.flexDirection === "row-reverse"}
+                    onClick={() =>
+                      onUpdate(selectedObject.id, {
+                        flexDirection: "row-reverse",
+                      } as Partial<FrameObject>)
+                    }
+                    tooltip="Row Reverse"
+                  >
+                    <ArrowLeft className="size-4" />
+                  </IconButton>
+                  <IconButton
+                    active={frame.flexDirection === "column-reverse"}
+                    onClick={() =>
+                      onUpdate(selectedObject.id, {
+                        flexDirection: "column-reverse",
+                      } as Partial<FrameObject>)
+                    }
+                    tooltip="Column Reverse"
+                  >
+                    <ArrowUp className="size-4" />
+                  </IconButton>
+                </IconButtonGroup>
+
+                {/* Justify Content */}
+                <div className="flex flex-col gap-1">
+                  <span className="text-[9px] text-zinc-600">Justify</span>
+                  <IconButtonGroup>
+                    <IconButton
+                      active={frame.justifyContent === "flex-start"}
+                      onClick={() =>
+                        onUpdate(selectedObject.id, {
+                          justifyContent: "flex-start",
+                        } as Partial<FrameObject>)
+                      }
+                      tooltip="Start"
+                    >
+                      {frame.flexDirection?.includes("column") ? (
+                        <AlignStartHorizontal className="size-4" />
+                      ) : (
+                        <AlignStartVertical className="size-4" />
+                      )}
+                    </IconButton>
+                    <IconButton
+                      active={frame.justifyContent === "center"}
+                      onClick={() =>
+                        onUpdate(selectedObject.id, {
+                          justifyContent: "center",
+                        } as Partial<FrameObject>)
+                      }
+                      tooltip="Center"
+                    >
+                      {frame.flexDirection?.includes("column") ? (
+                        <AlignCenterHorizontal className="size-4" />
+                      ) : (
+                        <AlignCenterVertical className="size-4" />
+                      )}
+                    </IconButton>
+                    <IconButton
+                      active={frame.justifyContent === "flex-end"}
+                      onClick={() =>
+                        onUpdate(selectedObject.id, {
+                          justifyContent: "flex-end",
+                        } as Partial<FrameObject>)
+                      }
+                      tooltip="End"
+                    >
+                      {frame.flexDirection?.includes("column") ? (
+                        <AlignEndHorizontal className="size-4" />
+                      ) : (
+                        <AlignEndVertical className="size-4" />
+                      )}
+                    </IconButton>
+                    <IconButton
+                      active={frame.justifyContent === "space-between"}
+                      onClick={() =>
+                        onUpdate(selectedObject.id, {
+                          justifyContent: "space-between",
+                        } as Partial<FrameObject>)
+                      }
+                      tooltip="Space Between"
+                    >
+                      {frame.flexDirection?.includes("column") ? (
+                        <StretchVertical className="size-4" />
+                      ) : (
+                        <StretchHorizontal className="size-4" />
+                      )}
+                    </IconButton>
+                  </IconButtonGroup>
+                </div>
+
+                {/* Align Items */}
+                <div className="flex flex-col gap-1">
+                  <span className="text-[9px] text-zinc-600">Align</span>
+                  <IconButtonGroup>
+                    <IconButton
+                      active={frame.alignItems === "flex-start"}
+                      onClick={() =>
+                        onUpdate(selectedObject.id, {
+                          alignItems: "flex-start",
+                        } as Partial<FrameObject>)
+                      }
+                      tooltip="Start"
+                    >
+                      {frame.flexDirection?.includes("column") ? (
+                        <AlignStartVertical className="size-4" />
+                      ) : (
+                        <AlignStartHorizontal className="size-4" />
+                      )}
+                    </IconButton>
+                    <IconButton
+                      active={frame.alignItems === "center"}
+                      onClick={() =>
+                        onUpdate(selectedObject.id, {
+                          alignItems: "center",
+                        } as Partial<FrameObject>)
+                      }
+                      tooltip="Center"
+                    >
+                      {frame.flexDirection?.includes("column") ? (
+                        <AlignCenterVertical className="size-4" />
+                      ) : (
+                        <AlignCenterHorizontal className="size-4" />
+                      )}
+                    </IconButton>
+                    <IconButton
+                      active={frame.alignItems === "flex-end"}
+                      onClick={() =>
+                        onUpdate(selectedObject.id, {
+                          alignItems: "flex-end",
+                        } as Partial<FrameObject>)
+                      }
+                      tooltip="End"
+                    >
+                      {frame.flexDirection?.includes("column") ? (
+                        <AlignEndVertical className="size-4" />
+                      ) : (
+                        <AlignEndHorizontal className="size-4" />
+                      )}
+                    </IconButton>
+                    <IconButton
+                      active={frame.alignItems === "stretch"}
+                      onClick={() =>
+                        onUpdate(selectedObject.id, {
+                          alignItems: "stretch",
+                        } as Partial<FrameObject>)
+                      }
+                      tooltip="Stretch"
+                    >
+                      {frame.flexDirection?.includes("column") ? (
+                        <StretchHorizontal className="size-4" />
+                      ) : (
+                        <StretchVertical className="size-4" />
+                      )}
+                    </IconButton>
+                  </IconButtonGroup>
+                </div>
+
+                {/* Wrap toggle */}
+                <div className="flex items-center gap-2">
+                  <IconButton
+                    active={frame.flexWrap === "wrap"}
+                    onClick={() =>
+                      onUpdate(selectedObject.id, {
+                        flexWrap: frame.flexWrap === "wrap" ? "nowrap" : "wrap",
+                      } as Partial<FrameObject>)
+                    }
+                    tooltip={frame.flexWrap === "wrap" ? "No Wrap" : "Wrap"}
+                  >
+                    <WrapText className="size-4" />
+                  </IconButton>
+                  <span className="text-[10px] text-zinc-500">
+                    {frame.flexWrap === "wrap" ? "Wrap" : "No wrap"}
+                  </span>
+                </div>
+
+                {/* Gap and Padding */}
+                <div className="grid grid-cols-2 gap-1.5">
+                  <NumberInput
+                    label="Gap"
+                    value={frame.gap || 0}
+                    onChange={(v) =>
+                      onUpdate(selectedObject.id, {
+                        gap: v,
+                      } as Partial<FrameObject>)
+                    }
+                    min={0}
+                  />
+                  <NumberInput
+                    label="Pad"
+                    value={frame.padding || 0}
+                    onChange={(v) =>
+                      onUpdate(selectedObject.id, {
+                        padding: v,
+                      } as Partial<FrameObject>)
+                    }
+                    min={0}
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Grid options - just gap/padding for now */}
+            {frame.layoutMode === "grid" && (
+              <div className="grid grid-cols-2 gap-1.5">
+                <NumberInput
+                  label="Gap"
+                  value={frame.gap || 0}
+                  onChange={(v) =>
+                    onUpdate(selectedObject.id, {
+                      gap: v,
+                    } as Partial<FrameObject>)
+                  }
+                  min={0}
+                />
+                <NumberInput
+                  label="Pad"
+                  value={frame.padding || 0}
+                  onChange={(v) =>
+                    onUpdate(selectedObject.id, {
+                      padding: v,
+                    } as Partial<FrameObject>)
+                  }
+                  min={0}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Text Section */}
+        {selectedObject.type === "text" && (
+          <div className="flex flex-col gap-2">
+            <SectionLabel>Text</SectionLabel>
+            <NumberInput
+              label="Size"
+              value={(selectedObject as TextObject).fontSize}
+              onChange={(v) =>
+                onUpdate(selectedObject.id, {
+                  fontSize: v,
+                } as Partial<TextObject>)
+              }
+              min={8}
+            />
+          </div>
+        )}
+
+        {/* Image info */}
         {selectedObject.type === "image" && (
-          <span className="text-[10px] font-mono text-zinc-600">
-            {(selectedObject as ImageObject).naturalWidth}×
-            {(selectedObject as ImageObject).naturalHeight}
-          </span>
+          <div className="flex flex-col gap-1">
+            <SectionLabel>Original</SectionLabel>
+            <span className="text-[10px] font-mono text-zinc-500">
+              {(selectedObject as ImageObject).naturalWidth} ×{" "}
+              {(selectedObject as ImageObject).naturalHeight}
+            </span>
+          </div>
         )}
       </div>
     </div>

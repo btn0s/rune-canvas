@@ -51,11 +51,55 @@ export type AlignItems = "flex-start" | "flex-end" | "center" | "stretch";
 export type FlexWrap = "nowrap" | "wrap" | "wrap-reverse";
 export type SizeMode = "fixed" | "fit" | "expand";
 
+export type StrokeStyle = "solid" | "dashed";
+export type BlendMode =
+  | "normal"
+  | "multiply"
+  | "screen"
+  | "overlay"
+  | "darken"
+  | "lighten";
+export type BorderSide = "all" | "top" | "right" | "bottom" | "left";
+
+export interface ShadowProps {
+  x: number;
+  y: number;
+  blur: number;
+  spread: number;
+  color: string;
+  opacity: number;
+}
+
 export interface FrameObject extends BaseObject {
   type: "frame";
   fill: string;
+  fillOpacity?: number; // 0-1, defaults to 1
+  // Radius (single or individual corners)
   radius: number;
-  clipContent: boolean; // toggle for overflow hidden
+  radiusTL?: number; // Top-left
+  radiusTR?: number; // Top-right
+  radiusBR?: number; // Bottom-right
+  radiusBL?: number; // Bottom-left
+  // Blending
+  blendMode?: BlendMode;
+  // Clip content
+  clipContent: boolean;
+  // Border (inside - shrinks content, uses border-box)
+  border?: string; // Color (hex)
+  borderWidth?: number; // Width in px
+  borderOpacity?: number; // 0-1
+  borderStyle?: StrokeStyle;
+  borderSide?: BorderSide; // Which sides to apply border
+  // Outline (outside - purely visual, doesn't affect content)
+  outline?: string; // Color (hex)
+  outlineWidth?: number; // Width in px
+  outlineOpacity?: number; // 0-1
+  outlineStyle?: StrokeStyle;
+  outlineOffset?: number; // Offset from edge
+  // Shadow (drop shadow)
+  shadow?: ShadowProps;
+  // Inner shadow
+  innerShadow?: ShadowProps;
   // Size modes
   widthMode: SizeMode;
   heightMode: SizeMode;
