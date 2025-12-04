@@ -201,3 +201,4 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
 }));
 
 export type { CanvasStoreState, SceneState as CanvasSceneState };
+
