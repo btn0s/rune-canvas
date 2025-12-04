@@ -858,7 +858,7 @@ export function Canvas() {
     } else if (isCreating) {
       updateCreate(canvasPoint);
     } else if (isDragging) {
-      updateDrag(canvasPoint, e.shiftKey);
+      updateDrag(canvasPoint, e.shiftKey, e.altKey);
     } else if (isResizing) {
       updateResize(canvasPoint, e.shiftKey, e.altKey);
     } else if (isMarqueeSelecting) {

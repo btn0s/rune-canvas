@@ -64,6 +64,10 @@ export function useDrag(config: DragConfig, actions: DragActions) {
   const clickedFrameId = useRef<string | null>(null);
   const didDrag = useRef(false);
 
+  // Alt-drag duplicate mode
+  const isDuplicateMode = useRef(false);
+  const originalStartPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
+
   // Selection state on mousedown
   const shiftOnMouseDown = useRef(false);
   const wasAlreadySelected = useRef(false);
@@ -120,7 +124,7 @@ export function useDrag(config: DragConfig, actions: DragActions) {
   );
 
   const updateDrag = useCallback(
-    (canvasPoint: Point, shiftKey = false) => {
+    (canvasPoint: Point, shiftKey = false, altKey = false) => {
       if (
         !isDragging ||
         !dragStart.current ||
@@ -139,6 +143,66 @@ export function useDrag(config: DragConfig, actions: DragActions) {
         history.captureOnce();
         didDrag.current = true;
         if (!hasDragMovement) setHasDragMovement(true);
+      }
+
+      // Alt-drag: switch to duplicate mode mid-drag
+      if (altKey && !isDuplicateMode.current && didDrag.current) {
+        isDuplicateMode.current = true;
+
+        // Store original positions to restore
+        const selected = objects.filter((o) => selectedIds.includes(o.id));
+        selected.forEach((o) => {
+          const startPos = dragObjectsStart.current.find((s) => s.id === o.id);
+          if (startPos) {
+            originalStartPositions.current.set(o.id, { x: startPos.x, y: startPos.y });
+          }
+        });
+
+        // Create duplicates
+        const descendants = getDescendants(selectedIds, objects);
+        const allToDupe = [...selected, ...descendants];
+        const newObjects = duplicateTree(allToDupe, { x: 0, y: 0 }, true);
+
+        // Get new root IDs (objects whose parent isn't also in newObjects)
+        const newRootIds = newObjects
+          .filter((o) => !o.parentId || !newObjects.some((c) => c.id === o.parentId))
+          .map((o) => o.id);
+
+        // Add duplicates and restore originals to starting positions
+        setObjects((prev) => {
+          // Restore originals to their starting positions
+          const restored = prev.map((o) => {
+            const origPos = originalStartPositions.current.get(o.id);
+            if (origPos) {
+              return { ...o, x: origPos.x, y: origPos.y };
+            }
+            return o;
+          });
+          // Add the new duplicates
+          return [...restored, ...newObjects];
+        });
+
+        // Switch selection to duplicates
+        setSelectedIds(newRootIds);
+
+        // Update drag refs to track the new duplicates
+        const newRootObjects = newObjects.filter((o) => newRootIds.includes(o.id));
+        
+        // Calculate where duplicates should be based on current drag delta
+        dragObjectsStart.current = newRootObjects.map((o) => ({
+          id: o.id,
+          x: o.x,
+          y: o.y,
+        }));
+
+        // Reset drag start to current point so delta calculation continues smoothly
+        dragStart.current = canvasPoint;
+        
+        // Update bounds for the new selection
+        const bounds = getSelectionBounds(newRootObjects, newRootIds);
+        dragBoundsStart.current = bounds ? { x: bounds.x, y: bounds.y } : null;
+
+        return; // Skip the rest of this update cycle
       }
 
       // Shift-drag: lock to axis
@@ -326,7 +390,7 @@ export function useDrag(config: DragConfig, actions: DragActions) {
         setPotentialParentId(null);
       }
     },
-    [isDragging, selectedIds, objects, hasDragMovement, setObjects, setGuides, history]
+    [isDragging, selectedIds, objects, hasDragMovement, setObjects, setSelectedIds, setGuides, history]
   );
 
   const endDrag = useCallback(() => {
@@ -426,6 +490,8 @@ export function useDrag(config: DragConfig, actions: DragActions) {
     wasAlreadySelected.current = false;
     dragLockedAxis.current = null;
     lastDragPoint.current = null;
+    isDuplicateMode.current = false;
+    originalStartPositions.current.clear();
   }, [selectedIds, setSelectedIds, setObjects, setGuides, history]);
 
   const startDuplicateDrag = useCallback(
