@@ -1,15 +1,12 @@
 import type { CanvasObject, Guide, ResizeHandle } from "./types";
+import { getCanvasPosition, type Rect } from "./geometry";
+
+// Re-export for consumers that were importing from snapping
+export { getCanvasPosition, type Rect } from "./geometry";
 
 // ============================================================================
 // Types
 // ============================================================================
-
-export interface Rect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
 
 interface SnapTarget {
   value: number;
@@ -34,46 +31,6 @@ export type SnapMode = "move" | "create" | "resize";
 // ============================================================================
 
 const SNAP_THRESHOLD = 8;
-
-// ============================================================================
-// Canvas Position Helpers
-// ============================================================================
-
-/**
- * Get the absolute canvas-space position of an object,
- * accounting for parent transforms in the hierarchy.
- */
-export function getCanvasPosition(
-  obj: CanvasObject,
-  objects: CanvasObject[]
-): { x: number; y: number } {
-  let x = obj.x;
-  let y = obj.y;
-  let parentId = obj.parentId;
-
-  while (parentId) {
-    const parent = objects.find((o) => o.id === parentId);
-    if (!parent) break;
-    x += parent.x;
-    y += parent.y;
-    parentId = parent.parentId;
-  }
-
-  return { x, y };
-}
-
-/**
- * Convert a CanvasObject to a Rect in canvas space.
- */
-export function toCanvasRect(obj: CanvasObject, objects: CanvasObject[]): Rect {
-  const pos = getCanvasPosition(obj, objects);
-  return {
-    x: pos.x,
-    y: pos.y,
-    width: obj.width,
-    height: obj.height,
-  };
-}
 
 // ============================================================================
 // Guide Creation Helpers

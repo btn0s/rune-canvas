@@ -19,6 +19,7 @@ import type {
   ImageObject,
   TextObject,
 } from "../lib/types";
+import { getCanvasPosition } from "../lib/geometry";
 import { Toggle } from "@/components/ui/toggle";
 import {
   Tooltip,
@@ -727,32 +728,12 @@ export function Canvas() {
     [selectionBounds, transform]
   );
 
-  // Helper to get canvas position (accounting for parent)
-  const getCanvasPosition = useCallback(
-    (obj: CanvasObject): { x: number; y: number } => {
-      let x = obj.x;
-      let y = obj.y;
-      let parentId = obj.parentId;
-
-      while (parentId) {
-        const parent = objects.find((o) => o.id === parentId);
-        if (!parent) break;
-        x += parent.x;
-        y += parent.y;
-        parentId = parent.parentId;
-      }
-
-      return { x, y };
-    },
-    [objects]
-  );
-
   // Hit test objects (canvas space) - includes label area for root objects
   const hitTestObject = useCallback(
     (canvasX: number, canvasY: number): string | null => {
       for (let i = objects.length - 1; i >= 0; i--) {
         const obj = objects[i];
-        const canvasPos = getCanvasPosition(obj);
+        const canvasPos = getCanvasPosition(obj, objects);
 
         // Check object bounds
         const inObject =
@@ -779,7 +760,7 @@ export function Canvas() {
       }
       return null;
     },
-    [objects, getCanvasPosition]
+    [objects]
   );
 
   const handleMouseDown = (e: React.MouseEvent) => {
