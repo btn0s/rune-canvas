@@ -1,4 +1,6 @@
 import { useCallback, useRef, useState } from "react";
+import { shallow } from "zustand/shallow";
+import { useCanvasStore } from "./canvasStore";
 import type {
   CanvasObject,
   FrameObject,
@@ -472,15 +474,40 @@ function calculateAllGaps(
 }
 
 export function useCanvas() {
-  const [transform, setTransform] = useState<Transform>({
-    x: 0,
-    y: 0,
-    scale: 1,
-  });
-  const [objects, setObjects] = useState<CanvasObject[]>([]);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [tool, setTool] = useState<Tool>("frame");
-  const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const {
+    transform,
+    objects,
+    selectedIds,
+    tool,
+    editingTextId,
+    setTransform,
+    setObjects,
+    setSelectedIds,
+    setTool,
+    setEditingTextId,
+    pushHistory,
+    undo,
+    redo,
+  } = useCanvasStore(
+    (state) => ({
+      transform: state.transform,
+      objects: state.objects,
+      selectedIds: state.selectedIds,
+      tool: state.tool,
+      editingTextId: state.editingTextId,
+      setTransform: state.setTransform,
+      setObjects: state.setObjects,
+      setSelectedIds: state.setSelectedIds,
+      setTool: state.setTool,
+      setEditingTextId: state.setEditingTextId,
+      pushHistory: state.pushHistory,
+      undo: state.undo,
+      redo: state.redo,
+    }),
+    shallow
+  );
+  const canUndo = useCanvasStore((state) => state.history.past.length > 0);
+  const canRedo = useCanvasStore((state) => state.history.future.length > 0);
 
   const [isCreating, setIsCreating] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -694,6 +721,7 @@ export function useCanvas() {
         };
       }
 
+      pushHistory();
       setIsCreating(true);
       createStart.current = canvasPoint; // Store canvas point for drag calculation
 
@@ -749,7 +777,7 @@ export function useCanvas() {
         setTool("select"); // Switch to select after creating text
       }
     },
-    [tool, objects]
+    [tool, objects, pushHistory]
   );
 
   const updateCreate = useCallback(
@@ -890,6 +918,7 @@ export function useCanvas() {
   // Track clicked frame for potential deselect-on-mouseup
   const clickedFrameId = useRef<string | null>(null);
   const didDrag = useRef(false);
+  const dragHistoryCaptured = useRef(false);
   // Track if shift was held on mousedown (for deselect on mouseup)
   const shiftOnMouseDown = useRef(false);
   // Track if clicked object was already selected (for shift+click deselect)
@@ -907,6 +936,7 @@ export function useCanvas() {
       // Reset drag tracking
       clickedFrameId.current = objectId;
       didDrag.current = false;
+      dragHistoryCaptured.current = false;
       // Track if shift was held (to prevent "click = select only this" behavior)
       shiftOnMouseDown.current = addToSelection;
       // Track if object was already selected (for shift+click deselect)
@@ -965,6 +995,10 @@ export function useCanvas() {
 
       // Mark as dragged if moved more than 2px
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        if (!dragHistoryCaptured.current) {
+          pushHistory();
+          dragHistoryCaptured.current = true;
+        }
         didDrag.current = true;
         if (!hasDragMovement) setHasDragMovement(true);
       }
@@ -1167,7 +1201,7 @@ export function useCanvas() {
         setPotentialParentId(null);
       }
     },
-    [isDragging, selectedIds, objects]
+    [isDragging, selectedIds, objects, pushHistory, hasDragMovement]
   );
 
   const endDrag = useCallback(() => {
@@ -1176,6 +1210,7 @@ export function useCanvas() {
       clearTimeout(reparentTimer.current);
       reparentTimer.current = null;
     }
+    dragHistoryCaptured.current = false;
     pendingParentId.current = null;
 
     // Handle click-without-drag scenarios
@@ -1275,6 +1310,7 @@ export function useCanvas() {
     bounds: { x: number; y: number; width: number; height: number };
     frames: CanvasObject[];
   } | null>(null);
+  const resizeHistoryCaptured = useRef(false);
 
   const startResize = useCallback(
     (handle: ResizeHandle, canvasPoint: Point) => {
@@ -1282,6 +1318,7 @@ export function useCanvas() {
       if (!bounds) return;
 
       setIsResizing(true);
+      resizeHistoryCaptured.current = false;
       resizeHandle.current = handle;
       resizeStart.current = {
         object: {
@@ -1312,6 +1349,11 @@ export function useCanvas() {
       const handle = resizeHandle.current!;
       let dx = canvasPoint.x - start.x;
       let dy = canvasPoint.y - start.y;
+
+      if (!resizeHistoryCaptured.current && (dx !== 0 || dy !== 0)) {
+        pushHistory();
+        resizeHistoryCaptured.current = true;
+      }
 
       // Shift: lock aspect ratio
       if (shiftKey && origBounds.width > 0 && origBounds.height > 0) {
@@ -1472,7 +1514,7 @@ export function useCanvas() {
         })
       );
     },
-    [isResizing, selectedIds, objects]
+    [isResizing, selectedIds, objects, pushHistory]
   );
 
   const endResize = useCallback(() => {
@@ -1480,6 +1522,7 @@ export function useCanvas() {
     setObjects((prev) => recalculateHugSizes(prev));
     setIsResizing(false);
     setGuides([]);
+    resizeHistoryCaptured.current = false;
     resizeHandle.current = null;
     resizeStart.current = null;
     resizeBoundsStart.current = null;
@@ -1643,6 +1686,7 @@ export function useCanvas() {
 
   const pasteClipboard = useCallback(() => {
     if (clipboard.current.length === 0) return;
+    pushHistory();
     const newObjects = duplicateTree(
       clipboard.current,
       { x: 20, y: 20 },
@@ -1655,10 +1699,11 @@ export function useCanvas() {
       )
       .map((o) => o.id);
     setSelectedIds(newRootIds);
-  }, [duplicateTree]);
+  }, [duplicateTree, pushHistory]);
 
   const duplicateSelected = useCallback(() => {
     if (selectedIds.length === 0) return;
+    pushHistory();
     const selected = objects.filter((o) => selectedIds.includes(o.id));
     const descendants = getDescendants(selectedIds, objects);
     const allToDupe = [...selected, ...descendants];
@@ -1670,7 +1715,7 @@ export function useCanvas() {
       )
       .map((o) => o.id);
     setSelectedIds(newRootIds);
-  }, [selectedIds, objects, getDescendants, duplicateTree]);
+  }, [selectedIds, objects, getDescendants, duplicateTree, pushHistory]);
 
   // Alt+drag to duplicate
   const startDuplicateDrag = useCallback(
@@ -1683,7 +1728,8 @@ export function useCanvas() {
       const allToDupe = [...selected, ...descendants];
 
       const newObjects = duplicateTree(allToDupe, { x: 0, y: 0 }, true);
-
+      pushHistory();
+      dragHistoryCaptured.current = true;
       setObjects((prev) => [...prev, ...newObjects]);
       const newRootIds = newObjects
         .filter(
@@ -1704,11 +1750,19 @@ export function useCanvas() {
       const bounds = getSelectionBounds(rootObjects, newRootIds);
       dragBoundsStart.current = bounds ? { x: bounds.x, y: bounds.y } : null;
     },
-    [objects, selectedIds, getSelectionBounds, getDescendants, duplicateTree]
+    [
+      objects,
+      selectedIds,
+      getSelectionBounds,
+      getDescendants,
+      duplicateTree,
+      pushHistory,
+    ]
   );
 
   const deleteSelected = useCallback(() => {
     if (selectedIds.length === 0) return;
+    pushHistory();
     const descendants = getDescendants(selectedIds, objects);
     const toDelete = new Set([...selectedIds, ...descendants.map((d) => d.id)]);
     setObjects((prev) => {
@@ -1718,7 +1772,7 @@ export function useCanvas() {
     });
     setSelectedIds([]);
     setEditingTextId(null);
-  }, [selectedIds, objects, getDescendants, recalculateHugSizes]);
+  }, [selectedIds, objects, getDescendants, recalculateHugSizes, pushHistory]);
 
   const selectAllSiblings = useCallback(() => {
     if (selectedIds.length === 0) {
@@ -1743,6 +1797,7 @@ export function useCanvas() {
     ) => {
       if (selectedIds.length === 0) return;
 
+      pushHistory();
       const selected = objects.filter((o) => selectedIds.includes(o.id));
 
       // Single object with parent frame: align within parent
@@ -1851,7 +1906,7 @@ export function useCanvas() {
         })
       );
     },
-    [selectedIds, objects]
+    [selectedIds, objects, pushHistory]
   );
 
   const alignLeft = useCallback(() => alignObjects("left"), [alignObjects]);
@@ -1871,6 +1926,8 @@ export function useCanvas() {
   const moveSelected = useCallback(
     (dx: number, dy: number) => {
       if (selectedIds.length === 0) return;
+      if (dx === 0 && dy === 0) return;
+      pushHistory();
       setObjects((prev) =>
         prev.map((o) => {
           if (!selectedIds.includes(o.id)) return o;
@@ -1878,7 +1935,7 @@ export function useCanvas() {
         })
       );
     },
-    [selectedIds]
+    [selectedIds, pushHistory]
   );
 
   // Add image object
@@ -1906,15 +1963,23 @@ export function useCanvas() {
         naturalWidth,
         naturalHeight,
       };
+      pushHistory();
       setObjects((prev) => [...prev, newImage]);
       setSelectedIds([id]);
     },
-    []
+    [pushHistory]
   );
 
   // Update object properties
   const updateObject = useCallback(
-    (id: string, updates: Partial<CanvasObject>) => {
+    (
+      id: string,
+      updates: Partial<CanvasObject>,
+      options?: { commit?: boolean }
+    ) => {
+      if (options?.commit !== false) {
+        pushHistory();
+      }
       setObjects((prev) => {
         const updated = prev.map((o) =>
           o.id === id ? ({ ...o, ...updates } as CanvasObject) : o
@@ -1923,21 +1988,26 @@ export function useCanvas() {
         return recalculateHugSizes(updated);
       });
     },
-    [recalculateHugSizes]
+    [recalculateHugSizes, pushHistory]
   );
 
   // Update text content
-  const updateTextContent = useCallback((id: string, content: string) => {
-    setObjects((prev) =>
-      prev.map((o) =>
-        o.id === id && o.type === "text" ? { ...o, content } : o
-      )
-    );
-  }, []);
+  const updateTextContent = useCallback(
+    (id: string, content: string) => {
+      pushHistory();
+      setObjects((prev) =>
+        prev.map((o) =>
+          o.id === id && o.type === "text" ? { ...o, content } : o
+        )
+      );
+    },
+    [pushHistory]
+  );
 
   // Set parent for nesting
   const setParent = useCallback(
     (childId: string, parentId: string | null) => {
+      pushHistory();
       setObjects((prev) => {
         const updated = prev.map((o) => {
           if (o.id === childId) {
@@ -1971,7 +2041,7 @@ export function useCanvas() {
         return recalculateHugSizes(updated);
       });
     },
-    [recalculateHugSizes]
+    [recalculateHugSizes, pushHistory]
   );
 
   const selectedObjects = objects.filter((o) => selectedIds.includes(o.id));
@@ -1996,6 +2066,11 @@ export function useCanvas() {
     guides,
     setTool,
     setEditingTextId,
+    pushHistory,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
     screenToCanvas,
     handleWheel,
     startCreate,

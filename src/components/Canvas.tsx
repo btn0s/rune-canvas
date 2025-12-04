@@ -302,6 +302,11 @@ export function Canvas() {
     addImage,
     updateTextContent,
     updateObject,
+    pushHistory,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   } = useCanvas();
 
   // Space key held for temporary pan
@@ -384,7 +389,7 @@ export function Canvas() {
 
       // Apply updates if any
       if (Object.keys(updates).length > 0) {
-        updateObject(obj.id, updates);
+        updateObject(obj.id, updates, { commit: false });
       }
     });
   }, [objects, transform.scale, updateObject, hasDragMovement]);
@@ -865,14 +870,18 @@ export function Canvas() {
 
   // Toggle flex layout on selected frames
   const toggleFlex = useCallback(() => {
+    if (selectedObjects.length === 0) return;
+    pushHistory();
     selectedObjects.forEach((obj) => {
       if (obj.type === "frame") {
         const frame = obj as FrameObject;
         const newMode = frame.layoutMode === "flex" ? "none" : "flex";
-        updateObject(obj.id, { layoutMode: newMode } as Partial<FrameObject>);
+        updateObject(obj.id, { layoutMode: newMode } as Partial<FrameObject>, {
+          commit: false,
+        });
       }
     });
-  }, [selectedObjects, updateObject]);
+  }, [selectedObjects, updateObject, pushHistory]);
 
   // Keyboard shortcuts (declarative)
   const shortcuts: Shortcut[] = useMemo(
@@ -889,6 +898,18 @@ export function Canvas() {
       { key: "c", modifiers: { meta: true }, action: copySelected },
       { key: "v", modifiers: { meta: true }, action: pasteClipboard },
       { key: "d", modifiers: { meta: true }, action: duplicateSelected },
+      {
+        key: "z",
+        modifiers: { meta: true },
+        action: undo,
+        when: () => canUndo,
+      },
+      {
+        key: "z",
+        modifiers: { meta: true, shift: true },
+        action: redo,
+        when: () => canRedo,
+      },
       {
         key: "a",
         modifiers: { meta: true },
