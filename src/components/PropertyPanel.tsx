@@ -2,7 +2,6 @@ import {
   CanvasObject,
   FrameObject,
   TextObject,
-  TextSizeMode,
   ImageObject,
   Transform,
   BlendMode,
