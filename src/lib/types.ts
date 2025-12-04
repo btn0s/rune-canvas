@@ -120,6 +120,8 @@ export interface ImageObject extends BaseObject {
   naturalHeight: number;
 }
 
+export type TextSizeMode = "auto-width" | "auto-height" | "fixed";
+
 export interface TextObject extends BaseObject {
   type: "text";
   content: string;
@@ -128,6 +130,7 @@ export interface TextObject extends BaseObject {
   fontWeight: number;
   textAlign: "left" | "center" | "right";
   color: string;
+  sizeMode: TextSizeMode;
 }
 
 export type CanvasObject = FrameObject | ImageObject | TextObject;

@@ -729,8 +729,8 @@ export function useCanvas() {
         parentId,
         x: relativePoint.x,
         y: relativePoint.y,
-        width: 200,
-        height: 24,
+        width: 0, // Will be auto-sized
+        height: 0, // Will be auto-sized
         opacity: 1,
         content: "",
         fontSize: 16,
@@ -738,6 +738,7 @@ export function useCanvas() {
         fontWeight: 400,
         textAlign: "left",
         color: "#000000",
+        sizeMode: "auto-width",
       };
 
       pushHistory();

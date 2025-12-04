@@ -335,7 +335,7 @@ export function Canvas() {
     }
   }, [editingTextId]);
 
-  // Sync positions and sizes from DOM for flex children and fit/expand frames
+  // Sync positions and sizes from DOM for flex children, fit/expand frames, and text
   // Also re-sync when drag ends (hasDragMovement goes false) to update flex child positions
   useLayoutEffect(() => {
     if (!containerRef.current) return;
@@ -368,6 +368,36 @@ export function Canvas() {
         }
       }
 
+      // Sync size for text objects based on size mode
+      if (obj.type === "text") {
+        const textObj = obj as TextObject;
+        const textEl = el.querySelector(
+          `[data-text-id="${obj.id}"]`
+        ) as HTMLElement;
+        if (textEl) {
+          const textRect = textEl.getBoundingClientRect();
+
+          if (textObj.sizeMode === "auto-width") {
+            // Sync both width and height
+            const domWidth = textRect.width / transform.scale;
+            const domHeight = textRect.height / transform.scale;
+            if (Math.abs(obj.width - domWidth) > 1) {
+              updates.width = domWidth;
+            }
+            if (Math.abs(obj.height - domHeight) > 1) {
+              updates.height = domHeight;
+            }
+          } else if (textObj.sizeMode === "auto-height") {
+            // Only sync height
+            const domHeight = textRect.height / transform.scale;
+            if (Math.abs(obj.height - domHeight) > 1) {
+              updates.height = domHeight;
+            }
+          }
+          // Fixed mode: don't sync anything
+        }
+      }
+
       // Sync position for objects inside flex/grid containers
       if (obj.parentId) {
         const parent = objects.find((o) => o.id === obj.parentId);
@@ -394,7 +424,7 @@ export function Canvas() {
         updateObject(obj.id, updates, { commit: false });
       }
     });
-  }, [objects, transform.scale, updateObject, hasDragMovement]);
+  }, [objects, transform.scale, updateObject, hasDragMovement, editingTextId]);
 
   // Draw interaction layer
   const draw = useCallback(() => {
@@ -1316,44 +1346,98 @@ export function Canvas() {
                     />
                   )}
 
-                  {obj.type === "text" && (
-                    <div
-                      data-text-id={obj.id}
-                      contentEditable={isEditing}
-                      suppressContentEditableWarning
-                      onBlur={(e) => {
-                        // Use innerText to preserve newlines
-                        updateTextContent(
-                          obj.id,
-                          e.currentTarget.innerText || ""
-                        );
-                        setEditingTextId(null);
-                      }}
-                      onKeyDown={(e) => {
-                        // Stop propagation to prevent global shortcuts while editing
-                        e.stopPropagation();
-                        if (e.key === "Escape") {
-                          e.currentTarget.blur();
-                        }
-                      }}
-                      style={{
-                        width: obj.width,
-                        minHeight: obj.height,
-                        color: (obj as TextObject).color,
-                        fontSize: (obj as TextObject).fontSize,
-                        fontFamily: (obj as TextObject).fontFamily,
-                        fontWeight: (obj as TextObject).fontWeight,
-                        textAlign: (obj as TextObject).textAlign,
+                  {obj.type === "text" &&
+                    (() => {
+                      const textObj = obj as TextObject;
+                      const sizeMode = textObj.sizeMode;
+
+                      // Style based on size mode:
+                      // auto-width: both dimensions auto, no wrapping
+                      // auto-height: fixed width, auto height, wraps
+                      // fixed: both fixed, clips overflow
+                      const textStyle: React.CSSProperties = {
+                        color: textObj.color,
+                        fontSize: textObj.fontSize,
+                        fontFamily: textObj.fontFamily,
+                        fontWeight: textObj.fontWeight,
+                        textAlign: textObj.textAlign,
                         outline: isEditing ? "1px solid #3b82f6" : "none",
-                        whiteSpace: "pre-wrap",
-                        wordWrap: "break-word",
                         pointerEvents: isEditing ? "auto" : "none",
                         cursor: isEditing ? "text" : "default",
-                      }}
-                    >
-                      {(obj as TextObject).content}
-                    </div>
-                  )}
+                        // Ensure minimum clickable area for empty text
+                        minWidth: sizeMode === "auto-width" ? 4 : undefined,
+                        minHeight: 4,
+                      };
+
+                      if (sizeMode === "auto-width") {
+                        // Auto width: no wrapping, both dimensions grow
+                        textStyle.whiteSpace = "pre";
+                        textStyle.width = "auto";
+                        textStyle.height = "auto";
+                      } else if (sizeMode === "auto-height") {
+                        // Auto height: fixed width, wraps, height grows
+                        textStyle.width = obj.width;
+                        textStyle.height = "auto";
+                        textStyle.whiteSpace = "pre-wrap";
+                        textStyle.wordWrap = "break-word";
+                      } else {
+                        // Fixed: both dimensions fixed, clips
+                        textStyle.width = obj.width;
+                        textStyle.height = obj.height;
+                        textStyle.whiteSpace = "pre-wrap";
+                        textStyle.wordWrap = "break-word";
+                        textStyle.overflow = "hidden";
+                      }
+
+                      return (
+                        <div
+                          data-text-id={obj.id}
+                          contentEditable={isEditing}
+                          suppressContentEditableWarning
+                          onBlur={(e) => {
+                            updateTextContent(
+                              obj.id,
+                              e.currentTarget.innerText || ""
+                            );
+                            setEditingTextId(null);
+                          }}
+                          onInput={(e) => {
+                            // Sync size in real-time while typing
+                            const el = e.currentTarget;
+                            const updates: Partial<TextObject> = {};
+
+                            if (sizeMode === "auto-width") {
+                              // Sync both width and height
+                              if (Math.abs(obj.width - el.offsetWidth) > 1) {
+                                updates.width = el.offsetWidth;
+                              }
+                              if (Math.abs(obj.height - el.offsetHeight) > 1) {
+                                updates.height = el.offsetHeight;
+                              }
+                            } else if (sizeMode === "auto-height") {
+                              // Only sync height
+                              if (Math.abs(obj.height - el.offsetHeight) > 1) {
+                                updates.height = el.offsetHeight;
+                              }
+                            }
+                            // Fixed mode: don't sync anything
+
+                            if (Object.keys(updates).length > 0) {
+                              updateObject(obj.id, updates, { commit: false });
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === "Escape") {
+                              e.currentTarget.blur();
+                            }
+                          }}
+                          style={textStyle}
+                        >
+                          {textObj.content || (isEditing ? "" : "\u200B")}
+                        </div>
+                      );
+                    })()}
                 </div>
               );
             };

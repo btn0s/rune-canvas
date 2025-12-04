@@ -2,6 +2,7 @@ import {
   CanvasObject,
   FrameObject,
   TextObject,
+  TextSizeMode,
   ImageObject,
   Transform,
   BlendMode,
@@ -30,6 +31,9 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
+  MoveHorizontal,
+  MoveVertical,
+  Lock,
 } from "lucide-react";
 import { Slider } from "./ui/slider";
 import { Checkbox } from "./ui/checkbox";
@@ -963,6 +967,41 @@ export function PropertyPanel({
         {selectedObject.type === "text" && (
           <div className="flex flex-col gap-2">
             <SectionLabel>Text</SectionLabel>
+            {/* Size Mode */}
+            <div className="flex gap-1">
+              {(
+                [
+                  {
+                    mode: "auto-width",
+                    icon: MoveHorizontal,
+                    label: "Auto Width",
+                  },
+                  {
+                    mode: "auto-height",
+                    icon: MoveVertical,
+                    label: "Auto Height",
+                  },
+                  { mode: "fixed", icon: Lock, label: "Fixed" },
+                ] as const
+              ).map(({ mode, icon: Icon, label }) => (
+                <button
+                  key={mode}
+                  title={label}
+                  className={`flex-1 h-7 rounded text-[10px] transition-colors ${
+                    (selectedObject as TextObject).sizeMode === mode
+                      ? "bg-blue-500/20 text-blue-400"
+                      : "bg-zinc-800/50 text-zinc-500 hover:text-zinc-300"
+                  }`}
+                  onClick={() =>
+                    onUpdate(selectedObject.id, {
+                      sizeMode: mode,
+                    } as Partial<TextObject>)
+                  }
+                >
+                  <Icon className="size-3.5 mx-auto" />
+                </button>
+              ))}
+            </div>
             <NumberInput
               label="Size"
               value={(selectedObject as TextObject).fontSize}
