@@ -6,6 +6,7 @@ import {
   getCanvasPosition,
   SNAP_THRESHOLD,
 } from "./snapping";
+import { useDrag } from "./interactions/useDrag";
 import type {
   CanvasObject,
   FrameObject,
@@ -57,8 +58,6 @@ export function useCanvas() {
   const canRedo = useCanvasStore((state) => state.history.future.length > 0);
 
   const [isCreating, setIsCreating] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [hasDragMovement, setHasDragMovement] = useState(false); // True when drag has actual movement
   const [isResizing, setIsResizing] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
@@ -69,20 +68,10 @@ export function useCanvas() {
     height: number;
   } | null>(null);
   const [guides, setGuides] = useState<Guide[]>([]);
-  const [potentialParentId, setPotentialParentId] = useState<string | null>(
-    null
-  );
-
-  // Reparent delay timer
-  const reparentTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingParentId = useRef<string | null>(null);
-  const lastDragPoint = useRef<Point | null>(null);
-  const REPARENT_DELAY = 150; // ms
 
   const createStart = useRef<Point | null>(null);
   const objectCounter = useRef(1);
-  const dragStart = useRef<Point | null>(null);
-  const dragObjectsStart = useRef<{ id: string; x: number; y: number }[]>([]);
+  const panStart = useRef<Point | null>(null);
   const resizeHandle = useRef<ResizeHandle | null>(null);
   const resizeStart = useRef<{
     object: { x: number; y: number; width: number; height: number };
@@ -460,398 +449,98 @@ export function useCanvas() {
     []
   );
 
-  // Store initial selection bounds for dragging
-  const dragBoundsStart = useRef<{ x: number; y: number } | null>(null);
-  // Track clicked frame for potential deselect-on-mouseup
-  const clickedFrameId = useRef<string | null>(null);
-  const didDrag = useRef(false);
-  const dragHistoryCaptured = useRef(false);
-  // Track if shift was held on mousedown (for deselect on mouseup)
-  const shiftOnMouseDown = useRef(false);
-  // Track if clicked object was already selected (for shift+click deselect)
-  const wasAlreadySelected = useRef(false);
-  // Track locked axis for shift-drag constraint
-  const dragLockedAxis = useRef<"x" | "y" | null>(null);
-
-  const startDrag = useCallback(
-    (objectId: string, canvasPoint: Point, addToSelection = false) => {
-      const obj = objects.find((o) => o.id === objectId);
-      if (!obj) return;
-
-      const isAlreadySelected = selectedIds.includes(objectId);
-
-      // Reset drag tracking
-      clickedFrameId.current = objectId;
-      didDrag.current = false;
-      dragHistoryCaptured.current = false;
-      // Track if shift was held (to prevent "click = select only this" behavior)
-      shiftOnMouseDown.current = addToSelection;
-      // Track if object was already selected (for shift+click deselect)
-      wasAlreadySelected.current = isAlreadySelected;
-
-      // Determine new selection
-      let newSelectedIds: string[];
-      if (addToSelection && !isAlreadySelected) {
-        // Shift+click unselected = add to selection
-        newSelectedIds = [...selectedIds, objectId];
-      } else if (isAlreadySelected) {
-        // Click on already-selected object = keep all selected (might deselect on mouseup)
-        newSelectedIds = selectedIds;
-      } else {
-        // Click unselected without shift = select only this one
-        newSelectedIds = [objectId];
-      }
-
-      setSelectedIds(newSelectedIds);
-      setIsDragging(true);
-      setHasDragMovement(false); // Reset - no movement yet
-      dragStart.current = canvasPoint;
-
-      // Store starting positions for all selected objects (relative positions)
-      const selectedObjectsList = objects.filter((o) =>
-        newSelectedIds.includes(o.id)
-      );
-      dragObjectsStart.current = selectedObjectsList.map((o) => ({
-        id: o.id,
-        x: o.x,
-        y: o.y,
-      }));
-
-      // Store initial bounding box position (canvas space)
-      const bounds = getSelectionBounds(objects, newSelectedIds);
-      dragBoundsStart.current = bounds ? { x: bounds.x, y: bounds.y } : null;
+  // Helper to get all descendants of given object IDs
+  const getDescendants = useCallback(
+    (ids: string[], allObjects: CanvasObject[]): CanvasObject[] => {
+      const result: CanvasObject[] = [];
+      const collectDescendants = (parentIds: string[]) => {
+        const children = allObjects.filter(
+          (o) => o.parentId && parentIds.includes(o.parentId)
+        );
+        if (children.length > 0) {
+          result.push(...children);
+          collectDescendants(children.map((c) => c.id));
+        }
+      };
+      collectDescendants(ids);
+      return result;
     },
-    [objects, selectedIds, getSelectionBounds]
+    []
   );
 
-  const updateDrag = useCallback(
-    (canvasPoint: Point, shiftKey = false) => {
-      if (
-        !isDragging ||
-        !dragStart.current ||
-        dragObjectsStart.current.length === 0 ||
-        !dragBoundsStart.current
-      )
-        return;
-
-      // Store last drag point for reparent timer
-      lastDragPoint.current = canvasPoint;
-
-      let dx = canvasPoint.x - dragStart.current.x;
-      let dy = canvasPoint.y - dragStart.current.y;
-
-      // Mark as dragged if moved more than 2px
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-        if (!dragHistoryCaptured.current) {
-          pushHistory();
-          dragHistoryCaptured.current = true;
-        }
-        didDrag.current = true;
-        if (!hasDragMovement) setHasDragMovement(true);
-      }
-
-      // Shift-drag: lock to axis based on initial movement direction
-      if (shiftKey && didDrag.current) {
-        // Determine locked axis on first significant movement
-        if (!dragLockedAxis.current) {
-          dragLockedAxis.current = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
-        }
-        // Constrain movement to locked axis
-        if (dragLockedAxis.current === "x") {
-          dy = 0;
-        } else {
-          dx = 0;
-        }
-      } else {
-        // Reset locked axis when shift is released
-        dragLockedAxis.current = null;
-      }
-
-      // Compute current bounding box dimensions from starting objects (canvas space)
-      const startingObjects = dragObjectsStart.current;
-      let minX = Infinity,
-        minY = Infinity,
-        maxX = -Infinity,
-        maxY = -Infinity;
-      for (const so of startingObjects) {
-        const obj = objects.find((o) => o.id === so.id);
-        if (!obj) continue;
-        const canvasPos = getCanvasPosition(
-          { ...obj, x: so.x, y: so.y },
-          objects
+  // Helper to duplicate a tree of objects with new IDs and proper parent remapping
+  const duplicateTree = useCallback(
+    (
+      objectsToDupe: CanvasObject[],
+      offset: { x: number; y: number } = { x: 20, y: 20 },
+      appendCopy: boolean = true
+    ): CanvasObject[] => {
+      const idMap = new Map<string, string>();
+      objectsToDupe.forEach((o, index) => {
+        idMap.set(
+          o.id,
+          `${o.type}-${Date.now()}-${index}-${Math.random()
+            .toString(36)
+            .substr(2, 9)}`
         );
-        minX = Math.min(minX, canvasPos.x);
-        minY = Math.min(minY, canvasPos.y);
-        maxX = Math.max(maxX, canvasPos.x + obj.width);
-        maxY = Math.max(maxY, canvasPos.y + obj.height);
-      }
-      const boundsWidth = maxX - minX;
-      const boundsHeight = maxY - minY;
-
-      // New bounding box position (canvas space)
-      const newBoundsX = dragBoundsStart.current.x + dx;
-      const newBoundsY = dragBoundsStart.current.y + dy;
-
-      // Exclude selected objects and all their descendants from snapping
-      const descendants = getDescendants(selectedIds, objects);
-      const excludeIds = new Set([
-        ...selectedIds,
-        ...descendants.map((d) => d.id),
-      ]);
-
-      // Scope snapping to siblings (same parent) only
-      const firstSelected = objects.find((o) => o.id === selectedIds[0]);
-      const parentId = firstSelected?.parentId ?? null;
-      const otherObjects = objects.filter(
-        (o) => !excludeIds.has(o.id) && o.parentId === parentId
-      );
-      const snapped = calculateSnapping(
-        {
-          x: newBoundsX,
-          y: newBoundsY,
-          width: boundsWidth,
-          height: boundsHeight,
-        },
-        otherObjects,
-        objects,
-        "move"
-      );
-
-      // Calculate the snap delta
-      const snapDx = snapped.x - newBoundsX;
-      const snapDy = snapped.y - newBoundsY;
-
-      setGuides(snapped.guides);
-      setObjects((prev) =>
-        prev.map((o) => {
-          const startPos = dragObjectsStart.current.find((s) => s.id === o.id);
-          if (!startPos) return o;
-          // Update relative position
-          return {
-            ...o,
-            x: startPos.x + dx + snapDx,
-            y: startPos.y + dy + snapDy,
-          };
-        })
-      );
-
-      // Calculate potential parent for nesting with delay
-      if (selectedIds.length === 1) {
-        const dragged = objects.find((o) => o.id === selectedIds[0]);
-        if (dragged) {
-          const draggedCenter = {
-            x: snapped.x + boundsWidth / 2,
-            y: snapped.y + boundsHeight / 2,
-          };
-
-          const frames = objects.filter(
-            (o) => o.type === "frame" && !selectedIds.includes(o.id)
-          );
-
-          let targetFrame: CanvasObject | null = null;
-          let smallestArea = Infinity;
-
-          for (const frame of frames) {
-            // Don't nest into own children
-            let isDescendant = false;
-            let checkId: string | null = frame.id;
-            while (checkId) {
-              const check = objects.find((o) => o.id === checkId);
-              if (check?.parentId === dragged.id) {
-                isDescendant = true;
-                break;
-              }
-              checkId = check?.parentId ?? null;
-            }
-            if (isDescendant) continue;
-
-            const frameCanvasPos = getCanvasPosition(frame, objects);
-            const inBounds =
-              draggedCenter.x >= frameCanvasPos.x &&
-              draggedCenter.x <= frameCanvasPos.x + frame.width &&
-              draggedCenter.y >= frameCanvasPos.y &&
-              draggedCenter.y <= frameCanvasPos.y + frame.height;
-
-            if (inBounds) {
-              const area = frame.width * frame.height;
-              if (area < smallestArea) {
-                smallestArea = area;
-                targetFrame = frame;
-              }
-            }
-          }
-
-          const newTargetId = targetFrame?.id ?? null;
-
-          // If target changed, reset timer
-          if (newTargetId !== pendingParentId.current) {
-            if (reparentTimer.current) {
-              clearTimeout(reparentTimer.current);
-              reparentTimer.current = null;
-            }
-            pendingParentId.current = newTargetId;
-
-            // If we have a new target and it's different from current parent, start timer
-            if (newTargetId && newTargetId !== dragged.parentId) {
-              reparentTimer.current = setTimeout(() => {
-                // Immediately reparent when timer fires
-                setPotentialParentId(newTargetId);
-                setObjects((prev) => {
-                  const obj = prev.find((o) => o.id === dragged.id);
-                  const newParent = prev.find((o) => o.id === newTargetId);
-                  if (!obj || !newParent) return prev;
-
-                  const canvasPos = getCanvasPosition(obj, prev);
-                  const parentCanvasPos = getCanvasPosition(newParent, prev);
-
-                  // Calculate new relative position
-                  const newRelX = canvasPos.x - parentCanvasPos.x;
-                  const newRelY = canvasPos.y - parentCanvasPos.y;
-
-                  // Reset drag references to current position so drag continues smoothly
-                  if (lastDragPoint.current) {
-                    dragStart.current = lastDragPoint.current;
-                    dragBoundsStart.current = {
-                      x: canvasPos.x,
-                      y: canvasPos.y,
-                    };
-                    dragObjectsStart.current = [
-                      { id: dragged.id, x: newRelX, y: newRelY },
-                    ];
-                  }
-
-                  return prev.map((o) =>
-                    o.id === dragged.id
-                      ? {
-                          ...o,
-                          parentId: newTargetId,
-                          x: newRelX,
-                          y: newRelY,
-                        }
-                      : o
-                  );
-                });
-                reparentTimer.current = null;
-              }, REPARENT_DELAY);
-            } else if (!newTargetId || newTargetId === dragged.parentId) {
-              // No target or same as current parent - clear highlight
-              setPotentialParentId(null);
-            }
-          }
-        }
-      } else {
-        if (reparentTimer.current) {
-          clearTimeout(reparentTimer.current);
-          reparentTimer.current = null;
-        }
-        pendingParentId.current = null;
-        setPotentialParentId(null);
-      }
-    },
-    [isDragging, selectedIds, objects, pushHistory, hasDragMovement]
-  );
-
-  const endDrag = useCallback(() => {
-    // Clear reparent timer
-    if (reparentTimer.current) {
-      clearTimeout(reparentTimer.current);
-      reparentTimer.current = null;
-    }
-    dragHistoryCaptured.current = false;
-    pendingParentId.current = null;
-
-    // Handle click-without-drag scenarios
-    if (clickedFrameId.current && !didDrag.current) {
-      if (
-        shiftOnMouseDown.current &&
-        wasAlreadySelected.current &&
-        selectedIds.includes(clickedFrameId.current)
-      ) {
-        // Shift+click on already-selected object without dragging = deselect it
-        setSelectedIds(
-          selectedIds.filter((id) => id !== clickedFrameId.current)
-        );
-      } else if (
-        !shiftOnMouseDown.current &&
-        selectedIds.length > 1 &&
-        selectedIds.includes(clickedFrameId.current)
-      ) {
-        // Click on selected object without shift = select only this one
-        setSelectedIds([clickedFrameId.current]);
-      }
-    }
-
-    // Handle unnesting: if object has a parent but is now outside all frames, unnest it
-    if (didDrag.current && selectedIds.length === 1) {
-      setObjects((prev) => {
-        const dragged = prev.find((o) => o.id === selectedIds[0]);
-        if (!dragged || !dragged.parentId) {
-          // Still recalculate hug sizes even if not unnesting
-          return recalculateHugSizes(prev);
-        }
-
-        const draggedCanvasPos = getCanvasPosition(dragged, prev);
-        const draggedCenter = {
-          x: draggedCanvasPos.x + dragged.width / 2,
-          y: draggedCanvasPos.y + dragged.height / 2,
-        };
-
-        // Check if still inside any frame
-        const frames = prev.filter(
-          (o) => o.type === "frame" && o.id !== dragged.id
-        );
-
-        let insideAnyFrame = false;
-        for (const frame of frames) {
-          const frameCanvasPos = getCanvasPosition(frame, prev);
-          if (
-            draggedCenter.x >= frameCanvasPos.x &&
-            draggedCenter.x <= frameCanvasPos.x + frame.width &&
-            draggedCenter.y >= frameCanvasPos.y &&
-            draggedCenter.y <= frameCanvasPos.y + frame.height
-          ) {
-            insideAnyFrame = true;
-            break;
-          }
-        }
-
-        // If outside all frames, unnest to root
-        if (!insideAnyFrame) {
-          const updated = prev.map((o) =>
-            o.id === dragged.id
-              ? {
-                  ...o,
-                  parentId: null,
-                  x: draggedCanvasPos.x,
-                  y: draggedCanvasPos.y,
-                }
-              : o
-          );
-          return recalculateHugSizes(updated);
-        }
-
-        return recalculateHugSizes(prev);
       });
-    } else if (didDrag.current) {
-      // Recalculate hug sizes after multi-object drag
-      setObjects((prev) => recalculateHugSizes(prev));
+
+      return objectsToDupe.map((o) => {
+        const parentInSet = o.parentId && idMap.has(o.parentId);
+        const isRoot = !o.parentId || !parentInSet;
+
+        let newParentId: string | null = null;
+        if (o.parentId) {
+          if (parentInSet) {
+            newParentId = idMap.get(o.parentId)!;
+          } else {
+            newParentId = o.parentId;
+          }
+        }
+
+        return {
+          ...o,
+          id: idMap.get(o.id)!,
+          name: appendCopy ? `${o.name} copy` : o.name,
+          parentId: newParentId,
+          x: isRoot ? o.x + offset.x : o.x,
+          y: isRoot ? o.y + offset.y : o.y,
+        };
+      });
+    },
+    []
+  );
+
+  // ---- Drag Interaction (extracted hook) ----
+  const drag = useDrag(
+    {
+      objects,
+      selectedIds,
+      getSelectionBounds,
+      getDescendants,
+      duplicateTree,
+    },
+    {
+      setObjects,
+      setSelectedIds,
+      setGuides,
+      pushHistory,
+      recalculateHugSizes,
     }
+  );
 
-    setIsDragging(false);
-    setHasDragMovement(false);
-    setGuides([]);
-    setPotentialParentId(null);
-    dragStart.current = null;
-    dragObjectsStart.current = [];
-    dragBoundsStart.current = null;
-    clickedFrameId.current = null;
-    didDrag.current = false;
-    shiftOnMouseDown.current = false;
-    wasAlreadySelected.current = false;
-    dragLockedAxis.current = null;
-    lastDragPoint.current = null;
-  }, [selectedIds]);
+  // Destructure for easier access
+  const {
+    isDragging,
+    hasDragMovement,
+    potentialParentId,
+    startDrag,
+    updateDrag,
+    endDrag,
+    startDuplicateDrag,
+  } = drag;
 
+  // NOTE: Old inline drag code has been removed - see useDrag hook
   // Store resize starting state
   const resizeBoundsStart = useRef<{
     bounds: { x: number; y: number; width: number; height: number };
@@ -1077,23 +766,23 @@ export function useCanvas() {
 
   const startPan = useCallback((screenPoint: Point) => {
     setIsPanning(true);
-    dragStart.current = screenPoint;
+    panStart.current = screenPoint;
   }, []);
 
   const updatePan = useCallback(
     (screenPoint: Point) => {
-      if (!isPanning || !dragStart.current) return;
-      const dx = screenPoint.x - dragStart.current.x;
-      const dy = screenPoint.y - dragStart.current.y;
+      if (!isPanning || !panStart.current) return;
+      const dx = screenPoint.x - panStart.current.x;
+      const dy = screenPoint.y - panStart.current.y;
       setTransform((t) => ({ ...t, x: t.x + dx, y: t.y + dy }));
-      dragStart.current = screenPoint;
+      panStart.current = screenPoint;
     },
     [isPanning]
   );
 
   const endPan = useCallback(() => {
     setIsPanning(false);
-    dragStart.current = null;
+    panStart.current = null;
   }, []);
 
   const select = useCallback((ids: string[] | null, addToSelection = false) => {
@@ -1154,76 +843,6 @@ export function useCanvas() {
   // Clipboard for copy/paste
   const clipboard = useRef<CanvasObject[]>([]);
 
-  // Helper to get all descendants of given object IDs
-  const getDescendants = useCallback(
-    (ids: string[], allObjects: CanvasObject[]): CanvasObject[] => {
-      const result: CanvasObject[] = [];
-      const collectDescendants = (parentIds: string[]) => {
-        const children = allObjects.filter(
-          (o) => o.parentId && parentIds.includes(o.parentId)
-        );
-        if (children.length > 0) {
-          result.push(...children);
-          collectDescendants(children.map((c) => c.id));
-        }
-      };
-      collectDescendants(ids);
-      return result;
-    },
-    []
-  );
-
-  // Helper to duplicate a tree of objects with new IDs and proper parent remapping
-  const duplicateTree = useCallback(
-    (
-      objectsToDupe: CanvasObject[],
-      offset: { x: number; y: number } = { x: 20, y: 20 },
-      appendCopy: boolean = true
-    ): CanvasObject[] => {
-      const idMap = new Map<string, string>();
-      objectsToDupe.forEach((o, index) => {
-        idMap.set(
-          o.id,
-          `${o.type}-${Date.now()}-${index}-${Math.random()
-            .toString(36)
-            .substr(2, 9)}`
-        );
-      });
-
-      return objectsToDupe.map((o) => {
-        // Check if this object's parent is in the duplication set
-        const parentInSet = o.parentId && idMap.has(o.parentId);
-        // Is this a "root" of the duplication (no parent, or parent not in set)
-        const isRoot = !o.parentId || !parentInSet;
-
-        // Determine the new parent:
-        // - If parent is in the set, remap to new ID
-        // - If parent is NOT in set but exists, keep original parent (stay nested)
-        // - If no parent, stay null
-        let newParentId: string | null = null;
-        if (o.parentId) {
-          if (parentInSet) {
-            newParentId = idMap.get(o.parentId)!;
-          } else {
-            // Keep the original parent - duplicate stays in same frame
-            newParentId = o.parentId;
-          }
-        }
-
-        return {
-          ...o,
-          id: idMap.get(o.id)!,
-          name: appendCopy ? `${o.name} copy` : o.name,
-          parentId: newParentId,
-          // Only offset root-level objects (children stay relative to parent)
-          x: isRoot ? o.x + offset.x : o.x,
-          y: isRoot ? o.y + offset.y : o.y,
-        };
-      });
-    },
-    []
-  );
-
   const copySelected = useCallback(() => {
     if (selectedIds.length === 0) return;
     const selected = objects.filter((o) => selectedIds.includes(o.id));
@@ -1263,49 +882,6 @@ export function useCanvas() {
       .map((o) => o.id);
     setSelectedIds(newRootIds);
   }, [selectedIds, objects, getDescendants, duplicateTree, pushHistory]);
-
-  // Alt+drag to duplicate
-  const startDuplicateDrag = useCallback(
-    (objectId: string, canvasPoint: Point) => {
-      const toDuplicate = selectedIds.includes(objectId)
-        ? selectedIds
-        : [objectId];
-      const selected = objects.filter((o) => toDuplicate.includes(o.id));
-      const descendants = getDescendants(toDuplicate, objects);
-      const allToDupe = [...selected, ...descendants];
-
-      const newObjects = duplicateTree(allToDupe, { x: 0, y: 0 }, true);
-      pushHistory();
-      dragHistoryCaptured.current = true;
-      setObjects((prev) => [...prev, ...newObjects]);
-      const newRootIds = newObjects
-        .filter(
-          (o) => !o.parentId || !newObjects.some((c) => c.id === o.parentId)
-        )
-        .map((o) => o.id);
-      setSelectedIds(newRootIds);
-      setIsDragging(true);
-      dragStart.current = canvasPoint;
-      const rootObjects = newObjects.filter((o) => newRootIds.includes(o.id));
-      dragObjectsStart.current = rootObjects.map((o) => ({
-        id: o.id,
-        x: o.x,
-        y: o.y,
-      }));
-
-      // Set initial bounds for snapping
-      const bounds = getSelectionBounds(rootObjects, newRootIds);
-      dragBoundsStart.current = bounds ? { x: bounds.x, y: bounds.y } : null;
-    },
-    [
-      objects,
-      selectedIds,
-      getSelectionBounds,
-      getDescendants,
-      duplicateTree,
-      pushHistory,
-    ]
-  );
 
   const deleteSelected = useCallback(() => {
     if (selectedIds.length === 0) return;
@@ -1655,4 +1231,3 @@ export function useCanvas() {
     setParent,
   };
 }
-
