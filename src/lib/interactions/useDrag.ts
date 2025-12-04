@@ -438,8 +438,7 @@ export function useDrag(config: DragConfig, actions: DragActions) {
       const allToDupe = [...selected, ...descendants];
 
       const newObjects = duplicateTree(allToDupe, { x: 0, y: 0 }, true);
-      pushHistory();
-      history.captureOnce(); // Mark as captured so we don't double-capture
+      history.captureOnce();
 
       setObjects((prev) => [...prev, ...newObjects]);
 
@@ -463,7 +462,7 @@ export function useDrag(config: DragConfig, actions: DragActions) {
       const bounds = getSelectionBounds(rootObjects, newRootIds);
       dragBoundsStart.current = bounds ? { x: bounds.x, y: bounds.y } : null;
     },
-    [objects, selectedIds, pushHistory, setObjects, setSelectedIds, history]
+    [objects, selectedIds, setObjects, setSelectedIds, history]
   );
 
   return {
