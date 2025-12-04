@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Frame, Type, Image } from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
@@ -10,6 +10,22 @@ interface LayerItem {
   id: string;
   name: string;
   parentId: string | null;
+  type: "frame" | "text" | "image";
+}
+
+// Icon component for layer type
+function LayerTypeIcon({ type, className }: { type: string; className?: string }) {
+  const iconClass = className || "w-3 h-3 text-zinc-500 shrink-0";
+  switch (type) {
+    case "frame":
+      return <Frame className={iconClass} />;
+    case "text":
+      return <Type className={iconClass} />;
+    case "image":
+      return <Image className={iconClass} />;
+    default:
+      return null;
+  }
 }
 
 interface LayersPanelProps {
@@ -88,13 +104,19 @@ function LayerTreeItem({
           />
         )}
         {isHovered && (
-          <span
-            className={`text-xs whitespace-nowrap ${
-              isSelected ? "text-blue-400" : "text-zinc-500"
-            }`}
-          >
-            {item.name}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <LayerTypeIcon 
+              type={item.type} 
+              className={`w-3 h-3 ${isSelected ? "text-blue-400" : "text-zinc-500"}`} 
+            />
+            <span
+              className={`text-xs whitespace-nowrap ${
+                isSelected ? "text-blue-400" : "text-zinc-500"
+              }`}
+            >
+              {item.name}
+            </span>
+          </div>
         )}
       </div>
     );
@@ -129,7 +151,7 @@ function LayerTreeItem({
         {isHovered && (
           <>
             <CollapsibleTrigger asChild onClick={handleChevronClick}>
-              <button className="p-0.5 -ml-1 mr-1 hover:bg-zinc-600/50 rounded transition-colors">
+              <button className="p-0.5 -ml-1 mr-0.5 hover:bg-zinc-600/50 rounded transition-colors">
                 <ChevronRight
                   className={`w-3 h-3 text-zinc-500 transition-transform duration-200 ${
                     isOpen ? "rotate-90" : ""
@@ -137,8 +159,12 @@ function LayerTreeItem({
                 />
               </button>
             </CollapsibleTrigger>
+            <LayerTypeIcon 
+              type={item.type} 
+              className={`w-3 h-3 ${isSelected ? "text-blue-400" : "text-zinc-500"}`} 
+            />
             <span
-              className={`text-xs whitespace-nowrap ${
+              className={`text-xs whitespace-nowrap ml-1 ${
                 isSelected ? "text-blue-400" : "text-zinc-500"
               }`}
             >

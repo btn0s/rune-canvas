@@ -1481,13 +1481,12 @@ export function Canvas() {
 
         {/* Layers panel */}
         <LayersPanel
-          items={objects
-            .filter((o) => o.type === "frame")
-            .map((o) => ({
-              id: o.id,
-              name: o.name,
-              parentId: o.parentId,
-            }))}
+          items={objects.map((o) => ({
+            id: o.id,
+            name: o.name,
+            parentId: o.parentId,
+            type: o.type,
+          }))}
           selectedIds={selectedIds}
           onSelect={select}
           debug={debugMode}

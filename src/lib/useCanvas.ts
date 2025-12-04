@@ -385,7 +385,23 @@ export function useCanvas() {
           canvasPos.y > y + height
         );
       });
-      setSelectedIds(intersecting.map((o) => o.id));
+      
+      // Filter out children whose parent is also selected (select outermost only)
+      const intersectingIds = new Set(intersecting.map((o) => o.id));
+      const outermostOnly = intersecting.filter((o) => {
+        // Walk up the parent chain - if any ancestor is in the selection, exclude this object
+        let parentId = o.parentId;
+        while (parentId) {
+          if (intersectingIds.has(parentId)) {
+            return false; // Parent is selected, so skip this child
+          }
+          const parent = objects.find((p) => p.id === parentId);
+          parentId = parent?.parentId ?? null;
+        }
+        return true;
+      });
+      
+      setSelectedIds(outermostOnly.map((o) => o.id));
     },
     [isMarqueeSelecting, objects]
   );
