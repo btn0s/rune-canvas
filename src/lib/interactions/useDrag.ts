@@ -116,7 +116,7 @@ export function useDrag(config: DragConfig, actions: DragActions) {
       const bounds = getSelectionBounds(objects, newSelectedIds);
       dragBoundsStart.current = bounds ? { x: bounds.x, y: bounds.y } : null;
     },
-    [objects, selectedIds, setSelectedIds]
+    [objects, selectedIds, setSelectedIds, history]
   );
 
   const updateDrag = useCallback(

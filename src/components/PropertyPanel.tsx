@@ -26,6 +26,10 @@ import {
   Grid3X3,
   Square,
   WrapText,
+  Bold,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
 } from "lucide-react";
 import { Slider } from "./ui/slider";
 import { Checkbox } from "./ui/checkbox";
@@ -97,12 +101,14 @@ export function PropertyPanel({
   const frame =
     selectedObject.type === "frame" ? (selectedObject as FrameObject) : null;
 
-  // Get fill color for display
+  // Get fill color for display (frames) or text color (text objects)
   const fillColor =
     selectedObject.type === "frame"
       ? (selectedObject as FrameObject).fill
-      : selectedObject.type === "text"
-      ? (selectedObject as TextObject).fill
+      : null;
+  const textColor =
+    selectedObject.type === "text"
+      ? (selectedObject as TextObject).color
       : null;
 
   return (
@@ -265,9 +271,8 @@ export function PropertyPanel({
           </div>
         </div>
 
-        {/* Fill Section - for frames and text */}
-        {(selectedObject.type === "frame" ||
-          selectedObject.type === "text") && (
+        {/* Fill Section - for frames only */}
+        {selectedObject.type === "frame" && (
           <CollapsibleSection
             label="Fill"
             isOpen={fillColor !== "transparent" && fillColor !== undefined}
@@ -293,6 +298,33 @@ export function PropertyPanel({
                 onUpdate(selectedObject.id, {
                   fillOpacity: opacity,
                 } as Partial<FrameObject>)
+              }
+            />
+          </CollapsibleSection>
+        )}
+
+        {/* Color Section - for text only */}
+        {selectedObject.type === "text" && (
+          <CollapsibleSection
+            label="Color"
+            isOpen={!!textColor}
+            onAdd={() =>
+              onUpdate(selectedObject.id, {
+                color: "#000000",
+              } as Partial<TextObject>)
+            }
+            onRemove={() =>
+              onUpdate(selectedObject.id, {
+                color: "transparent",
+              } as Partial<TextObject>)
+            }
+          >
+            <ColorInput
+              color={textColor || "#000000"}
+              onChange={(color) =>
+                onUpdate(selectedObject.id, {
+                  color,
+                } as Partial<TextObject>)
               }
             />
           </CollapsibleSection>
@@ -941,6 +973,52 @@ export function PropertyPanel({
               }
               min={8}
             />
+            <div className="flex gap-1">
+              <button
+                className={`flex-1 h-7 rounded text-[10px] font-medium transition-colors ${
+                  (selectedObject as TextObject).fontWeight >= 600
+                    ? "bg-blue-500/20 text-blue-400"
+                    : "bg-zinc-800/50 text-zinc-500 hover:text-zinc-300"
+                }`}
+                onClick={() =>
+                  onUpdate(selectedObject.id, {
+                    fontWeight:
+                      (selectedObject as TextObject).fontWeight >= 600
+                        ? 400
+                        : 700,
+                  } as Partial<TextObject>)
+                }
+              >
+                <Bold className="size-3.5 mx-auto" />
+              </button>
+            </div>
+            <div className="flex gap-1">
+              {(["left", "center", "right"] as const).map((align) => (
+                <button
+                  key={align}
+                  className={`flex-1 h-7 rounded text-[10px] transition-colors ${
+                    (selectedObject as TextObject).textAlign === align
+                      ? "bg-blue-500/20 text-blue-400"
+                      : "bg-zinc-800/50 text-zinc-500 hover:text-zinc-300"
+                  }`}
+                  onClick={() =>
+                    onUpdate(selectedObject.id, {
+                      textAlign: align,
+                    } as Partial<TextObject>)
+                  }
+                >
+                  {align === "left" && (
+                    <AlignLeft className="size-3.5 mx-auto" />
+                  )}
+                  {align === "center" && (
+                    <AlignCenter className="size-3.5 mx-auto" />
+                  )}
+                  {align === "right" && (
+                    <AlignRight className="size-3.5 mx-auto" />
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

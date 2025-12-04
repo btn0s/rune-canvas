@@ -302,6 +302,7 @@ export function Canvas() {
     moveSelected,
     addImage,
     updateTextContent,
+    createText,
     updateObject,
     pushHistory,
     undo,
@@ -809,8 +810,10 @@ export function Canvas() {
         }
         startMarquee(canvasPoint);
       }
-    } else if (tool === "frame" || tool === "rectangle" || tool === "text") {
+    } else if (tool === "frame" || tool === "rectangle") {
       startCreate(canvasPoint);
+    } else if (tool === "text") {
+      createText(canvasPoint);
     }
   };
 
@@ -1336,9 +1339,11 @@ export function Canvas() {
                       style={{
                         width: obj.width,
                         minHeight: obj.height,
-                        color: (obj as TextObject).fill,
+                        color: (obj as TextObject).color,
                         fontSize: (obj as TextObject).fontSize,
                         fontFamily: (obj as TextObject).fontFamily,
+                        fontWeight: (obj as TextObject).fontWeight,
+                        textAlign: (obj as TextObject).textAlign,
                         outline: isEditing ? "1px solid #3b82f6" : "none",
                         whiteSpace: "pre-wrap",
                         wordWrap: "break-word",

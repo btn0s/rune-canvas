@@ -125,7 +125,9 @@ export interface TextObject extends BaseObject {
   content: string;
   fontSize: number;
   fontFamily: string;
-  fill: string;
+  fontWeight: number;
+  textAlign: "left" | "center" | "right";
+  color: string;
 }
 
 export type CanvasObject = FrameObject | ImageObject | TextObject;

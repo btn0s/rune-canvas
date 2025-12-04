@@ -178,29 +178,8 @@ export function useCanvas() {
         };
         setObjects((prev) => [...prev, newFrame]);
         setSelectedIds([id]);
-      } else if (tool === "text") {
-        const id = `text-${Date.now()}`;
-        const name = `Text ${objectCounter.current++}`;
-        const newText: TextObject = {
-          id,
-          name,
-          type: "text",
-          parentId,
-          x: relativePoint.x,
-          y: relativePoint.y,
-          width: 200,
-          height: 24,
-          opacity: 1,
-          content: "",
-          fontSize: 16,
-          fontFamily: "system-ui",
-          fill: "#000000",
-        };
-        setObjects((prev) => [...prev, newText]);
-        setSelectedIds([id]);
-        setEditingTextId(id);
-        setTool("select"); // Switch to select after creating text
       }
+      // Note: Text tool is handled separately via createText()
     },
     [tool, objects, pushHistory]
   );
@@ -704,6 +683,72 @@ export function useCanvas() {
     [pushHistory]
   );
 
+  // Create text object (separate from frame/rectangle creation)
+  const createText = useCallback(
+    (canvasPoint: Point) => {
+      // Find the smallest frame that contains this point (for auto-nesting)
+      const frames = objects.filter((o) => o.type === "frame");
+      let targetParent: CanvasObject | null = null;
+      let smallestArea = Infinity;
+
+      for (const frame of frames) {
+        const frameCanvasPos = getCanvasPosition(frame, objects);
+        const inBounds =
+          canvasPoint.x >= frameCanvasPos.x &&
+          canvasPoint.x <= frameCanvasPos.x + frame.width &&
+          canvasPoint.y >= frameCanvasPos.y &&
+          canvasPoint.y <= frameCanvasPos.y + frame.height;
+
+        if (inBounds) {
+          const area = frame.width * frame.height;
+          if (area < smallestArea) {
+            smallestArea = area;
+            targetParent = frame;
+          }
+        }
+      }
+
+      const parentId = targetParent?.id ?? null;
+
+      // Convert canvas point to relative position if nested
+      let relativePoint = canvasPoint;
+      if (targetParent) {
+        const parentCanvasPos = getCanvasPosition(targetParent, objects);
+        relativePoint = {
+          x: canvasPoint.x - parentCanvasPos.x,
+          y: canvasPoint.y - parentCanvasPos.y,
+        };
+      }
+
+      const id = `text-${Date.now()}`;
+      const name = `Text ${objectCounter.current++}`;
+      const newText: TextObject = {
+        id,
+        name,
+        type: "text",
+        parentId,
+        x: relativePoint.x,
+        y: relativePoint.y,
+        width: 200,
+        height: 24,
+        opacity: 1,
+        content: "",
+        fontSize: 16,
+        fontFamily: "system-ui",
+        fontWeight: 400,
+        textAlign: "left",
+        color: "#000000",
+      };
+
+      pushHistory();
+      setObjects((prev) => [...prev, newText]);
+      setSelectedIds([id]);
+      setEditingTextId(id);
+      setTool("select");
+    },
+    [objects, pushHistory]
+  );
+
   // Set parent for nesting
   const setParent = useCallback(
     (childId: string, parentId: string | null) => {
@@ -805,6 +850,7 @@ export function useCanvas() {
     addImage,
     updateObject,
     updateTextContent,
+    createText,
     setParent,
   };
 }
