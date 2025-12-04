@@ -10,6 +10,8 @@ Review this code from a system design perspective:
 
 Don't give me a checklist. Give me insight.
 
+**Apply the 80/20 principle:** Focus on the 20% of changes that would deliver 80% of the improvement. I want high-leverage findings, not comprehensive coverage.
+
 1. **Understand the context first.** Look at how this code fits into the broader codebase:
    - What does it depend on? What depends on it?
    - What problem is it solving?
@@ -45,9 +47,12 @@ For each of the 3 leverage points:
 
 **Recommendation:** Specific action to take (or why to keep it as-is). Include code sketch if proposing a new abstraction.
 
+**Effort/Impact:** [Low/Medium/High] effort for [Low/Medium/High] impact.
+
 ## What I Don't Want
 
 - More than 3 items (force yourself to prioritize)
+- Low-leverage suggestions (high effort, low impact)
 - Style nitpicks
 - Suggestions that add complexity without clear payoff
 - Generic advice that could apply to any code

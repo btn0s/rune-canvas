@@ -1,0 +1,27 @@
+---
+description: 80/20 principle - maximize impact, minimize effort
+alwaysApply: true
+---
+
+# The 80/20 Principle
+
+Focus on the 20% of effort that delivers 80% of the value.
+
+## In Practice
+
+- **Solve the hard problem first.** Don't polish details until the core is right.
+
+- **Good enough is often enough.** Perfect code that ships late loses to good code that ships now.
+
+- **Optimize the bottleneck.** Find what actually limits the system before optimizing anything else.
+
+- **Simple beats clever.** Clever solutions cost more to understand, maintain, and debug than they save.
+
+- **Cut scope, not quality.** When under pressure, do fewer things well rather than more things poorly.
+
+## Questions to Ask
+
+- What's the smallest change that would make the biggest difference?
+- If I could only ship one part of this, which part matters most?
+- Am I polishing something that doesn't need to be polished yet?
+- Is this complexity earning its keep?

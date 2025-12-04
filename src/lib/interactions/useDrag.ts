@@ -1,7 +1,14 @@
 import { useCallback, useRef, useState } from "react";
 import type { CanvasObject, Point, Guide } from "../types";
-import { getCanvasPosition, type Rect } from "../geometry";
+import { getCanvasPosition } from "../geometry";
 import { calculateSnapping } from "../snapping";
+import {
+  getSelectionBounds,
+  getDescendants,
+  duplicateTree,
+  recalculateHugSizes,
+} from "../objects";
+import { useHistoryCapture } from "./useHistoryCapture";
 
 // ============================================================================
 // Types
@@ -12,19 +19,11 @@ interface DragActions {
   setSelectedIds: (ids: string[]) => void;
   setGuides: (guides: Guide[]) => void;
   pushHistory: () => void;
-  recalculateHugSizes: (objects: CanvasObject[]) => CanvasObject[];
 }
 
 interface DragConfig {
   objects: CanvasObject[];
   selectedIds: string[];
-  getSelectionBounds: (objects: CanvasObject[], ids: string[]) => Rect | null;
-  getDescendants: (ids: string[], objects: CanvasObject[]) => CanvasObject[];
-  duplicateTree: (
-    objects: CanvasObject[],
-    offset: { x: number; y: number },
-    appendCopy: boolean
-  ) => CanvasObject[];
 }
 
 // ============================================================================
@@ -38,20 +37,11 @@ const REPARENT_DELAY = 150; // ms
 // ============================================================================
 
 export function useDrag(config: DragConfig, actions: DragActions) {
-  const {
-    objects,
-    selectedIds,
-    getSelectionBounds,
-    getDescendants,
-    duplicateTree,
-  } = config;
-  const {
-    setObjects,
-    setSelectedIds,
-    setGuides,
-    pushHistory,
-    recalculateHugSizes,
-  } = actions;
+  const { objects, selectedIds } = config;
+  const { setObjects, setSelectedIds, setGuides, pushHistory } = actions;
+
+  // ---- History capture ----
+  const history = useHistoryCapture(pushHistory);
 
   // ---- State ----
   const [isDragging, setIsDragging] = useState(false);
@@ -73,7 +63,6 @@ export function useDrag(config: DragConfig, actions: DragActions) {
   // Click vs drag detection
   const clickedFrameId = useRef<string | null>(null);
   const didDrag = useRef(false);
-  const dragHistoryCaptured = useRef(false);
 
   // Selection state on mousedown
   const shiftOnMouseDown = useRef(false);
@@ -94,7 +83,7 @@ export function useDrag(config: DragConfig, actions: DragActions) {
       // Reset drag tracking
       clickedFrameId.current = objectId;
       didDrag.current = false;
-      dragHistoryCaptured.current = false;
+      history.reset();
       shiftOnMouseDown.current = addToSelection;
       wasAlreadySelected.current = isAlreadySelected;
 
@@ -127,7 +116,7 @@ export function useDrag(config: DragConfig, actions: DragActions) {
       const bounds = getSelectionBounds(objects, newSelectedIds);
       dragBoundsStart.current = bounds ? { x: bounds.x, y: bounds.y } : null;
     },
-    [objects, selectedIds, getSelectionBounds, setSelectedIds]
+    [objects, selectedIds, setSelectedIds]
   );
 
   const updateDrag = useCallback(
@@ -147,10 +136,7 @@ export function useDrag(config: DragConfig, actions: DragActions) {
 
       // Mark as dragged if moved more than 2px
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-        if (!dragHistoryCaptured.current) {
-          pushHistory();
-          dragHistoryCaptured.current = true;
-        }
+        history.captureOnce();
         didDrag.current = true;
         if (!hasDragMovement) setHasDragMovement(true);
       }
@@ -340,16 +326,7 @@ export function useDrag(config: DragConfig, actions: DragActions) {
         setPotentialParentId(null);
       }
     },
-    [
-      isDragging,
-      selectedIds,
-      objects,
-      pushHistory,
-      hasDragMovement,
-      getDescendants,
-      setObjects,
-      setGuides,
-    ]
+    [isDragging, selectedIds, objects, hasDragMovement, setObjects, setGuides, history]
   );
 
   const endDrag = useCallback(() => {
@@ -358,7 +335,7 @@ export function useDrag(config: DragConfig, actions: DragActions) {
       clearTimeout(reparentTimer.current);
       reparentTimer.current = null;
     }
-    dragHistoryCaptured.current = false;
+    history.reset();
     pendingParentId.current = null;
 
     // Handle click-without-drag scenarios
@@ -449,7 +426,7 @@ export function useDrag(config: DragConfig, actions: DragActions) {
     wasAlreadySelected.current = false;
     dragLockedAxis.current = null;
     lastDragPoint.current = null;
-  }, [selectedIds, setSelectedIds, setObjects, recalculateHugSizes]);
+  }, [selectedIds, setSelectedIds, setObjects, setGuides, history]);
 
   const startDuplicateDrag = useCallback(
     (objectId: string, canvasPoint: Point) => {
@@ -462,7 +439,7 @@ export function useDrag(config: DragConfig, actions: DragActions) {
 
       const newObjects = duplicateTree(allToDupe, { x: 0, y: 0 }, true);
       pushHistory();
-      dragHistoryCaptured.current = true;
+      history.captureOnce(); // Mark as captured so we don't double-capture
 
       setObjects((prev) => [...prev, ...newObjects]);
 
@@ -486,16 +463,7 @@ export function useDrag(config: DragConfig, actions: DragActions) {
       const bounds = getSelectionBounds(rootObjects, newRootIds);
       dragBoundsStart.current = bounds ? { x: bounds.x, y: bounds.y } : null;
     },
-    [
-      objects,
-      selectedIds,
-      getSelectionBounds,
-      getDescendants,
-      duplicateTree,
-      pushHistory,
-      setObjects,
-      setSelectedIds,
-    ]
+    [objects, selectedIds, pushHistory, setObjects, setSelectedIds, history]
   );
 
   return {

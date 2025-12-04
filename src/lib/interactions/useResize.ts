@@ -1,7 +1,9 @@
 import { useCallback, useRef, useState } from "react";
 import type { CanvasObject, Point, Guide, ResizeHandle } from "../types";
-import { getCanvasPosition, type Rect } from "../geometry";
+import { getCanvasPosition } from "../geometry";
 import { calculateSnapping } from "../snapping";
+import { getSelectionBounds, recalculateHugSizes } from "../objects";
+import { useHistoryCapture } from "./useHistoryCapture";
 
 // ============================================================================
 // Types
@@ -11,13 +13,11 @@ interface ResizeActions {
   setObjects: (updater: (prev: CanvasObject[]) => CanvasObject[]) => void;
   setGuides: (guides: Guide[]) => void;
   pushHistory: () => void;
-  recalculateHugSizes: (objects: CanvasObject[]) => CanvasObject[];
 }
 
 interface ResizeConfig {
   objects: CanvasObject[];
   selectedIds: string[];
-  getSelectionBounds: (objects: CanvasObject[], ids: string[]) => Rect | null;
 }
 
 // ============================================================================
@@ -25,8 +25,11 @@ interface ResizeConfig {
 // ============================================================================
 
 export function useResize(config: ResizeConfig, actions: ResizeActions) {
-  const { objects, selectedIds, getSelectionBounds } = config;
-  const { setObjects, setGuides, pushHistory, recalculateHugSizes } = actions;
+  const { objects, selectedIds } = config;
+  const { setObjects, setGuides, pushHistory } = actions;
+
+  // ---- History capture ----
+  const history = useHistoryCapture(pushHistory);
 
   // ---- State ----
   const [isResizing, setIsResizing] = useState(false);
@@ -41,7 +44,6 @@ export function useResize(config: ResizeConfig, actions: ResizeActions) {
     bounds: { x: number; y: number; width: number; height: number };
     frames: CanvasObject[];
   } | null>(null);
-  const resizeHistoryCaptured = useRef(false);
 
   // ---- Handlers ----
 
@@ -51,7 +53,7 @@ export function useResize(config: ResizeConfig, actions: ResizeActions) {
       if (!bounds) return;
 
       setIsResizing(true);
-      resizeHistoryCaptured.current = false;
+      history.reset();
       resizeHandle.current = handle;
       resizeStart.current = {
         object: {
@@ -69,7 +71,7 @@ export function useResize(config: ResizeConfig, actions: ResizeActions) {
           .map((o) => ({ ...o })),
       };
     },
-    [objects, selectedIds, getSelectionBounds]
+    [objects, selectedIds, history]
   );
 
   const updateResize = useCallback(
@@ -85,9 +87,8 @@ export function useResize(config: ResizeConfig, actions: ResizeActions) {
       let dy = canvasPoint.y - start.y;
 
       // Capture history on first movement
-      if (!resizeHistoryCaptured.current && (dx !== 0 || dy !== 0)) {
-        pushHistory();
-        resizeHistoryCaptured.current = true;
+      if (dx !== 0 || dy !== 0) {
+        history.captureOnce();
       }
 
       // Shift: lock aspect ratio
@@ -249,7 +250,7 @@ export function useResize(config: ResizeConfig, actions: ResizeActions) {
         })
       );
     },
-    [isResizing, selectedIds, objects, pushHistory, setGuides, setObjects]
+    [isResizing, selectedIds, objects, setGuides, setObjects, history]
   );
 
   const endResize = useCallback(() => {
@@ -257,11 +258,11 @@ export function useResize(config: ResizeConfig, actions: ResizeActions) {
     setObjects((prev) => recalculateHugSizes(prev));
     setIsResizing(false);
     setGuides([]);
-    resizeHistoryCaptured.current = false;
+    history.reset();
     resizeHandle.current = null;
     resizeStart.current = null;
     resizeBoundsStart.current = null;
-  }, [setObjects, setGuides, recalculateHugSizes]);
+  }, [setObjects, setGuides, history]);
 
   return {
     // State
