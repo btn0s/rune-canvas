@@ -66,7 +66,10 @@ interface PropertyPanelProps {
 /** Props for type-specific property components - supports single or multiple objects */
 interface ObjectPropertiesProps<T extends CanvasObject> {
   objects: T[];
+  /** Apply same updates to all objects */
   onUpdate: (updates: Partial<T>) => void;
+  /** Apply per-object updates (for merging with existing nested values) */
+  onUpdateEach: (getUpdates: (obj: T, index: number) => Partial<T>) => void;
 }
 
 // ============================================================================
@@ -77,6 +80,9 @@ interface ObjectPropertiesProps<T extends CanvasObject> {
 interface CommonPropertiesProps {
   objects: CanvasObject[];
   onUpdate: (updates: Partial<CanvasObject>) => void;
+  onUpdateEach?: (
+    getUpdates: (obj: CanvasObject, index: number) => Partial<CanvasObject>
+  ) => void;
 }
 
 /** Layout section - X, Y, Width, Height (shared by all object types) */
@@ -134,6 +140,7 @@ function OpacityInput({ objects, onUpdate }: CommonPropertiesProps) {
 function FrameProperties({
   objects: frames,
   onUpdate,
+  onUpdateEach,
 }: ObjectPropertiesProps<FrameObject>) {
   // Use first frame for conditional UI (e.g., flex direction icons)
   const firstFrame = frames[0];
@@ -555,13 +562,15 @@ function FrameProperties({
           width: f.outlineWidth,
           opacity: f.outlineOpacity,
         }))}
-        onChange={(updates) =>
-          onUpdate({
-            outline: updates.color,
-            outlineWidth: updates.width,
-            outlineOpacity: updates.opacity,
-          })
-        }
+        onChange={(updates) => {
+          // Only pass defined properties to avoid clearing others
+          const mapped: Partial<FrameObject> = {};
+          if (updates.color !== undefined) mapped.outline = updates.color;
+          if (updates.width !== undefined) mapped.outlineWidth = updates.width;
+          if (updates.opacity !== undefined)
+            mapped.outlineOpacity = updates.opacity;
+          onUpdate(mapped);
+        }}
         onAdd={() =>
           onUpdate({
             outline: "#000000",
@@ -596,13 +605,15 @@ function FrameProperties({
           width: f.borderWidth,
           opacity: f.borderOpacity,
         }))}
-        onChange={(updates) =>
-          onUpdate({
-            border: updates.color,
-            borderWidth: updates.width,
-            borderOpacity: updates.opacity,
-          })
-        }
+        onChange={(updates) => {
+          // Only pass defined properties to avoid clearing others
+          const mapped: Partial<FrameObject> = {};
+          if (updates.color !== undefined) mapped.border = updates.color;
+          if (updates.width !== undefined) mapped.borderWidth = updates.width;
+          if (updates.opacity !== undefined)
+            mapped.borderOpacity = updates.opacity;
+          onUpdate(mapped);
+        }}
         onAdd={() =>
           onUpdate({
             border: "#000000",
@@ -633,6 +644,15 @@ function FrameProperties({
         label="Shadow"
         shadows={frames.map((f) => f.shadow)}
         onChange={(shadow) => onUpdate({ shadow })}
+        onPartialChange={(updates) => {
+          // Merge partial updates with each object's existing shadow
+          onUpdateEach((frame) => {
+            if (frame.shadow) {
+              return { shadow: { ...frame.shadow, ...updates } };
+            }
+            return {};
+          });
+        }}
       />
 
       {/* Inner Shadow Section */}
@@ -640,6 +660,15 @@ function FrameProperties({
         label="Inner shadow"
         shadows={frames.map((f) => f.innerShadow)}
         onChange={(innerShadow) => onUpdate({ innerShadow })}
+        onPartialChange={(updates) => {
+          // Merge partial updates with each object's existing innerShadow
+          onUpdateEach((frame) => {
+            if (frame.innerShadow) {
+              return { innerShadow: { ...frame.innerShadow, ...updates } };
+            }
+            return {};
+          });
+        }}
       />
     </>
   );
@@ -652,6 +681,7 @@ function FrameProperties({
 function TextProperties({
   objects: texts,
   onUpdate,
+  onUpdateEach: _onUpdateEach,
 }: ObjectPropertiesProps<TextObject>) {
   // Cast for shared components that expect CanvasObject
   const commonUpdate = onUpdate as (updates: Partial<CanvasObject>) => void;
@@ -774,6 +804,7 @@ function TextProperties({
 function ImageProperties({
   objects: images,
   onUpdate,
+  onUpdateEach: _onUpdateEach,
 }: ObjectPropertiesProps<ImageObject>) {
   // Cast for shared components that expect CanvasObject
   const commonUpdate = onUpdate as (updates: Partial<CanvasObject>) => void;
@@ -810,7 +841,11 @@ function ImageProperties({
 // MIXED TYPE PROPERTIES (when different object types are selected)
 // ============================================================================
 
-function MixedTypeProperties({ objects, onUpdate }: CommonPropertiesProps) {
+function MixedTypeProperties({
+  objects,
+  onUpdate,
+  onUpdateEach: _onUpdateEach,
+}: CommonPropertiesProps) {
   return (
     <>
       {/* Only show common properties: Layout and Opacity */}
@@ -890,6 +925,16 @@ export function PropertyPanel({
     });
   };
 
+  // Update function that applies per-object updates (for merging nested values)
+  const handleUpdateEach = <T extends CanvasObject>(
+    getUpdates: (obj: T, index: number) => Partial<T>
+  ) => {
+    selectedObjects.forEach((obj, index) => {
+      const updates = getUpdates(obj as T, index);
+      onUpdate(obj.id, updates as Partial<CanvasObject>);
+    });
+  };
+
   // Determine the type(s) of selected objects
   const types = new Set(selectedObjects.map((o) => o.type));
   const isMixedTypes = types.size > 1;
@@ -903,6 +948,7 @@ export function PropertyPanel({
         <MixedTypeProperties
           objects={selectedObjects}
           onUpdate={handleUpdateAll}
+          onUpdateEach={handleUpdateEach}
         />
       );
     }
@@ -914,6 +960,7 @@ export function PropertyPanel({
           <FrameProperties
             objects={selectedObjects as FrameObject[]}
             onUpdate={handleUpdateAll}
+            onUpdateEach={handleUpdateEach}
           />
         );
       case "text":
@@ -921,6 +968,7 @@ export function PropertyPanel({
           <TextProperties
             objects={selectedObjects as TextObject[]}
             onUpdate={handleUpdateAll}
+            onUpdateEach={handleUpdateEach}
           />
         );
       case "image":
@@ -928,6 +976,7 @@ export function PropertyPanel({
           <ImageProperties
             objects={selectedObjects as ImageObject[]}
             onUpdate={handleUpdateAll}
+            onUpdateEach={handleUpdateEach}
           />
         );
       default:

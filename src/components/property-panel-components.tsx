@@ -133,6 +133,34 @@ export function NumberInput({
   suffix?: string;
 }) {
   const mixed = isMixed(value);
+  const [localValue, setLocalValue] = useState(mixed ? "" : String(Math.round(value)));
+  const [isFocused, setIsFocused] = useState(false);
+
+  // Sync from prop when not focused (and not mixed)
+  useEffect(() => {
+    if (!isFocused && !mixed) {
+      setLocalValue(String(Math.round(value)));
+    }
+  }, [value, isFocused, mixed]);
+
+  // When mixed changes to non-mixed, sync the value
+  useEffect(() => {
+    if (!mixed && !isFocused) {
+      setLocalValue(String(Math.round(value)));
+    }
+  }, [mixed]);
+
+  const commitValue = () => {
+    const parsed = parseFloat(localValue);
+    if (!isNaN(parsed)) {
+      const finalValue = min !== undefined ? Math.max(min, parsed) : parsed;
+      onChange(finalValue);
+      setLocalValue(String(Math.round(finalValue)));
+    } else if (!mixed) {
+      // Reset to original value if invalid and not mixed
+      setLocalValue(String(Math.round(value)));
+    }
+  };
 
   return (
     <div className="flex items-center h-7 bg-input/30 border border-border rounded-md">
@@ -141,15 +169,22 @@ export function NumberInput({
       )}
       <Input
         type="number"
-        value={mixed ? "" : Math.round(value)}
+        value={localValue}
         placeholder={mixed ? "—" : undefined}
-        onChange={(e) => {
-          const v = parseFloat(e.target.value) || 0;
-          onChange(min !== undefined ? Math.max(min, v) : v);
+        onChange={(e) => setLocalValue(e.target.value)}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => {
+          setIsFocused(false);
+          commitValue();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.currentTarget.blur();
+          }
         }}
         className={cn(
           "flex-1 min-w-0 h-full px-1 text-xs font-mono bg-transparent dark:bg-transparent border-0 shadow-none focus-visible:ring-0 rounded-none",
-          mixed
+          mixed && localValue === ""
             ? "text-muted-foreground placeholder:text-muted-foreground"
             : "text-foreground"
         )}
@@ -251,7 +286,10 @@ export function ColorInput({
   };
 
   const commitOpacity = (val: string) => {
-    const num = parseInt(val.replace("%", "")) || 0;
+    const cleaned = val.replace("%", "").trim();
+    if (cleaned === "") return; // Don't commit empty values
+    const num = parseInt(cleaned);
+    if (isNaN(num)) return; // Don't commit invalid values
     onOpacityChange?.(Math.min(100, Math.max(0, num)) / 100);
   };
 
@@ -492,12 +530,15 @@ export function ShadowSection({
   label,
   shadows,
   onChange,
+  onPartialChange,
 }: {
   label: string;
   /** Array of shadow values - one per selected object. undefined = no shadow */
   shadows: (ShadowProps | undefined)[];
-  /** Called with the new shadow value to apply to ALL selected objects */
+  /** Called with complete shadow for add/remove/toggle operations */
   onChange: (shadow: ShadowProps | undefined) => void;
+  /** Called with partial updates for individual property changes (preserves other props per object) */
+  onPartialChange?: (updates: Partial<ShadowProps>) => void;
 }) {
   // Compute mixed state
   const hasAny = shadows.some((s) => s !== undefined);
@@ -517,6 +558,15 @@ export function ShadowSection({
   // Create base shadow for updates (use first defined or defaults)
   const baseShadow: ShadowProps = defined[0] ?? DEFAULT_SHADOW;
 
+  // Use partial change if available (for multi-edit), otherwise use full onChange
+  const updateProp = <K extends keyof ShadowProps>(key: K, value: ShadowProps[K]) => {
+    if (onPartialChange) {
+      onPartialChange({ [key]: value });
+    } else {
+      onChange({ ...baseShadow, [key]: value });
+    }
+  };
+
   return (
     <CollapsibleSection
       label={label}
@@ -524,40 +574,44 @@ export function ShadowSection({
       onAdd={() => onChange({ ...DEFAULT_SHADOW })}
       onRemove={() => onChange(undefined)}
       visible={anyVisible}
-      onToggleVisible={() =>
-        onChange(
-          hasAny ? { ...baseShadow, opacity: anyVisible ? 0 : 0.2 } : undefined
-        )
-      }
+      onToggleVisible={() => {
+        if (onPartialChange) {
+          onPartialChange({ opacity: anyVisible ? 0 : 0.2 });
+        } else {
+          onChange(
+            hasAny ? { ...baseShadow, opacity: anyVisible ? 0 : 0.2 } : undefined
+          );
+        }
+      }}
     >
       <div className="grid grid-cols-2 gap-1.5">
         <NumberInput
           label="X"
           value={x}
-          onChange={(v) => onChange({ ...baseShadow, x: v })}
+          onChange={(v) => updateProp("x", v)}
         />
         <NumberInput
           label="Y"
           value={y}
-          onChange={(v) => onChange({ ...baseShadow, y: v })}
+          onChange={(v) => updateProp("y", v)}
         />
         <NumberInput
           label="Blur"
           value={blur}
-          onChange={(v) => onChange({ ...baseShadow, blur: Math.max(0, v) })}
+          onChange={(v) => updateProp("blur", Math.max(0, v))}
           min={0}
         />
         <NumberInput
           label="Spread"
           value={spread}
-          onChange={(v) => onChange({ ...baseShadow, spread: v })}
+          onChange={(v) => updateProp("spread", v)}
         />
       </div>
       <ColorInput
         color={color}
         opacity={opacity}
-        onChange={(c) => onChange({ ...baseShadow, color: c })}
-        onOpacityChange={(o) => onChange({ ...baseShadow, opacity: o })}
+        onChange={(c) => updateProp("color", c)}
+        onOpacityChange={(o) => updateProp("opacity", o)}
       />
     </CollapsibleSection>
   );
