@@ -768,58 +768,66 @@ export function useCanvas() {
   }, [selectedIds, pushHistory]);
 
   // Frame selection - wrap selected objects in a new frame
-  const frameSelection = useCallback(() => {
-    if (selectedIds.length === 0) return;
-    pushHistory();
+  // Frame selection - wrap selected objects in a new frame
+  // Optional layoutMode parameter to set the frame's layout (e.g., "flex")
+  const frameSelection = useCallback(
+    (options?: { layoutMode?: "none" | "flex" | "grid" }) => {
+      if (selectedIds.length === 0) return;
+      pushHistory();
 
-    // Get bounding box of selection
-    const bounds = getSelectionBounds(objects, selectedIds);
-    if (!bounds) return;
+      // Get bounding box of selection
+      const bounds = getSelectionBounds(objects, selectedIds);
+      if (!bounds) return;
 
-    const frameId = `frame-${Date.now()}`;
-    const newFrame: FrameObject = {
-      id: frameId,
-      name: `Frame ${objectCounter.current++}`,
-      type: "frame",
-      parentId: null,
-      x: bounds.x,
-      y: bounds.y,
-      width: bounds.width,
-      height: bounds.height,
-      opacity: 1,
-      fill: "#ffffff",
-      radius: 0,
-      clipContent: false,
-      widthMode: "fixed",
-      heightMode: "fixed",
-      layoutMode: "none",
-      flexDirection: "row",
-      justifyContent: "flex-start",
-      alignItems: "flex-start",
-      flexWrap: "nowrap",
-      gap: 0,
-      padding: 0,
-    };
+      const isFlexLayout =
+        options?.layoutMode === "flex" || options?.layoutMode === "grid";
+      const frameId = `frame-${Date.now()}`;
+      const newFrame: FrameObject = {
+        id: frameId,
+        name: `Frame ${objectCounter.current++}`,
+        type: "frame",
+        parentId: null,
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+        opacity: 1,
+        fill: "#ffffff",
+        radius: 0,
+        clipContent: false,
+        // Set to hug (fit) when creating a flex frame
+        widthMode: isFlexLayout ? "fit" : "fixed",
+        heightMode: isFlexLayout ? "fit" : "fixed",
+        layoutMode: options?.layoutMode ?? "none",
+        flexDirection: "row",
+        justifyContent: "flex-start",
+        alignItems: "flex-start",
+        flexWrap: "nowrap",
+        gap: 0,
+        padding: 0,
+      };
 
-    setObjects((prev) => {
-      // Reparent selected objects to new frame, adjusting positions
-      const updated = prev.map((o) => {
-        if (selectedIds.includes(o.id)) {
-          const canvasPos = getCanvasPosition(o, prev);
-          return {
-            ...o,
-            parentId: frameId,
-            x: canvasPos.x - bounds.x,
-            y: canvasPos.y - bounds.y,
-          };
-        }
-        return o;
+      setObjects((prev) => {
+        // Reparent selected objects to new frame, adjusting positions
+        const updated = prev.map((o) => {
+          if (selectedIds.includes(o.id)) {
+            const canvasPos = getCanvasPosition(o, prev);
+            return {
+              ...o,
+              parentId: frameId,
+              x: canvasPos.x - bounds.x,
+              y: canvasPos.y - bounds.y,
+            };
+          }
+          return o;
+        });
+        return [...updated, newFrame];
       });
-      return [...updated, newFrame];
-    });
 
-    setSelectedIds([frameId]);
-  }, [selectedIds, objects, pushHistory]);
+      setSelectedIds([frameId]);
+    },
+    [selectedIds, objects, pushHistory]
+  );
 
   // Paste at specific canvas position
   const pasteAt = useCallback(

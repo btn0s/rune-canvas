@@ -924,20 +924,24 @@ export function Canvas() {
     if (isMarqueeSelecting) endMarquee();
   };
 
-  // Toggle flex layout on selected frames
+  // Toggle flex layout on selected frame, or wrap selection in flex frame
   const toggleFlex = useCallback(() => {
     if (selectedObjects.length === 0) return;
-    pushHistory();
-    selectedObjects.forEach((obj) => {
-      if (obj.type === "frame") {
-        const frame = obj as FrameObject;
-        const newMode = frame.layoutMode === "flex" ? "none" : "flex";
-        updateObject(obj.id, { layoutMode: newMode } as Partial<FrameObject>, {
-          commit: false,
-        });
-      }
-    });
-  }, [selectedObjects, updateObject, pushHistory]);
+
+    // Single frame selected: toggle its flex mode
+    if (selectedObjects.length === 1 && selectedObjects[0].type === "frame") {
+      pushHistory();
+      const frame = selectedObjects[0] as FrameObject;
+      const newMode = frame.layoutMode === "flex" ? "none" : "flex";
+      updateObject(frame.id, { layoutMode: newMode } as Partial<FrameObject>, {
+        commit: false,
+      });
+      return;
+    }
+
+    // Multiple objects or single non-frame: wrap in flex frame
+    frameSelection({ layoutMode: "flex" });
+  }, [selectedObjects, updateObject, pushHistory, frameSelection]);
 
   // Keyboard shortcuts (declarative)
   const shortcuts: Shortcut[] = useMemo(
@@ -1022,7 +1026,7 @@ export function Canvas() {
       {
         key: "g",
         modifiers: { meta: true, alt: true },
-        action: frameSelection,
+        action: () => frameSelection(),
       },
     ],
     [
@@ -1644,7 +1648,7 @@ export function Canvas() {
                 <ContextMenuShortcut>⌫</ContextMenuShortcut>
               </ContextMenuItem>
               <ContextMenuSeparator />
-              <ContextMenuItem onClick={frameSelection}>
+              <ContextMenuItem onClick={() => frameSelection()}>
                 Frame selection
                 <ContextMenuShortcut>⌘⌥G</ContextMenuShortcut>
               </ContextMenuItem>
