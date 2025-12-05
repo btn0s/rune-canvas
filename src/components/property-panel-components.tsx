@@ -453,6 +453,7 @@ export function PropertyButton({
 
 // ============================================================================
 // EFFECT SECTIONS - Reusable property sections for visual effects
+// These support multi-selection by accepting arrays and computing mixed values
 // ============================================================================
 
 import type { ShadowProps, BorderSide } from "@/lib/types";
@@ -469,72 +470,112 @@ const DEFAULT_SHADOW: ShadowProps = {
 };
 
 /**
+ * Helper to get a mixed value from an array of shadow objects for a specific key
+ */
+function getShadowMixedValue<K extends keyof ShadowProps>(
+  shadows: (ShadowProps | undefined)[],
+  key: K,
+  defaultValue: ShadowProps[K]
+): ShadowProps[K] | MixedValue {
+  const defined = shadows.filter((s): s is ShadowProps => s !== undefined);
+  if (defined.length === 0) return defaultValue;
+  const firstValue = defined[0][key];
+  const allSame = defined.every((s) => s[key] === firstValue);
+  return allSame ? firstValue : MIXED;
+}
+
+/**
  * Shadow section - handles both drop shadow and inner shadow
- * Provides X/Y offset, blur, spread, color, and opacity controls
+ * Supports multi-selection by accepting an array of shadows
  */
 export function ShadowSection({
   label,
-  shadow,
+  shadows,
   onChange,
 }: {
   label: string;
-  shadow: ShadowProps | undefined;
+  /** Array of shadow values - one per selected object. undefined = no shadow */
+  shadows: (ShadowProps | undefined)[];
+  /** Called with the new shadow value to apply to ALL selected objects */
   onChange: (shadow: ShadowProps | undefined) => void;
 }) {
+  // Compute mixed state
+  const hasAny = shadows.some((s) => s !== undefined);
+  const hasAll = shadows.every((s) => s !== undefined);
+  const defined = shadows.filter((s): s is ShadowProps => s !== undefined);
+
+  // Get mixed values for each property
+  const x = getShadowMixedValue(shadows, "x", 0);
+  const y = getShadowMixedValue(shadows, "y", 2);
+  const blur = getShadowMixedValue(shadows, "blur", 4);
+  const spread = getShadowMixedValue(shadows, "spread", 0);
+  const color = getShadowMixedValue(shadows, "color", "#000000");
+  const opacity = getShadowMixedValue(shadows, "opacity", 0.2);
+
+  // For visibility toggle, check if any shadow has opacity > 0
+  const anyVisible = defined.some((s) => s.opacity > 0);
+
+  // Create base shadow for updates (use first defined or defaults)
+  const baseShadow: ShadowProps = defined[0] ?? DEFAULT_SHADOW;
+
   return (
     <CollapsibleSection
       label={label}
-      isOpen={!!shadow}
+      isOpen={hasAny}
       onAdd={() => onChange({ ...DEFAULT_SHADOW })}
       onRemove={() => onChange(undefined)}
-      visible={(shadow?.opacity ?? 0) > 0}
+      visible={anyVisible}
       onToggleVisible={() =>
         onChange(
-          shadow
-            ? { ...shadow, opacity: shadow.opacity > 0 ? 0 : 0.2 }
-            : undefined
+          hasAny ? { ...baseShadow, opacity: anyVisible ? 0 : 0.2 } : undefined
         )
       }
     >
       <div className="grid grid-cols-2 gap-1.5">
         <NumberInput
           label="X"
-          value={shadow?.x || 0}
-          onChange={(v) => onChange({ ...shadow!, x: v })}
+          value={x}
+          onChange={(v) => onChange({ ...baseShadow, x: v })}
         />
         <NumberInput
           label="Y"
-          value={shadow?.y || 0}
-          onChange={(v) => onChange({ ...shadow!, y: v })}
+          value={y}
+          onChange={(v) => onChange({ ...baseShadow, y: v })}
         />
         <NumberInput
           label="Blur"
-          value={shadow?.blur || 0}
-          onChange={(v) => onChange({ ...shadow!, blur: Math.max(0, v) })}
+          value={blur}
+          onChange={(v) => onChange({ ...baseShadow, blur: Math.max(0, v) })}
           min={0}
         />
         <NumberInput
           label="Spread"
-          value={shadow?.spread || 0}
-          onChange={(v) => onChange({ ...shadow!, spread: v })}
+          value={spread}
+          onChange={(v) => onChange({ ...baseShadow, spread: v })}
         />
       </div>
       <ColorInput
-        color={shadow?.color || "#000000"}
-        opacity={shadow?.opacity ?? 0.2}
-        onChange={(color) => onChange({ ...shadow!, color })}
-        onOpacityChange={(opacity) => onChange({ ...shadow!, opacity })}
+        color={color}
+        opacity={opacity}
+        onChange={(c) => onChange({ ...baseShadow, color: c })}
+        onOpacityChange={(o) => onChange({ ...baseShadow, opacity: o })}
       />
     </CollapsibleSection>
   );
 }
 
+/** Stroke data for multi-selection - one entry per selected object */
+interface StrokeData {
+  color: string | undefined;
+  width: number | undefined;
+  opacity: number | undefined;
+}
+
 // Stroke section props - shared between border and outline
 interface StrokeSectionProps {
   label: string;
-  color: string | undefined;
-  width: number;
-  opacity: number;
+  /** Array of stroke data - one per selected object */
+  strokes: StrokeData[];
   onChange: (updates: {
     color?: string;
     width?: number;
@@ -547,27 +588,53 @@ interface StrokeSectionProps {
 }
 
 /**
+ * Helper to get mixed value from stroke array
+ */
+function getStrokeMixedValue<K extends keyof StrokeData>(
+  strokes: StrokeData[],
+  key: K,
+  defaultValue: NonNullable<StrokeData[K]>
+): NonNullable<StrokeData[K]> | MixedValue {
+  // Only consider strokes that have a color (meaning the effect is enabled)
+  const active = strokes.filter((s) => s.color !== undefined);
+  if (active.length === 0) return defaultValue;
+  const firstValue = active[0][key];
+  const allSame = active.every((s) => s[key] === firstValue);
+  return allSame ? firstValue ?? defaultValue : MIXED;
+}
+
+/**
  * Stroke section - handles border and outline properties
- * Provides width, color, and opacity controls with optional additional controls
+ * Supports multi-selection by accepting an array of stroke data
  */
 export function StrokeSection({
   label,
-  color,
-  width,
-  opacity,
+  strokes,
   onChange,
   onAdd,
   onRemove,
   children,
 }: StrokeSectionProps) {
+  // Compute mixed state
+  const hasAny = strokes.some((s) => s.color !== undefined);
+  const active = strokes.filter((s) => s.color !== undefined);
+
+  // Get mixed values
+  const color = getStrokeMixedValue(strokes, "color", "#000000");
+  const width = getStrokeMixedValue(strokes, "width", 1);
+  const opacity = getStrokeMixedValue(strokes, "opacity", 1);
+
+  // For visibility toggle
+  const anyVisible = active.some((s) => (s.opacity ?? 1) > 0);
+
   return (
     <CollapsibleSection
       label={label}
-      isOpen={!!color}
+      isOpen={hasAny}
       onAdd={onAdd}
       onRemove={onRemove}
-      visible={opacity > 0}
-      onToggleVisible={() => onChange({ opacity: opacity > 0 ? 0 : 1 })}
+      visible={anyVisible}
+      onToggleVisible={() => onChange({ opacity: anyVisible ? 0 : 1 })}
     >
       <div className="grid grid-cols-2 gap-1.5">
         <NumberInput
@@ -579,7 +646,7 @@ export function StrokeSection({
         {children}
       </div>
       <ColorInput
-        color={color!}
+        color={color}
         opacity={opacity}
         onChange={(c) => onChange({ color: c })}
         onOpacityChange={(o) => onChange({ opacity: o })}
@@ -590,21 +657,29 @@ export function StrokeSection({
 
 /**
  * Border side selector - for selecting which sides to apply border to
+ * Supports mixed values for multi-selection
  */
 export function BorderSideSelect({
   value,
   onChange,
 }: {
-  value: BorderSide;
+  value: BorderSide | MixedValue;
   onChange: (side: BorderSide) => void;
 }) {
+  const mixed = isMixed(value);
   return (
-    <PropertySelect value={value} onValueChange={(v) => onChange(v as BorderSide)}>
-      {(["all", "top", "right", "bottom", "left"] as BorderSide[]).map((side) => (
-        <SelectItem key={side} value={side} className="capitalize text-xs">
-          {side}
-        </SelectItem>
-      ))}
+    <PropertySelect
+      value={mixed ? "all" : value}
+      onValueChange={(v) => onChange(v as BorderSide)}
+      placeholder={mixed ? "Mixed" : undefined}
+    >
+      {(["all", "top", "right", "bottom", "left"] as BorderSide[]).map(
+        (side) => (
+          <SelectItem key={side} value={side} className="capitalize text-xs">
+            {side}
+          </SelectItem>
+        )
+      )}
     </PropertySelect>
   );
 }

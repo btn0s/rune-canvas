@@ -135,9 +135,8 @@ function FrameProperties({
   objects: frames,
   onUpdate,
 }: ObjectPropertiesProps<FrameObject>) {
-  // For single selection, use first frame directly for conditional UI
+  // Use first frame for conditional UI (e.g., flex direction icons)
   const firstFrame = frames[0];
-  const isSingle = frames.length === 1;
 
   // Get mixed values for common properties
   const fillColor = getMixedValue(frames, "fill");
@@ -535,101 +534,100 @@ function FrameProperties({
         );
       })()}
 
-      {/* Effect sections - only show for single selection to keep UI simple */}
-      {isSingle && (
-        <>
-          {/* Outline Section */}
-          <StrokeSection
-            label="Outline"
-            color={firstFrame.outline}
-            width={firstFrame.outlineWidth || 1}
-            opacity={firstFrame.outlineOpacity ?? 1}
-            onChange={(updates) =>
-              onUpdate({
-                outline: updates.color ?? firstFrame.outline,
-                outlineWidth: updates.width ?? firstFrame.outlineWidth,
-                outlineOpacity: updates.opacity ?? firstFrame.outlineOpacity,
-              })
-            }
-            onAdd={() =>
-              onUpdate({
-                outline: "#000000",
-                outlineWidth: 1,
-                outlineOpacity: 1,
-                outlineStyle: "solid",
-                outlineOffset: 0,
-              })
-            }
-            onRemove={() =>
-              onUpdate({
-                outline: undefined,
-                outlineWidth: undefined,
-                outlineOpacity: undefined,
-                outlineStyle: undefined,
-                outlineOffset: undefined,
-              })
-            }
-          >
-            <NumberInput
-              label="Off"
-              value={firstFrame.outlineOffset || 0}
-              onChange={(v) => onUpdate({ outlineOffset: v })}
-            />
-          </StrokeSection>
+      {/* Outline Section */}
+      <StrokeSection
+        label="Outline"
+        strokes={frames.map((f) => ({
+          color: f.outline,
+          width: f.outlineWidth,
+          opacity: f.outlineOpacity,
+        }))}
+        onChange={(updates) =>
+          onUpdate({
+            outline: updates.color,
+            outlineWidth: updates.width,
+            outlineOpacity: updates.opacity,
+          })
+        }
+        onAdd={() =>
+          onUpdate({
+            outline: "#000000",
+            outlineWidth: 1,
+            outlineOpacity: 1,
+            outlineStyle: "solid",
+            outlineOffset: 0,
+          })
+        }
+        onRemove={() =>
+          onUpdate({
+            outline: undefined,
+            outlineWidth: undefined,
+            outlineOpacity: undefined,
+            outlineStyle: undefined,
+            outlineOffset: undefined,
+          })
+        }
+      >
+        <NumberInput
+          label="Off"
+          value={getMixedValue(frames, "outlineOffset") ?? 0}
+          onChange={(v) => onUpdate({ outlineOffset: v })}
+        />
+      </StrokeSection>
 
-          {/* Border Section */}
-          <StrokeSection
-            label="Border"
-            color={firstFrame.border}
-            width={firstFrame.borderWidth || 1}
-            opacity={firstFrame.borderOpacity ?? 1}
-            onChange={(updates) =>
-              onUpdate({
-                border: updates.color ?? firstFrame.border,
-                borderWidth: updates.width ?? firstFrame.borderWidth,
-                borderOpacity: updates.opacity ?? firstFrame.borderOpacity,
-              })
-            }
-            onAdd={() =>
-              onUpdate({
-                border: "#000000",
-                borderWidth: 1,
-                borderOpacity: 1,
-                borderStyle: "solid",
-                borderSide: "all",
-              })
-            }
-            onRemove={() =>
-              onUpdate({
-                border: undefined,
-                borderWidth: undefined,
-                borderOpacity: undefined,
-                borderStyle: undefined,
-                borderSide: undefined,
-              })
-            }
-          >
-            <BorderSideSelect
-              value={firstFrame.borderSide || "all"}
-              onChange={(side) => onUpdate({ borderSide: side })}
-            />
-          </StrokeSection>
+      {/* Border Section */}
+      <StrokeSection
+        label="Border"
+        strokes={frames.map((f) => ({
+          color: f.border,
+          width: f.borderWidth,
+          opacity: f.borderOpacity,
+        }))}
+        onChange={(updates) =>
+          onUpdate({
+            border: updates.color,
+            borderWidth: updates.width,
+            borderOpacity: updates.opacity,
+          })
+        }
+        onAdd={() =>
+          onUpdate({
+            border: "#000000",
+            borderWidth: 1,
+            borderOpacity: 1,
+            borderStyle: "solid",
+            borderSide: "all",
+          })
+        }
+        onRemove={() =>
+          onUpdate({
+            border: undefined,
+            borderWidth: undefined,
+            borderOpacity: undefined,
+            borderStyle: undefined,
+            borderSide: undefined,
+          })
+        }
+      >
+        <BorderSideSelect
+          value={getMixedValue(frames, "borderSide") ?? "all"}
+          onChange={(side) => onUpdate({ borderSide: side })}
+        />
+      </StrokeSection>
 
-          {/* Shadow Section */}
-          <ShadowSection
-            label="Shadow"
-            shadow={firstFrame.shadow}
-            onChange={(shadow) => onUpdate({ shadow })}
-          />
+      {/* Shadow Section */}
+      <ShadowSection
+        label="Shadow"
+        shadows={frames.map((f) => f.shadow)}
+        onChange={(shadow) => onUpdate({ shadow })}
+      />
 
-          {/* Inner Shadow Section */}
-          <ShadowSection
-            label="Inner shadow"
-            shadow={firstFrame.innerShadow}
-            onChange={(innerShadow) => onUpdate({ innerShadow })}
-          />
-        </>
-      )}
+      {/* Inner Shadow Section */}
+      <ShadowSection
+        label="Inner shadow"
+        shadows={frames.map((f) => f.innerShadow)}
+        onChange={(innerShadow) => onUpdate({ innerShadow })}
+      />
     </>
   );
 }
