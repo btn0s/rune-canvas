@@ -17,6 +17,47 @@ import {
 // Consistent label color for all property panel labels
 const LABEL_COLOR = "text-muted-foreground";
 
+// ============================================================================
+// MIXED VALUE UTILITIES - For multi-selection editing
+// ============================================================================
+
+/** Symbol representing a mixed value (different across selected objects) */
+export const MIXED = Symbol("mixed");
+export type MixedValue = typeof MIXED;
+
+/** Check if a value is mixed */
+export function isMixed<T>(value: T | MixedValue): value is MixedValue {
+  return value === MIXED;
+}
+
+/**
+ * Get a property value from multiple objects.
+ * Returns the value if all objects have the same value, otherwise MIXED.
+ */
+export function getMixedValue<T, K extends keyof T>(
+  objects: T[],
+  key: K
+): T[K] | MixedValue {
+  if (objects.length === 0) return MIXED;
+  const firstValue = objects[0][key];
+  const allSame = objects.every((obj) => obj[key] === firstValue);
+  return allSame ? firstValue : MIXED;
+}
+
+/**
+ * Get a nested property value from multiple objects.
+ * Returns the value if all objects have the same value, otherwise MIXED.
+ */
+export function getMixedNestedValue<T, V>(
+  objects: T[],
+  getter: (obj: T) => V | undefined
+): V | undefined | MixedValue {
+  if (objects.length === 0) return MIXED;
+  const firstValue = getter(objects[0]);
+  const allSame = objects.every((obj) => getter(obj) === firstValue);
+  return allSame ? firstValue : MIXED;
+}
+
 // Icon button component using shadcn Button
 export function IconButton({
   active,
@@ -77,6 +118,7 @@ export function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 // Number input with label - consistent styling
+// Supports mixed values for multi-selection editing
 export function NumberInput({
   label,
   value,
@@ -85,11 +127,13 @@ export function NumberInput({
   suffix,
 }: {
   label?: string;
-  value: number;
+  value: number | MixedValue;
   onChange: (value: number) => void;
   min?: number;
   suffix?: string;
 }) {
+  const mixed = isMixed(value);
+
   return (
     <div className="flex items-center h-7 bg-input/30 border border-border rounded-md">
       {label && (
@@ -97,12 +141,18 @@ export function NumberInput({
       )}
       <Input
         type="number"
-        value={Math.round(value)}
+        value={mixed ? "" : Math.round(value)}
+        placeholder={mixed ? "—" : undefined}
         onChange={(e) => {
           const v = parseFloat(e.target.value) || 0;
           onChange(min !== undefined ? Math.max(min, v) : v);
         }}
-        className="flex-1 min-w-0 h-full px-1 text-xs font-mono text-foreground bg-transparent dark:bg-transparent border-0 shadow-none focus-visible:ring-0 rounded-none"
+        className={cn(
+          "flex-1 min-w-0 h-full px-1 text-xs font-mono bg-transparent dark:bg-transparent border-0 shadow-none focus-visible:ring-0 rounded-none",
+          mixed
+            ? "text-muted-foreground placeholder:text-muted-foreground"
+            : "text-foreground"
+        )}
       />
       {suffix && (
         <span className={cn("text-xs pr-2", LABEL_COLOR)}>{suffix}</span>
@@ -155,19 +205,26 @@ function EditableField({
 }
 
 // Color input with swatch, hex, and opacity - swatch opens color picker popover
+// Supports mixed values for multi-selection editing
 export function ColorInput({
   color,
   opacity = 1,
   onChange,
   onOpacityChange,
 }: {
-  color: string;
-  opacity?: number;
+  color: string | MixedValue;
+  opacity?: number | MixedValue;
   onChange: (color: string) => void;
   onOpacityChange?: (opacity: number) => void;
 }) {
-  const hexDisplay = color.replace("#", "").toUpperCase();
-  const opacityDisplay = `${Math.round(opacity * 100)}`;
+  const colorMixed = isMixed(color);
+  const opacityMixed = isMixed(opacity);
+  const displayColor = colorMixed ? "#888888" : color;
+  const displayOpacity = opacityMixed ? 1 : opacity;
+  const hexDisplay = colorMixed ? "" : color.replace("#", "").toUpperCase();
+  const opacityDisplay = opacityMixed
+    ? ""
+    : `${Math.round(displayOpacity * 100)}`;
 
   const commitHex = (val: string) => {
     const hex = val.replace("#", "").toUpperCase();
@@ -205,8 +262,11 @@ export function ColorInput({
         <PopoverTrigger asChild>
           <button className="h-full aspect-square shrink-0 p-1 hover:bg-input/50 transition-colors cursor-pointer">
             <div
-              className="h-full w-full rounded"
-              style={{ backgroundColor: color }}
+              className={cn(
+                "h-full w-full rounded",
+                colorMixed && "bg-gradient-to-br from-zinc-400 to-zinc-600"
+              )}
+              style={colorMixed ? undefined : { backgroundColor: displayColor }}
             />
           </button>
         </PopoverTrigger>
@@ -217,8 +277,8 @@ export function ColorInput({
           sideOffset={8}
         >
           <ColorPicker
-            value={color}
-            alpha={opacity}
+            value={displayColor}
+            alpha={displayOpacity}
             onChange={onChange}
             onAlphaChange={onOpacityChange}
           >
@@ -228,7 +288,8 @@ export function ColorInput({
             <div className="flex items-center gap-1.5">
               <Input
                 type="text"
-                value={hexDisplay}
+                value={colorMixed ? "" : hexDisplay}
+                placeholder={colorMixed ? "Mixed" : undefined}
                 onChange={(e) => {
                   const hex = e.target.value.replace("#", "");
                   if (/^[0-9A-Fa-f]{0,6}$/.test(hex)) {
@@ -247,7 +308,13 @@ export function ColorInput({
       <EditableField
         value={hexDisplay}
         onCommit={commitHex}
-        className="flex-1 min-w-0 px-1 text-xs font-mono text-foreground bg-transparent border-0 outline-none uppercase"
+        placeholder={colorMixed ? "—" : undefined}
+        className={cn(
+          "flex-1 min-w-0 px-1 text-xs font-mono bg-transparent border-0 outline-none uppercase",
+          colorMixed
+            ? "text-muted-foreground placeholder:text-muted-foreground"
+            : "text-foreground"
+        )}
         maxLength={6}
       />
       <span className={cn("text-xs", LABEL_COLOR)}>/</span>
@@ -255,7 +322,13 @@ export function ColorInput({
       <EditableField
         value={opacityDisplay}
         onCommit={commitOpacity}
-        className="w-10 px-1 text-xs font-mono text-foreground bg-transparent border-0 outline-none text-right"
+        placeholder={opacityMixed ? "—" : undefined}
+        className={cn(
+          "w-10 px-1 text-xs font-mono bg-transparent border-0 outline-none text-right",
+          opacityMixed
+            ? "text-muted-foreground placeholder:text-muted-foreground"
+            : "text-foreground"
+        )}
       />
       <span className={cn("text-xs pr-1.5", LABEL_COLOR)}>%</span>
     </div>

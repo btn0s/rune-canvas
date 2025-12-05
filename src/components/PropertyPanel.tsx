@@ -46,6 +46,9 @@ import {
   ShadowSection,
   StrokeSection,
   BorderSideSelect,
+  getMixedValue,
+  isMixed,
+  MIXED,
 } from "./property-panel-components";
 
 // ============================================================================
@@ -60,9 +63,9 @@ interface PropertyPanelProps {
   onUpdate: (id: string, updates: Partial<CanvasObject>) => void;
 }
 
-/** Props for type-specific property components */
+/** Props for type-specific property components - supports single or multiple objects */
 interface ObjectPropertiesProps<T extends CanvasObject> {
-  object: T;
+  objects: T[];
   onUpdate: (updates: Partial<T>) => void;
 }
 
@@ -70,36 +73,36 @@ interface ObjectPropertiesProps<T extends CanvasObject> {
 // COMMON PROPERTY SECTIONS
 // ============================================================================
 
-/** Common props for layout/opacity that work with any object type */
+/** Common props for multi-object layout/opacity */
 interface CommonPropertiesProps {
-  object: CanvasObject;
+  objects: CanvasObject[];
   onUpdate: (updates: Partial<CanvasObject>) => void;
 }
 
 /** Layout section - X, Y, Width, Height (shared by all object types) */
-function LayoutSection({ object, onUpdate }: CommonPropertiesProps) {
+function LayoutSection({ objects, onUpdate }: CommonPropertiesProps) {
   return (
     <div className="flex flex-col gap-1.5">
       <SectionLabel>Layout</SectionLabel>
       <div className="grid grid-cols-2 gap-1.5">
         <NumberInput
           label="X"
-          value={object.x}
+          value={getMixedValue(objects, "x")}
           onChange={(v) => onUpdate({ x: v })}
         />
         <NumberInput
           label="Y"
-          value={object.y}
+          value={getMixedValue(objects, "y")}
           onChange={(v) => onUpdate({ y: v })}
         />
         <NumberInput
           label="W"
-          value={object.width}
+          value={getMixedValue(objects, "width")}
           onChange={(v) => onUpdate({ width: v })}
         />
         <NumberInput
           label="H"
-          value={object.height}
+          value={getMixedValue(objects, "height")}
           onChange={(v) => onUpdate({ height: v })}
         />
       </div>
@@ -108,10 +111,13 @@ function LayoutSection({ object, onUpdate }: CommonPropertiesProps) {
 }
 
 /** Opacity input - shared by all object types */
-function OpacityInput({ object, onUpdate }: CommonPropertiesProps) {
+function OpacityInput({ objects, onUpdate }: CommonPropertiesProps) {
+  const opacity = getMixedValue(objects, "opacity");
+  const displayValue = isMixed(opacity) ? MIXED : Math.round(opacity * 100);
+
   return (
     <NumberInput
-      value={Math.round(object.opacity * 100)}
+      value={displayValue}
       onChange={(v) =>
         onUpdate({ opacity: Math.min(100, Math.max(0, v)) / 100 })
       }
@@ -126,10 +132,21 @@ function OpacityInput({ object, onUpdate }: CommonPropertiesProps) {
 // ============================================================================
 
 function FrameProperties({
-  object: frame,
+  objects: frames,
   onUpdate,
 }: ObjectPropertiesProps<FrameObject>) {
-  const fillColor = frame.fill;
+  // For single selection, use first frame directly for conditional UI
+  const firstFrame = frames[0];
+  const isSingle = frames.length === 1;
+
+  // Get mixed values for common properties
+  const fillColor = getMixedValue(frames, "fill");
+  const layoutMode = getMixedValue(frames, "layoutMode");
+  const clipContent = getMixedValue(frames, "clipContent");
+
+  // For flex properties, only show if all frames have the same layoutMode
+  const allFlex = !isMixed(layoutMode) && layoutMode === "flex";
+  const allNone = !isMixed(layoutMode) && layoutMode === "none";
 
   return (
     <>
@@ -139,28 +156,28 @@ function FrameProperties({
         <div className="grid grid-cols-2 gap-1.5">
           <NumberInput
             label="X"
-            value={frame.x}
+            value={getMixedValue(frames, "x")}
             onChange={(v) => onUpdate({ x: v })}
           />
           <NumberInput
             label="Y"
-            value={frame.y}
+            value={getMixedValue(frames, "y")}
             onChange={(v) => onUpdate({ y: v })}
           />
           <NumberInput
             label="W"
-            value={frame.width}
+            value={getMixedValue(frames, "width")}
             onChange={(v) => onUpdate({ width: v })}
           />
           <NumberInput
             label="H"
-            value={frame.height}
+            value={getMixedValue(frames, "height")}
             onChange={(v) => onUpdate({ height: v })}
           />
         </div>
 
-        {/* Add flex button */}
-        {frame.layoutMode === "none" && (
+        {/* Add flex button - only show if all frames have layoutMode: none */}
+        {allNone && (
           <PropertyButton onClick={() => onUpdate({ layoutMode: "flex" })}>
             Add flex ⇧ A
           </PropertyButton>
@@ -169,7 +186,7 @@ function FrameProperties({
         {/* Clip content toggle */}
         <label className="flex items-center gap-2 cursor-pointer">
           <Checkbox
-            checked={frame.clipContent}
+            checked={isMixed(clipContent) ? "indeterminate" : clipContent}
             onCheckedChange={(checked) =>
               onUpdate({ clipContent: checked === true })
             }
@@ -180,8 +197,8 @@ function FrameProperties({
         </label>
       </div>
 
-      {/* Flex Layout Section */}
-      {frame.layoutMode === "flex" && (
+      {/* Flex Layout Section - only show if all frames have flex layout */}
+      {allFlex && (
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <SectionLabel>Flex</SectionLabel>
@@ -194,31 +211,43 @@ function FrameProperties({
             </Button>
           </div>
 
-          {/* Direction */}
+          {/* Direction - use first frame for icon display */}
           <IconButtonGroup>
             <IconButton
-              active={frame.flexDirection === "row"}
+              active={
+                !isMixed(getMixedValue(frames, "flexDirection")) &&
+                getMixedValue(frames, "flexDirection") === "row"
+              }
               onClick={() => onUpdate({ flexDirection: "row" })}
               tooltip="Row"
             >
               <ArrowRight className="size-4" />
             </IconButton>
             <IconButton
-              active={frame.flexDirection === "column"}
+              active={
+                !isMixed(getMixedValue(frames, "flexDirection")) &&
+                getMixedValue(frames, "flexDirection") === "column"
+              }
               onClick={() => onUpdate({ flexDirection: "column" })}
               tooltip="Column"
             >
               <ArrowDown className="size-4" />
             </IconButton>
             <IconButton
-              active={frame.flexDirection === "row-reverse"}
+              active={
+                !isMixed(getMixedValue(frames, "flexDirection")) &&
+                getMixedValue(frames, "flexDirection") === "row-reverse"
+              }
               onClick={() => onUpdate({ flexDirection: "row-reverse" })}
               tooltip="Row Reverse"
             >
               <ArrowLeft className="size-4" />
             </IconButton>
             <IconButton
-              active={frame.flexDirection === "column-reverse"}
+              active={
+                !isMixed(getMixedValue(frames, "flexDirection")) &&
+                getMixedValue(frames, "flexDirection") === "column-reverse"
+              }
               onClick={() => onUpdate({ flexDirection: "column-reverse" })}
               tooltip="Column Reverse"
             >
@@ -231,44 +260,56 @@ function FrameProperties({
             <span className="text-xs text-muted-foreground">Justify</span>
             <IconButtonGroup>
               <IconButton
-                active={frame.justifyContent === "flex-start"}
+                active={
+                  !isMixed(getMixedValue(frames, "justifyContent")) &&
+                  getMixedValue(frames, "justifyContent") === "flex-start"
+                }
                 onClick={() => onUpdate({ justifyContent: "flex-start" })}
                 tooltip="Start"
               >
-                {frame.flexDirection?.includes("column") ? (
+                {firstFrame.flexDirection?.includes("column") ? (
                   <AlignStartHorizontal className="size-4" />
                 ) : (
                   <AlignStartVertical className="size-4" />
                 )}
               </IconButton>
               <IconButton
-                active={frame.justifyContent === "center"}
+                active={
+                  !isMixed(getMixedValue(frames, "justifyContent")) &&
+                  getMixedValue(frames, "justifyContent") === "center"
+                }
                 onClick={() => onUpdate({ justifyContent: "center" })}
                 tooltip="Center"
               >
-                {frame.flexDirection?.includes("column") ? (
+                {firstFrame.flexDirection?.includes("column") ? (
                   <AlignCenterHorizontal className="size-4" />
                 ) : (
                   <AlignCenterVertical className="size-4" />
                 )}
               </IconButton>
               <IconButton
-                active={frame.justifyContent === "flex-end"}
+                active={
+                  !isMixed(getMixedValue(frames, "justifyContent")) &&
+                  getMixedValue(frames, "justifyContent") === "flex-end"
+                }
                 onClick={() => onUpdate({ justifyContent: "flex-end" })}
                 tooltip="End"
               >
-                {frame.flexDirection?.includes("column") ? (
+                {firstFrame.flexDirection?.includes("column") ? (
                   <AlignEndHorizontal className="size-4" />
                 ) : (
                   <AlignEndVertical className="size-4" />
                 )}
               </IconButton>
               <IconButton
-                active={frame.justifyContent === "space-between"}
+                active={
+                  !isMixed(getMixedValue(frames, "justifyContent")) &&
+                  getMixedValue(frames, "justifyContent") === "space-between"
+                }
                 onClick={() => onUpdate({ justifyContent: "space-between" })}
                 tooltip="Space Between"
               >
-                {frame.flexDirection?.includes("column") ? (
+                {firstFrame.flexDirection?.includes("column") ? (
                   <StretchVertical className="size-4" />
                 ) : (
                   <StretchHorizontal className="size-4" />
@@ -282,44 +323,56 @@ function FrameProperties({
             <span className="text-xs text-muted-foreground">Align</span>
             <IconButtonGroup>
               <IconButton
-                active={frame.alignItems === "flex-start"}
+                active={
+                  !isMixed(getMixedValue(frames, "alignItems")) &&
+                  getMixedValue(frames, "alignItems") === "flex-start"
+                }
                 onClick={() => onUpdate({ alignItems: "flex-start" })}
                 tooltip="Start"
               >
-                {frame.flexDirection?.includes("column") ? (
+                {firstFrame.flexDirection?.includes("column") ? (
                   <AlignStartVertical className="size-4" />
                 ) : (
                   <AlignStartHorizontal className="size-4" />
                 )}
               </IconButton>
               <IconButton
-                active={frame.alignItems === "center"}
+                active={
+                  !isMixed(getMixedValue(frames, "alignItems")) &&
+                  getMixedValue(frames, "alignItems") === "center"
+                }
                 onClick={() => onUpdate({ alignItems: "center" })}
                 tooltip="Center"
               >
-                {frame.flexDirection?.includes("column") ? (
+                {firstFrame.flexDirection?.includes("column") ? (
                   <AlignCenterVertical className="size-4" />
                 ) : (
                   <AlignCenterHorizontal className="size-4" />
                 )}
               </IconButton>
               <IconButton
-                active={frame.alignItems === "flex-end"}
+                active={
+                  !isMixed(getMixedValue(frames, "alignItems")) &&
+                  getMixedValue(frames, "alignItems") === "flex-end"
+                }
                 onClick={() => onUpdate({ alignItems: "flex-end" })}
                 tooltip="End"
               >
-                {frame.flexDirection?.includes("column") ? (
+                {firstFrame.flexDirection?.includes("column") ? (
                   <AlignEndVertical className="size-4" />
                 ) : (
                   <AlignEndHorizontal className="size-4" />
                 )}
               </IconButton>
               <IconButton
-                active={frame.alignItems === "stretch"}
+                active={
+                  !isMixed(getMixedValue(frames, "alignItems")) &&
+                  getMixedValue(frames, "alignItems") === "stretch"
+                }
                 onClick={() => onUpdate({ alignItems: "stretch" })}
                 tooltip="Stretch"
               >
-                {frame.flexDirection?.includes("column") ? (
+                {firstFrame.flexDirection?.includes("column") ? (
                   <StretchHorizontal className="size-4" />
                 ) : (
                   <StretchVertical className="size-4" />
@@ -331,18 +384,29 @@ function FrameProperties({
           {/* Wrap toggle */}
           <div className="flex items-center gap-2">
             <IconButton
-              active={frame.flexWrap === "wrap"}
-              onClick={() =>
-                onUpdate({
-                  flexWrap: frame.flexWrap === "wrap" ? "nowrap" : "wrap",
-                })
+              active={
+                !isMixed(getMixedValue(frames, "flexWrap")) &&
+                getMixedValue(frames, "flexWrap") === "wrap"
               }
-              tooltip={frame.flexWrap === "wrap" ? "No Wrap" : "Wrap"}
+              onClick={() => {
+                const currentWrap = getMixedValue(frames, "flexWrap");
+                onUpdate({
+                  flexWrap:
+                    isMixed(currentWrap) || currentWrap === "wrap"
+                      ? "nowrap"
+                      : "wrap",
+                });
+              }}
+              tooltip="Toggle Wrap"
             >
               <WrapText className="size-4" />
             </IconButton>
             <span className="text-xs text-muted-foreground">
-              {frame.flexWrap === "wrap" ? "Wrap" : "No wrap"}
+              {(() => {
+                const wrap = getMixedValue(frames, "flexWrap");
+                if (isMixed(wrap)) return "Mixed";
+                return wrap === "wrap" ? "Wrap" : "No wrap";
+              })()}
             </span>
           </div>
 
@@ -350,13 +414,13 @@ function FrameProperties({
           <div className="grid grid-cols-2 gap-1.5">
             <NumberInput
               label="Gap"
-              value={frame.gap || 0}
+              value={getMixedValue(frames, "gap") ?? 0}
               onChange={(v) => onUpdate({ gap: v })}
               min={0}
             />
             <NumberInput
               label="Pad"
-              value={frame.padding || 0}
+              value={getMixedValue(frames, "padding") ?? 0}
               onChange={(v) => onUpdate({ padding: v })}
               min={0}
             />
@@ -372,13 +436,17 @@ function FrameProperties({
             <Slider
               min={0}
               max={100}
-              value={[frame.radius]}
+              value={[
+                isMixed(getMixedValue(frames, "radius"))
+                  ? 0
+                  : (getMixedValue(frames, "radius") as number),
+              ]}
               onValueChange={(values) => onUpdate({ radius: values[0] })}
               className="h-1.5 w-full"
             />
           </div>
           <NumberInput
-            value={frame.radius}
+            value={getMixedValue(frames, "radius")}
             onChange={(v) => onUpdate({ radius: Math.max(0, v) })}
             min={0}
           />
@@ -389,16 +457,24 @@ function FrameProperties({
       <div className="flex flex-col gap-1.5">
         <SectionLabel>Blending</SectionLabel>
         <div className="grid grid-cols-2 gap-1.5">
-          <NumberInput
-            value={Math.round(frame.opacity * 100)}
-            onChange={(v) =>
-              onUpdate({ opacity: Math.min(100, Math.max(0, v)) / 100 })
-            }
-            suffix="%"
-            min={0}
-          />
+          {(() => {
+            const opacity = getMixedValue(frames, "opacity");
+            return (
+              <NumberInput
+                value={isMixed(opacity) ? MIXED : Math.round(opacity * 100)}
+                onChange={(v) =>
+                  onUpdate({ opacity: Math.min(100, Math.max(0, v)) / 100 })
+                }
+                suffix="%"
+                min={0}
+              />
+            );
+          })()}
           <PropertySelect
-            value={frame.blendMode || "normal"}
+            value={(() => {
+              const blendMode = getMixedValue(frames, "blendMode");
+              return isMixed(blendMode) ? "normal" : blendMode || "normal";
+            })()}
             onValueChange={(value) =>
               onUpdate({ blendMode: value as BlendMode })
             }
@@ -426,114 +502,134 @@ function FrameProperties({
       </div>
 
       {/* Fill Section */}
-      <CollapsibleSection
-        label="Fill"
-        isOpen={fillColor !== "transparent" && fillColor !== undefined}
-        onAdd={() => onUpdate({ fill: "#DDDDDD" })}
-        onRemove={() => onUpdate({ fill: "transparent" })}
-        visible={(frame.fillOpacity ?? 1) > 0}
-        onToggleVisible={() =>
-          onUpdate({ fillOpacity: (frame.fillOpacity ?? 1) > 0 ? 0 : 1 })
-        }
-      >
-        <ColorInput
-          color={fillColor || "#DDDDDD"}
-          opacity={frame.fillOpacity ?? 1}
-          onChange={(color) => onUpdate({ fill: color })}
-          onOpacityChange={(opacity) => onUpdate({ fillOpacity: opacity })}
-        />
-      </CollapsibleSection>
+      {(() => {
+        const hasFill = frames.some(
+          (f) => f.fill !== "transparent" && f.fill !== undefined
+        );
+        const fillOpacity = getMixedValue(frames, "fillOpacity");
+        return (
+          <CollapsibleSection
+            label="Fill"
+            isOpen={
+              !isMixed(fillColor)
+                ? fillColor !== "transparent" && fillColor !== undefined
+                : hasFill
+            }
+            onAdd={() => onUpdate({ fill: "#DDDDDD" })}
+            onRemove={() => onUpdate({ fill: "transparent" })}
+            visible={isMixed(fillOpacity) ? true : (fillOpacity ?? 1) > 0}
+            onToggleVisible={() => {
+              const currentOpacity = isMixed(fillOpacity)
+                ? 1
+                : fillOpacity ?? 1;
+              onUpdate({ fillOpacity: currentOpacity > 0 ? 0 : 1 });
+            }}
+          >
+            <ColorInput
+              color={isMixed(fillColor) ? MIXED : fillColor || "#DDDDDD"}
+              opacity={isMixed(fillOpacity) ? MIXED : fillOpacity ?? 1}
+              onChange={(color) => onUpdate({ fill: color })}
+              onOpacityChange={(opacity) => onUpdate({ fillOpacity: opacity })}
+            />
+          </CollapsibleSection>
+        );
+      })()}
 
-      {/* Outline Section */}
-      <StrokeSection
-        label="Outline"
-        color={frame.outline}
-        width={frame.outlineWidth || 1}
-        opacity={frame.outlineOpacity ?? 1}
-        onChange={(updates) =>
-          onUpdate({
-            outline: updates.color ?? frame.outline,
-            outlineWidth: updates.width ?? frame.outlineWidth,
-            outlineOpacity: updates.opacity ?? frame.outlineOpacity,
-          })
-        }
-        onAdd={() =>
-          onUpdate({
-            outline: "#000000",
-            outlineWidth: 1,
-            outlineOpacity: 1,
-            outlineStyle: "solid",
-            outlineOffset: 0,
-          })
-        }
-        onRemove={() =>
-          onUpdate({
-            outline: undefined,
-            outlineWidth: undefined,
-            outlineOpacity: undefined,
-            outlineStyle: undefined,
-            outlineOffset: undefined,
-          })
-        }
-      >
-        <NumberInput
-          label="Off"
-          value={frame.outlineOffset || 0}
-          onChange={(v) => onUpdate({ outlineOffset: v })}
-        />
-      </StrokeSection>
+      {/* Effect sections - only show for single selection to keep UI simple */}
+      {isSingle && (
+        <>
+          {/* Outline Section */}
+          <StrokeSection
+            label="Outline"
+            color={firstFrame.outline}
+            width={firstFrame.outlineWidth || 1}
+            opacity={firstFrame.outlineOpacity ?? 1}
+            onChange={(updates) =>
+              onUpdate({
+                outline: updates.color ?? firstFrame.outline,
+                outlineWidth: updates.width ?? firstFrame.outlineWidth,
+                outlineOpacity: updates.opacity ?? firstFrame.outlineOpacity,
+              })
+            }
+            onAdd={() =>
+              onUpdate({
+                outline: "#000000",
+                outlineWidth: 1,
+                outlineOpacity: 1,
+                outlineStyle: "solid",
+                outlineOffset: 0,
+              })
+            }
+            onRemove={() =>
+              onUpdate({
+                outline: undefined,
+                outlineWidth: undefined,
+                outlineOpacity: undefined,
+                outlineStyle: undefined,
+                outlineOffset: undefined,
+              })
+            }
+          >
+            <NumberInput
+              label="Off"
+              value={firstFrame.outlineOffset || 0}
+              onChange={(v) => onUpdate({ outlineOffset: v })}
+            />
+          </StrokeSection>
 
-      {/* Border Section */}
-      <StrokeSection
-        label="Border"
-        color={frame.border}
-        width={frame.borderWidth || 1}
-        opacity={frame.borderOpacity ?? 1}
-        onChange={(updates) =>
-          onUpdate({
-            border: updates.color ?? frame.border,
-            borderWidth: updates.width ?? frame.borderWidth,
-            borderOpacity: updates.opacity ?? frame.borderOpacity,
-          })
-        }
-        onAdd={() =>
-          onUpdate({
-            border: "#000000",
-            borderWidth: 1,
-            borderOpacity: 1,
-            borderStyle: "solid",
-            borderSide: "all",
-          })
-        }
-        onRemove={() =>
-          onUpdate({
-            border: undefined,
-            borderWidth: undefined,
-            borderOpacity: undefined,
-            borderStyle: undefined,
-            borderSide: undefined,
-          })
-        }
-      >
-        <BorderSideSelect
-          value={frame.borderSide || "all"}
-          onChange={(side) => onUpdate({ borderSide: side })}
-        />
-      </StrokeSection>
+          {/* Border Section */}
+          <StrokeSection
+            label="Border"
+            color={firstFrame.border}
+            width={firstFrame.borderWidth || 1}
+            opacity={firstFrame.borderOpacity ?? 1}
+            onChange={(updates) =>
+              onUpdate({
+                border: updates.color ?? firstFrame.border,
+                borderWidth: updates.width ?? firstFrame.borderWidth,
+                borderOpacity: updates.opacity ?? firstFrame.borderOpacity,
+              })
+            }
+            onAdd={() =>
+              onUpdate({
+                border: "#000000",
+                borderWidth: 1,
+                borderOpacity: 1,
+                borderStyle: "solid",
+                borderSide: "all",
+              })
+            }
+            onRemove={() =>
+              onUpdate({
+                border: undefined,
+                borderWidth: undefined,
+                borderOpacity: undefined,
+                borderStyle: undefined,
+                borderSide: undefined,
+              })
+            }
+          >
+            <BorderSideSelect
+              value={firstFrame.borderSide || "all"}
+              onChange={(side) => onUpdate({ borderSide: side })}
+            />
+          </StrokeSection>
 
-      {/* Shadow Section */}
-      <ShadowSection
-        label="Shadow"
-        shadow={frame.shadow}
-        onChange={(shadow) => onUpdate({ shadow })}
-      />
+          {/* Shadow Section */}
+          <ShadowSection
+            label="Shadow"
+            shadow={firstFrame.shadow}
+            onChange={(shadow) => onUpdate({ shadow })}
+          />
 
-      {/* Inner Shadow Section */}
-      <ShadowSection
-        label="Inner shadow"
-        shadow={frame.innerShadow}
-        onChange={(innerShadow) => onUpdate({ innerShadow })}
-      />
+          {/* Inner Shadow Section */}
+          <ShadowSection
+            label="Inner shadow"
+            shadow={firstFrame.innerShadow}
+            onChange={(innerShadow) => onUpdate({ innerShadow })}
+          />
+        </>
+      )}
     </>
   );
 }
@@ -543,22 +639,29 @@ function FrameProperties({
 // ============================================================================
 
 function TextProperties({
-  object: text,
+  objects: texts,
   onUpdate,
 }: ObjectPropertiesProps<TextObject>) {
   // Cast for shared components that expect CanvasObject
   const commonUpdate = onUpdate as (updates: Partial<CanvasObject>) => void;
 
+  // Get mixed values
+  const textColor = getMixedValue(texts, "color");
+  const sizeMode = getMixedValue(texts, "sizeMode");
+  const fontSize = getMixedValue(texts, "fontSize");
+  const fontWeight = getMixedValue(texts, "fontWeight");
+  const textAlign = getMixedValue(texts, "textAlign");
+
   return (
     <>
       {/* Layout */}
-      <LayoutSection object={text} onUpdate={commonUpdate} />
+      <LayoutSection objects={texts} onUpdate={commonUpdate} />
 
       {/* Blending (opacity only for text) */}
       <div className="flex flex-col gap-1.5">
         <SectionLabel>Blending</SectionLabel>
         <div className="grid grid-cols-2 gap-1.5">
-          <OpacityInput object={text} onUpdate={commonUpdate} />
+          <OpacityInput objects={texts} onUpdate={commonUpdate} />
           <div />
         </div>
       </div>
@@ -566,12 +669,12 @@ function TextProperties({
       {/* Color Section */}
       <CollapsibleSection
         label="Color"
-        isOpen={!!text.color}
+        isOpen={texts.some((t) => !!t.color)}
         onAdd={() => onUpdate({ color: "#000000" })}
         onRemove={() => onUpdate({ color: "transparent" })}
       >
         <ColorInput
-          color={text.color || "#000000"}
+          color={isMixed(textColor) ? MIXED : textColor || "#000000"}
           onChange={(color) => onUpdate({ color })}
         />
       </CollapsibleSection>
@@ -593,7 +696,7 @@ function TextProperties({
               key={mode}
               title={label}
               className={`flex-1 h-7 rounded-md text-xs transition-colors ${
-                text.sizeMode === mode
+                !isMixed(sizeMode) && sizeMode === mode
                   ? "bg-primary/20 text-primary"
                   : "bg-input/30 text-muted-foreground hover:text-foreground"
               }`}
@@ -606,7 +709,7 @@ function TextProperties({
 
         <NumberInput
           label="Size"
-          value={text.fontSize}
+          value={fontSize}
           onChange={(v) => onUpdate({ fontSize: v })}
           min={8}
         />
@@ -615,13 +718,14 @@ function TextProperties({
         <div className="flex gap-1">
           <button
             className={`flex-1 h-7 rounded-md text-xs font-medium transition-colors ${
-              text.fontWeight >= 600
+              !isMixed(fontWeight) && fontWeight >= 600
                 ? "bg-blue-500/20 text-blue-400"
                 : "bg-zinc-800/50 text-zinc-500 hover:text-zinc-300"
             }`}
-            onClick={() =>
-              onUpdate({ fontWeight: text.fontWeight >= 600 ? 400 : 700 })
-            }
+            onClick={() => {
+              const currentWeight = isMixed(fontWeight) ? 400 : fontWeight;
+              onUpdate({ fontWeight: currentWeight >= 600 ? 400 : 700 });
+            }}
           >
             <Bold className="size-3.5 mx-auto" />
           </button>
@@ -633,7 +737,7 @@ function TextProperties({
             <button
               key={align}
               className={`flex-1 h-7 rounded-md text-xs transition-colors ${
-                text.textAlign === align
+                !isMixed(textAlign) && textAlign === align
                   ? "bg-primary/20 text-primary"
                   : "bg-input/30 text-muted-foreground hover:text-foreground"
               }`}
@@ -657,32 +761,64 @@ function TextProperties({
 // ============================================================================
 
 function ImageProperties({
-  object: image,
+  objects: images,
   onUpdate,
 }: ObjectPropertiesProps<ImageObject>) {
   // Cast for shared components that expect CanvasObject
   const commonUpdate = onUpdate as (updates: Partial<CanvasObject>) => void;
+  const isSingle = images.length === 1;
 
   return (
     <>
       {/* Layout */}
-      <LayoutSection object={image} onUpdate={commonUpdate} />
+      <LayoutSection objects={images} onUpdate={commonUpdate} />
 
       {/* Blending (opacity only for images) */}
       <div className="flex flex-col gap-1.5">
         <SectionLabel>Blending</SectionLabel>
         <div className="grid grid-cols-2 gap-1.5">
-          <OpacityInput object={image} onUpdate={commonUpdate} />
+          <OpacityInput objects={images} onUpdate={commonUpdate} />
           <div />
         </div>
       </div>
 
-      {/* Original dimensions */}
-      <div className="flex flex-col gap-1">
-        <SectionLabel>Original</SectionLabel>
-        <span className="text-xs font-mono text-muted-foreground">
-          {image.naturalWidth} × {image.naturalHeight}
-        </span>
+      {/* Original dimensions - only show for single selection */}
+      {isSingle && (
+        <div className="flex flex-col gap-1">
+          <SectionLabel>Original</SectionLabel>
+          <span className="text-xs font-mono text-muted-foreground">
+            {images[0].naturalWidth} × {images[0].naturalHeight}
+          </span>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ============================================================================
+// MIXED TYPE PROPERTIES (when different object types are selected)
+// ============================================================================
+
+function MixedTypeProperties({ objects, onUpdate }: CommonPropertiesProps) {
+  return (
+    <>
+      {/* Only show common properties: Layout and Opacity */}
+      <LayoutSection objects={objects} onUpdate={onUpdate} />
+
+      {/* Blending (opacity only) */}
+      <div className="flex flex-col gap-1.5">
+        <SectionLabel>Blending</SectionLabel>
+        <div className="grid grid-cols-2 gap-1.5">
+          <OpacityInput objects={objects} onUpdate={onUpdate} />
+          <div />
+        </div>
+      </div>
+
+      {/* Info about mixed selection */}
+      <div className="text-xs text-muted-foreground text-center py-2">
+        {objects.length} objects selected
+        <br />
+        <span className="text-xs opacity-60">Mixed types</span>
       </div>
     </>
   );
@@ -702,8 +838,6 @@ export function PropertyPanel({
   const [isHovered, setIsHovered] = useState(false);
   const [isOverlapping, setIsOverlapping] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
-  const selectedObject =
-    selectedObjects.length === 1 ? selectedObjects[0] : null;
 
   // Check if panel overlaps with any object
   const checkOverlap = useCallback(() => {
@@ -735,35 +869,54 @@ export function PropertyPanel({
     checkOverlap();
   }, [checkOverlap]);
 
-  if (!selectedObject) return null;
+  // Nothing selected
+  if (selectedObjects.length === 0) return null;
 
-  // Create a typed update function that binds the object ID
-  const handleUpdate = <T extends CanvasObject>(updates: Partial<T>) => {
-    onUpdate(selectedObject.id, updates as Partial<CanvasObject>);
+  // Update function that applies to ALL selected objects
+  const handleUpdateAll = <T extends CanvasObject>(updates: Partial<T>) => {
+    selectedObjects.forEach((obj) => {
+      onUpdate(obj.id, updates as Partial<CanvasObject>);
+    });
   };
 
-  // Render content based on object type
+  // Determine the type(s) of selected objects
+  const types = new Set(selectedObjects.map((o) => o.type));
+  const isMixedTypes = types.size > 1;
+  const commonType = isMixedTypes ? null : selectedObjects[0].type;
+
+  // Render content based on selection
   const renderContent = () => {
-    switch (selectedObject.type) {
+    // Mixed types - show only common properties
+    if (isMixedTypes) {
+      return (
+        <MixedTypeProperties
+          objects={selectedObjects}
+          onUpdate={handleUpdateAll}
+        />
+      );
+    }
+
+    // All same type - show type-specific properties
+    switch (commonType) {
       case "frame":
         return (
           <FrameProperties
-            object={selectedObject as FrameObject}
-            onUpdate={handleUpdate}
+            objects={selectedObjects as FrameObject[]}
+            onUpdate={handleUpdateAll}
           />
         );
       case "text":
         return (
           <TextProperties
-            object={selectedObject as TextObject}
-            onUpdate={handleUpdate}
+            objects={selectedObjects as TextObject[]}
+            onUpdate={handleUpdateAll}
           />
         );
       case "image":
         return (
           <ImageProperties
-            object={selectedObject as ImageObject}
-            onUpdate={handleUpdate}
+            objects={selectedObjects as ImageObject[]}
+            onUpdate={handleUpdateAll}
           />
         );
       default:
