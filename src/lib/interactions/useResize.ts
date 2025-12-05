@@ -187,19 +187,23 @@ export function useResize(config: ResizeConfig, actions: ResizeActions) {
         if (handle.includes("n")) y = origBounds.y + origBounds.height - 1;
       }
 
-      // Scope snapping to siblings (same parent) only
+      // Get parent for snapping (children snap to parent edges + siblings)
       const firstSelected = objects.find((o) => o.id === selectedIds[0]);
       const parentId = firstSelected?.parentId ?? null;
-      const otherObjects = objects.filter(
+      const parent = parentId ? objects.find((o) => o.id === parentId) : null;
+
+      // Siblings = objects with same parent, excluding selected
+      const siblings = objects.filter(
         (o) => !selectedIds.includes(o.id) && o.parentId === parentId
       );
 
       const snapped = calculateSnapping(
         { x, y, width, height },
-        otherObjects,
+        siblings,
         objects,
         "resize",
-        handle
+        handle,
+        parent // snap to parent edges too
       );
 
       // Calculate scale factors

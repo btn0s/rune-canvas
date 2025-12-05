@@ -501,7 +501,6 @@ export function ShadowSection({
 }) {
   // Compute mixed state
   const hasAny = shadows.some((s) => s !== undefined);
-  const hasAll = shadows.every((s) => s !== undefined);
   const defined = shadows.filter((s): s is ShadowProps => s !== undefined);
 
   // Get mixed values for each property

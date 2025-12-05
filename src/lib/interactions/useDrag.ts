@@ -154,7 +154,10 @@ export function useDrag(config: DragConfig, actions: DragActions) {
         selected.forEach((o) => {
           const startPos = dragObjectsStart.current.find((s) => s.id === o.id);
           if (startPos) {
-            originalStartPositions.current.set(o.id, { x: startPos.x, y: startPos.y });
+            originalStartPositions.current.set(o.id, {
+              x: startPos.x,
+              y: startPos.y,
+            });
           }
         });
 
@@ -165,7 +168,9 @@ export function useDrag(config: DragConfig, actions: DragActions) {
 
         // Get new root IDs (objects whose parent isn't also in newObjects)
         const newRootIds = newObjects
-          .filter((o) => !o.parentId || !newObjects.some((c) => c.id === o.parentId))
+          .filter(
+            (o) => !o.parentId || !newObjects.some((c) => c.id === o.parentId)
+          )
           .map((o) => o.id);
 
         // Add duplicates and restore originals to starting positions
@@ -186,8 +191,10 @@ export function useDrag(config: DragConfig, actions: DragActions) {
         setSelectedIds(newRootIds);
 
         // Update drag refs to track the new duplicates
-        const newRootObjects = newObjects.filter((o) => newRootIds.includes(o.id));
-        
+        const newRootObjects = newObjects.filter((o) =>
+          newRootIds.includes(o.id)
+        );
+
         // Calculate where duplicates should be based on current drag delta
         dragObjectsStart.current = newRootObjects.map((o) => ({
           id: o.id,
@@ -197,7 +204,7 @@ export function useDrag(config: DragConfig, actions: DragActions) {
 
         // Reset drag start to current point so delta calculation continues smoothly
         dragStart.current = canvasPoint;
-        
+
         // Update bounds for the new selection
         const bounds = getSelectionBounds(newRootObjects, newRootIds);
         dragBoundsStart.current = bounds ? { x: bounds.x, y: bounds.y } : null;
@@ -250,10 +257,13 @@ export function useDrag(config: DragConfig, actions: DragActions) {
         ...descendants.map((d) => d.id),
       ]);
 
-      // Scope snapping to siblings only
+      // Get parent for snapping (children snap to parent edges + siblings)
       const firstSelected = objects.find((o) => o.id === selectedIds[0]);
       const parentId = firstSelected?.parentId ?? null;
-      const otherObjects = objects.filter(
+      const parent = parentId ? objects.find((o) => o.id === parentId) : null;
+
+      // Siblings = objects with same parent, excluding selected
+      const siblings = objects.filter(
         (o) => !excludeIds.has(o.id) && o.parentId === parentId
       );
 
@@ -264,9 +274,11 @@ export function useDrag(config: DragConfig, actions: DragActions) {
           width: boundsWidth,
           height: boundsHeight,
         },
-        otherObjects,
+        siblings,
         objects,
-        "move"
+        "move",
+        undefined, // no resize handle
+        parent // snap to parent edges too
       );
 
       const snapDx = snapped.x - newBoundsX;

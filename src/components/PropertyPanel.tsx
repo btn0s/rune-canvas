@@ -177,7 +177,20 @@ function FrameProperties({
 
         {/* Add flex button - only show if all frames have layoutMode: none */}
         {allNone && (
-          <PropertyButton onClick={() => onUpdate({ layoutMode: "flex" })}>
+          <PropertyButton
+            onClick={() =>
+              onUpdate({
+                layoutMode: "flex",
+                // Ensure flex defaults are set
+                flexDirection: "row",
+                justifyContent: "flex-start",
+                alignItems: "flex-start",
+                flexWrap: "nowrap",
+                gap: 0,
+                padding: 0,
+              })
+            }
+          >
             Add flex ⇧ A
           </PropertyButton>
         )}

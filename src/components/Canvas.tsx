@@ -310,6 +310,9 @@ export function Canvas() {
   // Hovered resize handle for cursor
   const [hoveredHandle, setHoveredHandle] = useState<ResizeHandle | null>(null);
 
+  // Hovered object for visual feedback
+  const [hoveredObjectId, setHoveredObjectId] = useState<string | null>(null);
+
   // Context menu position (canvas space)
   const [contextMenuPoint, setContextMenuPoint] = useState<Point | null>(null);
 
@@ -567,6 +570,39 @@ export function Canvas() {
       ctx.setLineDash([]);
     }
 
+    // Draw hover outline for non-selected objects
+    if (hoveredObjectId && container) {
+      const hoveredObj = objects.find((o) => o.id === hoveredObjectId);
+      if (hoveredObj) {
+        // Use DOM position for accuracy with flex children
+        const el = container.querySelector(
+          `[data-object-id="${hoveredObjectId}"]`
+        ) as HTMLElement;
+
+        let hx: number, hy: number, hw: number, hh: number;
+
+        if (el) {
+          const containerRect = container.getBoundingClientRect();
+          const elRect = el.getBoundingClientRect();
+          hx = elRect.left - containerRect.left;
+          hy = elRect.top - containerRect.top;
+          hw = elRect.width;
+          hh = elRect.height;
+        } else {
+          const hoveredPos = getCanvasPosition(hoveredObj, objects);
+          hx = hoveredPos.x * transform.scale + transform.x;
+          hy = hoveredPos.y * transform.scale + transform.y;
+          hw = hoveredObj.width * transform.scale;
+          hh = hoveredObj.height * transform.scale;
+        }
+
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([]);
+        ctx.strokeRect(hx, hy, hw, hh);
+      }
+    }
+
     // Draw selection: outline, handles, dimensions
     if (selectionBounds) {
       const x = selectionBounds.x * transform.scale + transform.x;
@@ -652,6 +688,8 @@ export function Canvas() {
     marqueeRect,
     isMarqueeSelecting,
     debugMode,
+    hoveredObjectId,
+    objects,
   ]);
 
   useEffect(() => {
@@ -754,12 +792,35 @@ export function Canvas() {
 
   // Hit test objects (canvas space) - includes label area for root objects
   // Returns the smallest (most nested) object containing the point
+  // Uses DOM positions for accuracy with flex-positioned children
   const hitTestObject = useCallback(
     (canvasX: number, canvasY: number): string | null => {
+      if (!containerRef.current) return null;
+
       let bestMatch: { id: string; area: number } | null = null;
+      const containerRect = containerRef.current.getBoundingClientRect();
 
       for (const obj of objects) {
-        const canvasPos = getCanvasPosition(obj, objects);
+        // Get actual DOM position for accurate hit testing
+        const el = containerRef.current.querySelector(
+          `[data-object-id="${obj.id}"]`
+        ) as HTMLElement;
+
+        let canvasPos: { x: number; y: number };
+
+        if (el) {
+          // Use DOM position (most accurate, especially for flex children)
+          const elRect = el.getBoundingClientRect();
+          canvasPos = {
+            x:
+              (elRect.left - containerRect.left - transform.x) /
+              transform.scale,
+            y: (elRect.top - containerRect.top - transform.y) / transform.scale,
+          };
+        } else {
+          // Fallback to stored position
+          canvasPos = getCanvasPosition(obj, objects);
+        }
 
         // Check object bounds
         const inObject =
@@ -791,7 +852,7 @@ export function Canvas() {
 
       return bestMatch?.id ?? null;
     },
-    [objects]
+    [objects, transform]
   );
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -872,19 +933,37 @@ export function Canvas() {
 
     if (isPanning) {
       updatePan({ x: e.clientX, y: e.clientY });
+      setHoveredObjectId(null);
     } else if (isCreating) {
       updateCreate(canvasPoint);
+      setHoveredObjectId(null);
     } else if (isDragging) {
       updateDrag(canvasPoint, e.shiftKey, e.altKey);
+      setHoveredObjectId(null);
     } else if (isResizing) {
       updateResize(canvasPoint, e.shiftKey, e.altKey);
+      setHoveredObjectId(null);
     } else if (isMarqueeSelecting) {
       updateMarquee(canvasPoint);
+      setHoveredObjectId(null);
     } else if (tool === "select") {
       // Check for handle hover when idle
-      setHoveredHandle(hitTestHandle(screenX, screenY));
+      const handle = hitTestHandle(screenX, screenY);
+      setHoveredHandle(handle);
+
+      // Track hovered object (only when not over a handle)
+      if (!handle) {
+        const objectId = hitTestObject(canvasPoint.x, canvasPoint.y);
+        // Don't show hover for already-selected objects
+        setHoveredObjectId(
+          objectId && !selectedIds.includes(objectId) ? objectId : null
+        );
+      } else {
+        setHoveredObjectId(null);
+      }
     } else {
       setHoveredHandle(null);
+      setHoveredObjectId(null);
     }
   };
 
@@ -908,9 +987,22 @@ export function Canvas() {
       pushHistory();
       const frame = selectedObjects[0] as FrameObject;
       const newMode = frame.layoutMode === "flex" ? "none" : "flex";
-      updateObject(frame.id, { layoutMode: newMode } as Partial<FrameObject>, {
-        commit: false,
-      });
+
+      // When enabling flex, ensure defaults are set
+      const updates: Partial<FrameObject> =
+        newMode === "flex"
+          ? {
+              layoutMode: "flex",
+              flexDirection: frame.flexDirection || "row",
+              justifyContent: frame.justifyContent || "flex-start",
+              alignItems: frame.alignItems || "flex-start",
+              flexWrap: frame.flexWrap || "nowrap",
+              gap: frame.gap ?? 0,
+              padding: frame.padding ?? 0,
+            }
+          : { layoutMode: "none" };
+
+      updateObject(frame.id, updates, { commit: false });
       return;
     }
 
@@ -1122,6 +1214,8 @@ export function Canvas() {
     ? "crosshair"
     : hoveredHandle
     ? getHandleCursor(hoveredHandle)
+    : hoveredObjectId
+    ? "default"
     : "default";
 
   // Handle context menu to capture position

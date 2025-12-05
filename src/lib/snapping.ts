@@ -1,168 +1,14 @@
-import type { CanvasObject, Guide, ResizeHandle } from "./types";
+import type { CanvasObject, Guide, ResizeHandle, FrameObject } from "./types";
 import { getCanvasPosition, type Rect } from "./geometry";
 
-// Re-export for consumers that were importing from snapping
+// Re-export for consumers
 export { getCanvasPosition, type Rect } from "./geometry";
 
 // ============================================================================
 // Types
 // ============================================================================
 
-interface SnapTarget {
-  value: number;
-  objectId: string;
-  object: Rect;
-}
-
-interface GapInfo {
-  distance: number;
-  start: number;
-  end: number;
-  topY?: number;
-  bottomY?: number;
-  leftX?: number;
-  rightX?: number;
-}
-
 export type SnapMode = "move" | "create" | "resize";
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-const SNAP_THRESHOLD = 8;
-
-// ============================================================================
-// Guide Creation Helpers
-// ============================================================================
-
-function createVerticalGuide(
-  position: number,
-  currentObj: { y: number; height: number },
-  snapObj: { y: number; height: number }
-): Guide {
-  return {
-    type: "vertical",
-    position,
-    startBound: Math.min(currentObj.y, snapObj.y),
-    endBound: Math.max(
-      currentObj.y + currentObj.height,
-      snapObj.y + snapObj.height
-    ),
-  };
-}
-
-function createHorizontalGuide(
-  position: number,
-  currentObj: { x: number; width: number },
-  snapObj: { x: number; width: number }
-): Guide {
-  return {
-    type: "horizontal",
-    position,
-    startBound: Math.min(currentObj.x, snapObj.x),
-    endBound: Math.max(
-      currentObj.x + currentObj.width,
-      snapObj.x + snapObj.width
-    ),
-  };
-}
-
-// ============================================================================
-// Gap Calculation
-// ============================================================================
-
-/**
- * Calculate all horizontal and vertical gaps between objects.
- * Used for gap snapping during drag operations.
- */
-export function calculateAllGaps(
-  objects: CanvasObject[],
-  allObjects: CanvasObject[]
-): {
-  horizontal: GapInfo[];
-  vertical: GapInfo[];
-} {
-  const horizontal: GapInfo[] = [];
-  const vertical: GapInfo[] = [];
-
-  for (let i = 0; i < objects.length; i++) {
-    for (let j = i + 1; j < objects.length; j++) {
-      const a = objects[i];
-      const b = objects[j];
-      const aPos = getCanvasPosition(a, allObjects);
-      const bPos = getCanvasPosition(b, allObjects);
-
-      // Horizontal gap (objects side by side)
-      if (aPos.x + a.width < bPos.x) {
-        const gapStart = aPos.x + a.width;
-        const gapEnd = bPos.x;
-        const overlapTop = Math.max(aPos.y, bPos.y);
-        const overlapBottom = Math.min(aPos.y + a.height, bPos.y + b.height);
-        if (overlapBottom > overlapTop) {
-          horizontal.push({
-            distance: Math.round(gapEnd - gapStart),
-            start: gapStart,
-            end: gapEnd,
-            topY: overlapTop,
-            bottomY: overlapBottom,
-          });
-        }
-      } else if (bPos.x + b.width < aPos.x) {
-        const gapStart = bPos.x + b.width;
-        const gapEnd = aPos.x;
-        const overlapTop = Math.max(aPos.y, bPos.y);
-        const overlapBottom = Math.min(aPos.y + a.height, bPos.y + b.height);
-        if (overlapBottom > overlapTop) {
-          horizontal.push({
-            distance: Math.round(gapEnd - gapStart),
-            start: gapStart,
-            end: gapEnd,
-            topY: overlapTop,
-            bottomY: overlapBottom,
-          });
-        }
-      }
-
-      // Vertical gap (objects stacked)
-      if (aPos.y + a.height < bPos.y) {
-        const gapStart = aPos.y + a.height;
-        const gapEnd = bPos.y;
-        const overlapLeft = Math.max(aPos.x, bPos.x);
-        const overlapRight = Math.min(aPos.x + a.width, bPos.x + b.width);
-        if (overlapRight > overlapLeft) {
-          vertical.push({
-            distance: Math.round(gapEnd - gapStart),
-            start: gapStart,
-            end: gapEnd,
-            leftX: overlapLeft,
-            rightX: overlapRight,
-          });
-        }
-      } else if (bPos.y + b.height < aPos.y) {
-        const gapStart = bPos.y + b.height;
-        const gapEnd = aPos.y;
-        const overlapLeft = Math.max(aPos.x, bPos.x);
-        const overlapRight = Math.min(aPos.x + a.width, bPos.x + b.width);
-        if (overlapRight > overlapLeft) {
-          vertical.push({
-            distance: Math.round(gapEnd - gapStart),
-            start: gapStart,
-            end: gapEnd,
-            leftX: overlapLeft,
-            rightX: overlapRight,
-          });
-        }
-      }
-    }
-  }
-
-  return { horizontal, vertical };
-}
-
-// ============================================================================
-// Snapping Engine
-// ============================================================================
 
 export interface SnapResult {
   x: number;
@@ -172,129 +18,266 @@ export interface SnapResult {
   guides: Guide[];
 }
 
+interface SnapLine {
+  position: number;
+  /** The rect this snap line belongs to (for guide bounds calculation) */
+  rect: Rect;
+  /** Type of line: edge or center */
+  type: "edge" | "center";
+}
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+const SNAP_THRESHOLD = 8;
+
+export { SNAP_THRESHOLD };
+
+// ============================================================================
+// Guide Creation
+// ============================================================================
+
+function createVerticalGuide(
+  position: number,
+  movingRect: Rect,
+  snapRect: Rect
+): Guide {
+  return {
+    type: "vertical",
+    position,
+    startBound: Math.min(movingRect.y, snapRect.y),
+    endBound: Math.max(
+      movingRect.y + movingRect.height,
+      snapRect.y + snapRect.height
+    ),
+  };
+}
+
+function createHorizontalGuide(
+  position: number,
+  movingRect: Rect,
+  snapRect: Rect
+): Guide {
+  return {
+    type: "horizontal",
+    position,
+    startBound: Math.min(movingRect.x, snapRect.x),
+    endBound: Math.max(
+      movingRect.x + movingRect.width,
+      snapRect.x + snapRect.width
+    ),
+  };
+}
+
+// ============================================================================
+// Snap Line Collection
+// ============================================================================
+
 /**
- * Calculate snapped position for an object based on nearby objects.
- * Handles edge snapping, center snapping, and gap snapping.
+ * Collect snap lines from an array of objects.
+ * Returns arrays of X and Y snap positions with their source rects.
+ */
+function collectSnapLines(
+  objects: CanvasObject[],
+  allObjects: CanvasObject[]
+): { xLines: SnapLine[]; yLines: SnapLine[] } {
+  const xLines: SnapLine[] = [];
+  const yLines: SnapLine[] = [];
+
+  for (const obj of objects) {
+    const pos = getCanvasPosition(obj, allObjects);
+    const rect: Rect = {
+      x: pos.x,
+      y: pos.y,
+      width: obj.width,
+      height: obj.height,
+    };
+
+    // Left edge
+    xLines.push({ position: pos.x, rect, type: "edge" });
+    // Right edge
+    xLines.push({ position: pos.x + obj.width, rect, type: "edge" });
+    // Center X
+    xLines.push({ position: pos.x + obj.width / 2, rect, type: "center" });
+
+    // Top edge
+    yLines.push({ position: pos.y, rect, type: "edge" });
+    // Bottom edge
+    yLines.push({ position: pos.y + obj.height, rect, type: "edge" });
+    // Center Y
+    yLines.push({ position: pos.y + obj.height / 2, rect, type: "center" });
+  }
+
+  return { xLines, yLines };
+}
+
+/**
+ * Add snap lines for a parent container (inner edges for child snapping).
+ * Children snap to the inside edges of their parent.
+ */
+function addParentSnapLines(
+  parent: CanvasObject,
+  allObjects: CanvasObject[],
+  xLines: SnapLine[],
+  yLines: SnapLine[]
+): void {
+  const pos = getCanvasPosition(parent, allObjects);
+  const rect: Rect = {
+    x: pos.x,
+    y: pos.y,
+    width: parent.width,
+    height: parent.height,
+  };
+
+  // For parent snapping, we use the INNER edges (same as outer for the child's perspective)
+  // Left inner edge
+  xLines.push({ position: pos.x, rect, type: "edge" });
+  // Right inner edge
+  xLines.push({ position: pos.x + parent.width, rect, type: "edge" });
+  // Center X
+  xLines.push({ position: pos.x + parent.width / 2, rect, type: "center" });
+
+  // Top inner edge
+  yLines.push({ position: pos.y, rect, type: "edge" });
+  // Bottom inner edge
+  yLines.push({ position: pos.y + parent.height, rect, type: "edge" });
+  // Center Y
+  yLines.push({ position: pos.y + parent.height / 2, rect, type: "center" });
+
+  // If parent has padding (flex container), also snap to padded edges
+  if (parent.type === "frame") {
+    const frame = parent as FrameObject;
+    const padding = frame.padding || 0;
+    if (padding > 0 && frame.layoutMode !== "none") {
+      // Padded inner edges
+      xLines.push({ position: pos.x + padding, rect, type: "edge" });
+      xLines.push({
+        position: pos.x + parent.width - padding,
+        rect,
+        type: "edge",
+      });
+      yLines.push({ position: pos.y + padding, rect, type: "edge" });
+      yLines.push({
+        position: pos.y + parent.height - padding,
+        rect,
+        type: "edge",
+      });
+    }
+  }
+}
+
+// ============================================================================
+// Snapping Engine
+// ============================================================================
+
+/**
+ * Calculate snapped position for a rect based on snap lines.
+ *
+ * Simple algorithm:
+ * 1. Collect snap lines from siblings and optionally parent
+ * 2. Check if moving rect's edges/center are within threshold of any snap line
+ * 3. Snap to the closest match and generate guides
  */
 export function calculateSnapping(
-  obj: Rect,
-  otherObjects: CanvasObject[],
+  movingRect: Rect,
+  /** Sibling objects to snap to */
+  siblings: CanvasObject[],
+  /** All objects (for position calculation) */
   allObjects: CanvasObject[],
   mode: SnapMode,
-  resizeHandle?: ResizeHandle
+  resizeHandle?: ResizeHandle,
+  /** Parent object for inner-edge snapping */
+  parent?: CanvasObject | null
 ): SnapResult {
-  let { x, y, width, height } = obj;
+  let { x, y, width, height } = movingRect;
   const guides: Guide[] = [];
 
-  if (otherObjects.length === 0) {
+  // Collect snap lines from siblings
+  const { xLines, yLines } = collectSnapLines(siblings, allObjects);
+
+  // Add parent snap lines if provided
+  if (parent) {
+    addParentSnapLines(parent, allObjects, xLines, yLines);
+  }
+
+  // No snap targets
+  if (xLines.length === 0 && yLines.length === 0) {
     return { x, y, width, height, guides };
   }
 
-  // Collect snap targets with object references (using canvas-space positions)
-  const xTargets: SnapTarget[] = [];
-  const yTargets: SnapTarget[] = [];
+  // Current rect for guide calculation
+  const currentRect = (): Rect => ({ x, y, width, height });
 
-  for (const other of otherObjects) {
-    const canvasPos = getCanvasPosition(other, allObjects);
-    const rect: Rect = {
-      ...canvasPos,
-      width: other.width,
-      height: other.height,
-    };
+  // Try to snap X position
+  const trySnapX = (
+    edgePosition: number,
+    applySnap: (snapTo: number) => void
+  ): boolean => {
+    for (const line of xLines) {
+      if (Math.abs(edgePosition - line.position) < SNAP_THRESHOLD) {
+        applySnap(line.position);
+        guides.push(
+          createVerticalGuide(line.position, currentRect(), line.rect)
+        );
+        return true;
+      }
+    }
+    return false;
+  };
 
-    xTargets.push({ value: canvasPos.x, objectId: other.id, object: rect });
-    xTargets.push({
-      value: canvasPos.x + other.width,
-      objectId: other.id,
-      object: rect,
-    });
-    xTargets.push({
-      value: canvasPos.x + other.width / 2,
-      objectId: other.id,
-      object: rect,
-    });
-
-    yTargets.push({ value: canvasPos.y, objectId: other.id, object: rect });
-    yTargets.push({
-      value: canvasPos.y + other.height,
-      objectId: other.id,
-      object: rect,
-    });
-    yTargets.push({
-      value: canvasPos.y + other.height / 2,
-      objectId: other.id,
-      object: rect,
-    });
-  }
+  // Try to snap Y position
+  const trySnapY = (
+    edgePosition: number,
+    applySnap: (snapTo: number) => void
+  ): boolean => {
+    for (const line of yLines) {
+      if (Math.abs(edgePosition - line.position) < SNAP_THRESHOLD) {
+        applySnap(line.position);
+        guides.push(
+          createHorizontalGuide(line.position, currentRect(), line.rect)
+        );
+        return true;
+      }
+    }
+    return false;
+  };
 
   let snappedX = false;
   let snappedY = false;
 
-  // Helper to try snapping X position
-  const trySnapX = (
-    edgePos: number,
-    applySnap: (targetValue: number) => void
-  ) => {
-    if (snappedX) return;
-    for (const target of xTargets) {
-      if (Math.abs(edgePos - target.value) < SNAP_THRESHOLD) {
-        applySnap(target.value);
-        snappedX = true;
-        guides.push(
-          createVerticalGuide(target.value, { y, height }, target.object)
-        );
-        break;
-      }
-    }
-  };
-
-  // Helper to try snapping Y position
-  const trySnapY = (
-    edgePos: number,
-    applySnap: (targetValue: number) => void
-  ) => {
-    if (snappedY) return;
-    for (const target of yTargets) {
-      if (Math.abs(edgePos - target.value) < SNAP_THRESHOLD) {
-        applySnap(target.value);
-        snappedY = true;
-        guides.push(
-          createHorizontalGuide(target.value, { x, width }, target.object)
-        );
-        break;
-      }
-    }
-  };
-
+  // Move/Create mode: snap all edges and center
   if (mode === "move" || mode === "create") {
-    // Snap left edge
-    trySnapX(x, (v) => {
-      x = v;
-    });
-    // Snap right edge
-    trySnapX(x + width, (v) => {
-      x = v - width;
-    });
-    // Snap center X
-    trySnapX(x + width / 2, (v) => {
-      x = v - width / 2;
-    });
+    // X axis: left edge, right edge, center (in priority order)
+    if (!snappedX)
+      snappedX = trySnapX(x, (v) => {
+        x = v;
+      });
+    if (!snappedX)
+      snappedX = trySnapX(x + width, (v) => {
+        x = v - width;
+      });
+    if (!snappedX)
+      snappedX = trySnapX(x + width / 2, (v) => {
+        x = v - width / 2;
+      });
 
-    // Snap top edge
-    trySnapY(y, (v) => {
-      y = v;
-    });
-    // Snap bottom edge
-    trySnapY(y + height, (v) => {
-      y = v - height;
-    });
-    // Snap center Y
-    trySnapY(y + height / 2, (v) => {
-      y = v - height / 2;
-    });
+    // Y axis: top edge, bottom edge, center
+    if (!snappedY)
+      snappedY = trySnapY(y, (v) => {
+        y = v;
+      });
+    if (!snappedY)
+      snappedY = trySnapY(y + height, (v) => {
+        y = v - height;
+      });
+    if (!snappedY)
+      snappedY = trySnapY(y + height / 2, (v) => {
+        y = v - height / 2;
+      });
   }
 
-  // Edge snapping during resize
+  // Resize mode: only snap the edge being resized
   if (mode === "resize" && resizeHandle) {
     if (resizeHandle.includes("e")) {
       trySnapX(x + width, (v) => {
@@ -320,158 +303,5 @@ export function calculateSnapping(
     }
   }
 
-  // Gap snapping for move mode
-  if (mode === "move") {
-    const allGaps = calculateAllGaps(otherObjects, allObjects);
-
-    // Try horizontal gap snapping
-    for (const gap of allGaps.horizontal) {
-      if (snappedX) break;
-      for (const other of otherObjects) {
-        const otherCanvasPos = getCanvasPosition(other, allObjects);
-        const gapToRight = otherCanvasPos.x - (x + width);
-        if (
-          gapToRight > 0 &&
-          Math.abs(gapToRight - gap.distance) < SNAP_THRESHOLD
-        ) {
-          x = otherCanvasPos.x - width - gap.distance;
-          snappedX = true;
-          // Add guide for the new gap being created
-          guides.push({
-            type: "gap",
-            distance: gap.distance,
-            orientation: "vertical",
-            gapStart: x + width,
-            gapEnd: otherCanvasPos.x,
-            gapTopY: Math.max(y, otherCanvasPos.y),
-            gapBottomY: Math.min(y + height, otherCanvasPos.y + other.height),
-          });
-          // Add guides for ALL existing gaps with this distance
-          for (const existingGap of allGaps.horizontal) {
-            if (existingGap.distance === gap.distance) {
-              guides.push({
-                type: "gap",
-                distance: existingGap.distance,
-                orientation: "vertical",
-                gapStart: existingGap.start,
-                gapEnd: existingGap.end,
-                gapTopY: existingGap.topY,
-                gapBottomY: existingGap.bottomY,
-              });
-            }
-          }
-          break;
-        }
-        const gapToLeft = x - (otherCanvasPos.x + other.width);
-        if (
-          gapToLeft > 0 &&
-          Math.abs(gapToLeft - gap.distance) < SNAP_THRESHOLD
-        ) {
-          x = otherCanvasPos.x + other.width + gap.distance;
-          snappedX = true;
-          guides.push({
-            type: "gap",
-            distance: gap.distance,
-            orientation: "vertical",
-            gapStart: otherCanvasPos.x + other.width,
-            gapEnd: x,
-            gapTopY: Math.max(y, otherCanvasPos.y),
-            gapBottomY: Math.min(y + height, otherCanvasPos.y + other.height),
-          });
-          for (const existingGap of allGaps.horizontal) {
-            if (existingGap.distance === gap.distance) {
-              guides.push({
-                type: "gap",
-                distance: existingGap.distance,
-                orientation: "vertical",
-                gapStart: existingGap.start,
-                gapEnd: existingGap.end,
-                gapTopY: existingGap.topY,
-                gapBottomY: existingGap.bottomY,
-              });
-            }
-          }
-          break;
-        }
-      }
-    }
-
-    // Try vertical gap snapping
-    for (const gap of allGaps.vertical) {
-      if (snappedY) break;
-      for (const other of otherObjects) {
-        const otherCanvasPos = getCanvasPosition(other, allObjects);
-        const gapBelow = otherCanvasPos.y - (y + height);
-        if (
-          gapBelow > 0 &&
-          Math.abs(gapBelow - gap.distance) < SNAP_THRESHOLD
-        ) {
-          y = otherCanvasPos.y - height - gap.distance;
-          snappedY = true;
-          guides.push({
-            type: "gap",
-            distance: gap.distance,
-            orientation: "horizontal",
-            gapStart: y + height,
-            gapEnd: otherCanvasPos.y,
-            gapLeftX: Math.max(x, otherCanvasPos.x),
-            gapRightX: Math.min(x + width, otherCanvasPos.x + other.width),
-          });
-          for (const existingGap of allGaps.vertical) {
-            if (existingGap.distance === gap.distance) {
-              guides.push({
-                type: "gap",
-                distance: existingGap.distance,
-                orientation: "horizontal",
-                gapStart: existingGap.start,
-                gapEnd: existingGap.end,
-                gapLeftX: existingGap.leftX,
-                gapRightX: existingGap.rightX,
-              });
-            }
-          }
-          break;
-        }
-        const gapAbove = y - (otherCanvasPos.y + other.height);
-        if (
-          gapAbove > 0 &&
-          Math.abs(gapAbove - gap.distance) < SNAP_THRESHOLD
-        ) {
-          y = otherCanvasPos.y + other.height + gap.distance;
-          snappedY = true;
-          guides.push({
-            type: "gap",
-            distance: gap.distance,
-            orientation: "horizontal",
-            gapStart: otherCanvasPos.y + other.height,
-            gapEnd: y,
-            gapLeftX: Math.max(x, otherCanvasPos.x),
-            gapRightX: Math.min(x + width, otherCanvasPos.x + other.width),
-          });
-          for (const existingGap of allGaps.vertical) {
-            if (existingGap.distance === gap.distance) {
-              guides.push({
-                type: "gap",
-                distance: existingGap.distance,
-                orientation: "horizontal",
-                gapStart: existingGap.start,
-                gapEnd: existingGap.end,
-                gapLeftX: existingGap.leftX,
-                gapRightX: existingGap.rightX,
-              });
-            }
-          }
-          break;
-        }
-      }
-    }
-  }
-
   return { x, y, width, height, guides };
 }
-
-// ============================================================================
-// Snap Threshold Export (for use in creation snapping)
-// ============================================================================
-
-export { SNAP_THRESHOLD };
