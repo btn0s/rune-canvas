@@ -977,27 +977,64 @@ export function PropertyPanel({
   // ==========================================================================
   // HIDE MODE - Hover-based with slide-in animation
   // ==========================================================================
-  const isExpanded = isHovered;
+
+  // Generate abstract bars based on object type (varies the visual slightly)
+  const getCollapsedBars = () => {
+    if (isMixedTypes) return [16, 20, 12];
+    switch (commonType) {
+      case "frame":
+        return [20, 16, 20, 12, 16];
+      case "text":
+        return [20, 14, 18, 12];
+      case "image":
+        return [20, 16, 12];
+      default:
+        return [20, 16, 12];
+    }
+  };
 
   return (
-    <div
-      ref={panelRef}
-      className="absolute right-4 top-1/2 -translate-y-1/2 select-none"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onMouseDown={(e) => e.stopPropagation()}
-      onMouseUp={(e) => e.stopPropagation()}
-    >
+    <>
+      {/* Hover trigger zone with collapsed indicator */}
       <div
-        className="bg-card border border-border rounded-md p-3 transition-all duration-200 ease-out"
+        ref={panelRef}
+        className="absolute right-4 top-1/2 -translate-y-1/2 select-none"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        onMouseDown={(e) => e.stopPropagation()}
+        onMouseUp={(e) => e.stopPropagation()}
+      >
+        {/* Collapsed indicator - abstract bars (will be replaced with icon) */}
+        <div
+          className="flex flex-col items-start gap-1 p-2 transition-opacity duration-200"
+          style={{ opacity: isHovered ? 0 : 1 }}
+        >
+          {getCollapsedBars().map((width, i) => (
+            <div
+              key={i}
+              className="h-[2px] rounded-full bg-zinc-600"
+              style={{ width }}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Panel - completely separate, slides in from right */}
+      <div
+        className="absolute right-4 top-1/2 -translate-y-1/2 bg-card border border-border rounded-md p-3 select-none transition-all duration-200 ease-out"
         style={{
           width: 220,
-          opacity: isExpanded ? 1 : 0.5,
-          transform: isExpanded ? "translateX(0)" : "translateX(8px)",
+          opacity: isHovered ? 1 : 0,
+          transform: isHovered ? "translateX(0)" : "translateX(8px)",
+          pointerEvents: isHovered ? "auto" : "none",
         }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        onMouseDown={(e) => e.stopPropagation()}
+        onMouseUp={(e) => e.stopPropagation()}
       >
         <div className="flex flex-col gap-3">{renderContent()}</div>
       </div>
-    </div>
+    </>
   );
 }

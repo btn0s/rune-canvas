@@ -293,54 +293,55 @@ export function LayersPanel({
   // ==========================================================================
   // HIDE MODE - Hover-based with slide-in animation
   // ==========================================================================
-  const isExpanded = isHovered;
 
   return (
-    <div
-      className="absolute left-4 top-1/2 -translate-y-1/2 select-none"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onMouseDown={(e) => e.stopPropagation()}
-      onMouseUp={(e) => e.stopPropagation()}
-    >
-      {/* Debug hitbox visualization */}
-      {debug && (
-        <div
-          className="absolute border-2 border-dashed border-red-500/50 bg-red-500/10 pointer-events-none rounded"
-          style={{ inset: 0 }}
-        />
-      )}
-
-      {/* Collapsed state - minimal indicators */}
+    <>
+      {/* Hover trigger zone with collapsed indicator */}
       <div
-        className="flex flex-col gap-0.5 p-2 transition-opacity duration-200"
-        style={{
-          opacity: isExpanded ? 0 : 1,
-          pointerEvents: isExpanded ? "none" : "auto",
-        }}
+        className="absolute left-4 top-1/2 -translate-y-1/2 select-none"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        onMouseDown={(e) => e.stopPropagation()}
+        onMouseUp={(e) => e.stopPropagation()}
       >
-        {rootItems.map((item) => (
-          <CollapsedIndicator
-            key={item.id}
-            item={item}
-            items={items}
-            depth={0}
-            selectedIds={selectedIds}
+        {/* Debug hitbox visualization */}
+        {debug && (
+          <div
+            className="absolute border-2 border-dashed border-red-500/50 bg-red-500/10 pointer-events-none rounded"
+            style={{ inset: 0 }}
           />
-        ))}
+        )}
+
+        {/* Collapsed indicator - layer bars (will be replaced with icon) */}
+        <div
+          className="flex flex-col items-end gap-0.5 p-2 transition-opacity duration-200"
+          style={{ opacity: isHovered ? 0 : 1 }}
+        >
+          {rootItems.map((item) => (
+            <CollapsedIndicator
+              key={item.id}
+              item={item}
+              items={items}
+              depth={0}
+              selectedIds={selectedIds}
+            />
+          ))}
+        </div>
       </div>
 
-      {/* Expanded state - slides in from left */}
+      {/* Panel - completely separate, slides in from left */}
       <div
-        className="absolute top-1/2 left-0 -translate-y-1/2 bg-card border border-border rounded-md p-3 transition-all duration-200 ease-out"
+        className="absolute left-4 top-1/2 -translate-y-1/2 bg-card border border-border rounded-md p-3 select-none transition-all duration-200 ease-out"
         style={{
-          opacity: isExpanded ? 1 : 0,
-          transform: isExpanded
-            ? "translateX(0) translateY(-50%)"
-            : "translateX(-8px) translateY(-50%)",
-          pointerEvents: isExpanded ? "auto" : "none",
+          opacity: isHovered ? 1 : 0,
+          transform: isHovered ? "translateX(0)" : "translateX(-8px)",
+          pointerEvents: isHovered ? "auto" : "none",
           minWidth: 160,
         }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        onMouseDown={(e) => e.stopPropagation()}
+        onMouseUp={(e) => e.stopPropagation()}
       >
         <div className="flex flex-col gap-1">
           {rootItems.map((item) => (
@@ -369,6 +370,6 @@ export function LayersPanel({
           }
         }
       `}</style>
-    </div>
+    </>
   );
 }
