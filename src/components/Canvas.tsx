@@ -936,8 +936,11 @@ export function Canvas() {
       setHoveredObjectId(null);
     } else if (isResizing) {
       updateResize(canvasPoint, e.shiftKey, e.altKey, e.metaKey);
-      // Track crop mode: meta key + resizing a single image
-      const selectedObj = selectedIds.length === 1 ? objects.find(o => o.id === selectedIds[0]) : null;
+      // Track crop mode: meta key + resizing a single image (auto-switches to crop mode)
+      const selectedObj =
+        selectedIds.length === 1
+          ? objects.find((o) => o.id === selectedIds[0])
+          : null;
       setIsCropMode(e.metaKey && selectedObj?.type === "image");
       setHoveredObjectId(null);
     } else if (isMarqueeSelecting) {
@@ -1330,11 +1333,17 @@ export function Canvas() {
                       {obj.type === "image" &&
                         (() => {
                           const imgObj = obj as ImageObject;
-                          const showCropPreview = isCropMode && isSelected;
+                          // Show crop preview when meta+resizing any image
+                          const showCropPreview =
+                            isCropMode &&
+                            isSelected &&
+                            imgObj.fillMode === "crop" &&
+                            imgObj.cropWidth > 0 &&
+                            imgObj.cropHeight > 0;
 
                           return (
                             <>
-                              {/* Dimmed full image preview during crop mode */}
+                              {/* Dimmed full image preview during crop mode resize */}
                               {showCropPreview && (
                                 <img
                                   src={imgObj.src}
@@ -1362,7 +1371,7 @@ export function Canvas() {
                                   }}
                                 />
                               )}
-                              {/* Main cropped image */}
+                              {/* Main image */}
                               <div style={computeImageWrapperStyle(imgObj)}>
                                 <img
                                   src={imgObj.src}

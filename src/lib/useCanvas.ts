@@ -879,15 +879,18 @@ export function useCanvas() {
         name,
         type: "image",
         parentId,
-        x: position.x,
-        y: position.y,
+        // Center the image at the drop position
+        x: position.x - naturalWidth / 2,
+        y: position.y - naturalHeight / 2,
         width: naturalWidth,
         height: naturalHeight,
         opacity: 1,
         src,
         naturalWidth,
         naturalHeight,
-        // Initialize crop to full image (no cropping)
+        // Default to "fill" mode (like Figma)
+        fillMode: "fill",
+        // Initialize crop to full image (used when fillMode is "crop")
         cropX: 0,
         cropY: 0,
         cropWidth: naturalWidth,

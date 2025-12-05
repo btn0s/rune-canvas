@@ -811,14 +811,7 @@ function ImageProperties({
   const commonUpdate = onUpdate as (updates: Partial<CanvasObject>) => void;
   const isSingle = images.length === 1;
 
-  // Check if any image is cropped (crop differs from full image)
-  const isCropped = images.some(
-    (img) =>
-      img.cropX !== 0 ||
-      img.cropY !== 0 ||
-      img.cropWidth !== img.naturalWidth ||
-      img.cropHeight !== img.naturalHeight
-  );
+  const fillMode = getMixedValue(images, "fillMode") || "fill";
 
   return (
     <>
@@ -834,66 +827,84 @@ function ImageProperties({
         </div>
       </div>
 
-      {/* Crop Section */}
+      {/* Image Fill Section */}
       <div className="flex flex-col gap-1.5">
-        <SectionLabel>Crop</SectionLabel>
-        <div className="grid grid-cols-2 gap-1.5">
-          <NumberInput
-            label="X"
-            value={getMixedValue(images, "cropX")}
-            onChange={(v) => onUpdate({ cropX: Math.max(0, v) })}
-            min={0}
-          />
-          <NumberInput
-            label="Y"
-            value={getMixedValue(images, "cropY")}
-            onChange={(v) => onUpdate({ cropY: Math.max(0, v) })}
-            min={0}
-          />
-          <NumberInput
-            label="W"
-            value={getMixedValue(images, "cropWidth")}
-            onChange={(v) => onUpdate({ cropWidth: Math.max(1, v) })}
-            min={1}
-          />
-          <NumberInput
-            label="H"
-            value={getMixedValue(images, "cropHeight")}
-            onChange={(v) => onUpdate({ cropHeight: Math.max(1, v) })}
-            min={1}
-          />
-        </div>
-        {isCropped && (
-          <PropertyButton
-            onClick={() => {
-              // Reset each image's crop to its full natural size
-              images.forEach((img) => {
-                onUpdate({
-                  cropX: 0,
-                  cropY: 0,
-                  cropWidth: img.naturalWidth,
-                  cropHeight: img.naturalHeight,
-                });
-              });
-            }}
-          >
-            Reset crop
-          </PropertyButton>
-        )}
-        <span className="text-[10px] text-muted-foreground">
-          Hold ⌘ while resizing to crop
-        </span>
-      </div>
+        <SectionLabel>Image</SectionLabel>
 
-      {/* Original dimensions - only show for single selection */}
-      {isSingle && (
-        <div className="flex flex-col gap-1">
-          <SectionLabel>Original</SectionLabel>
-          <span className="text-xs font-mono text-muted-foreground">
-            {images[0].naturalWidth} × {images[0].naturalHeight}
-          </span>
+        {/* Fill Mode Selector */}
+        <div className="flex gap-1">
+          {(
+            [
+              { mode: "fill", label: "Fill" },
+              { mode: "fit", label: "Fit" },
+              { mode: "crop", label: "Crop" },
+            ] as const
+          ).map(({ mode, label }) => (
+            <button
+              key={mode}
+              className={`flex-1 h-7 rounded-md text-xs transition-colors ${
+                !isMixed(fillMode) && fillMode === mode
+                  ? "bg-primary/20 text-primary"
+                  : "bg-input/30 text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => {
+                // When switching to crop mode, initialize crop to current frame bounds
+                if (mode === "crop") {
+                  images.forEach((img) => {
+                    // Calculate what crop values would show the same view as "fill" mode
+                    const frameAspect = img.width / img.height;
+                    const imageAspect = img.naturalWidth / img.naturalHeight;
+
+                    let cropW, cropH, cropX, cropY;
+                    if (frameAspect > imageAspect) {
+                      // Frame is wider - crop top/bottom
+                      cropW = img.naturalWidth;
+                      cropH = img.naturalWidth / frameAspect;
+                      cropX = 0;
+                      cropY = (img.naturalHeight - cropH) / 2;
+                    } else {
+                      // Frame is taller - crop left/right
+                      cropH = img.naturalHeight;
+                      cropW = img.naturalHeight * frameAspect;
+                      cropX = (img.naturalWidth - cropW) / 2;
+                      cropY = 0;
+                    }
+
+                    onUpdate({
+                      fillMode: "crop",
+                      cropX,
+                      cropY,
+                      cropWidth: cropW,
+                      cropHeight: cropH,
+                    });
+                  });
+                } else {
+                  onUpdate({ fillMode: mode });
+                }
+              }}
+            >
+              {label}
+            </button>
+          ))}
         </div>
-      )}
+
+        {/* Crop mode hint */}
+        {!isMixed(fillMode) && fillMode === "crop" && (
+          <span className="text-[10px] text-muted-foreground">
+            Hold ⌘ while resizing to adjust crop
+          </span>
+        )}
+
+        {/* Original dimensions - only show for single selection */}
+        {isSingle && (
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Original</span>
+            <span className="text-xs font-mono text-muted-foreground">
+              {images[0].naturalWidth} × {images[0].naturalHeight}
+            </span>
+          </div>
+        )}
+      </div>
     </>
   );
 }

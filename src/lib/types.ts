@@ -113,12 +113,16 @@ export interface FrameObject extends BaseObject {
   padding: number;
 }
 
+export type ImageFillMode = "fill" | "fit" | "crop";
+
 export interface ImageObject extends BaseObject {
   type: "image";
   src: string;
   naturalWidth: number;
   naturalHeight: number;
-  // Crop state - defines which portion of the image is visible
+  // Fill mode determines how the image fits within the frame
+  fillMode: ImageFillMode;
+  // Crop state - only used when fillMode is "crop"
   // Values are in image pixels (0 to naturalWidth/Height)
   cropX: number; // Left edge of visible area
   cropY: number; // Top edge of visible area

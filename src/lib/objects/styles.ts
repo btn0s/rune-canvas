@@ -249,7 +249,7 @@ export function computeTextStyle(
 // ============================================================================
 
 /**
- * Compute styles for the image wrapper (handles overflow clipping for crop).
+ * Compute styles for the image wrapper (handles overflow clipping).
  */
 export function computeImageWrapperStyle(image: ImageObject): CSSProperties {
   return {
@@ -262,41 +262,68 @@ export function computeImageWrapperStyle(image: ImageObject): CSSProperties {
 
 /**
  * Compute styles for image content (the actual <img> element).
- * Handles crop by scaling and positioning the image within its wrapper.
+ * Handles different fill modes: fill (cover), fit (contain), crop (manual).
  */
 export function computeImageStyle(image: ImageObject): CSSProperties {
-  // If no crop data, render at display size
-  if (!image.cropWidth || !image.cropHeight) {
-    return {
-      width: image.width,
-      height: image.height,
-      maxWidth: "unset",
-      objectFit: "cover",
-      display: "block",
-    };
+  const fillMode = image.fillMode || "fill";
+
+  switch (fillMode) {
+    case "fill":
+      // Cover: scale to fill the frame, crop as needed, centered
+      return {
+        width: "100%",
+        height: "100%",
+        objectFit: "cover",
+        objectPosition: "center",
+        display: "block",
+      };
+
+    case "fit":
+      // Contain: scale to fit within frame, letterbox as needed, centered
+      return {
+        width: "100%",
+        height: "100%",
+        objectFit: "contain",
+        objectPosition: "center",
+        display: "block",
+      };
+
+    case "crop":
+    default: {
+      // Manual crop: use cropX/Y/Width/Height to position image
+      if (!image.cropWidth || !image.cropHeight) {
+        // Fallback if no crop data
+        return {
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          display: "block",
+        };
+      }
+
+      // Calculate scale: display size / crop size
+      const scaleX = image.width / image.cropWidth;
+      const scaleY = image.height / image.cropHeight;
+
+      // The full image size when scaled
+      const scaledWidth = image.naturalWidth * scaleX;
+      const scaledHeight = image.naturalHeight * scaleY;
+
+      // Offset based on crop position
+      const offsetX = -image.cropX * scaleX;
+      const offsetY = -image.cropY * scaleY;
+
+      return {
+        position: "absolute",
+        width: scaledWidth,
+        height: scaledHeight,
+        left: offsetX,
+        top: offsetY,
+        maxWidth: "unset",
+        display: "block",
+      };
+    }
   }
-
-  // Calculate scale: display size / crop size
-  const scaleX = image.width / image.cropWidth;
-  const scaleY = image.height / image.cropHeight;
-
-  // The full image size when scaled
-  const scaledWidth = image.naturalWidth * scaleX;
-  const scaledHeight = image.naturalHeight * scaleY;
-
-  // Offset based on crop position
-  const offsetX = -image.cropX * scaleX;
-  const offsetY = -image.cropY * scaleY;
-
-  return {
-    position: "absolute",
-    width: scaledWidth,
-    height: scaledHeight,
-    left: offsetX,
-    top: offsetY,
-    maxWidth: "unset",
-    display: "block",
-  };
 }
 
 // ============================================================================

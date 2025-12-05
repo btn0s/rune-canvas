@@ -91,11 +91,68 @@ export function useResize(config: ResizeConfig, actions: ResizeActions) {
         history.captureOnce();
       }
 
-      // Check if we're in crop mode (meta key + single image selected)
+      // Check if we're in crop mode (meta key + single image)
       const selectedObj = objects.find((o) => o.id === selectedIds[0]);
-      const isCropMode = metaKey && selectedIds.length === 1 && selectedObj?.type === "image";
+      const isImage = selectedIds.length === 1 && selectedObj?.type === "image";
+      const isCropMode = metaKey && isImage;
 
       if (isCropMode) {
+        const imageObj = selectedObj as ImageObject;
+
+        // If image is not in crop mode, switch it and initialize crop values
+        if (imageObj.fillMode !== "crop") {
+          // Calculate crop values that match current "fill" view
+          const frameAspect = imageObj.width / imageObj.height;
+          const imageAspect = imageObj.naturalWidth / imageObj.naturalHeight;
+
+          let initCropW, initCropH, initCropX, initCropY;
+          if (frameAspect > imageAspect) {
+            // Frame is wider - crop top/bottom
+            initCropW = imageObj.naturalWidth;
+            initCropH = imageObj.naturalWidth / frameAspect;
+            initCropX = 0;
+            initCropY = (imageObj.naturalHeight - initCropH) / 2;
+          } else {
+            // Frame is taller - crop left/right
+            initCropH = imageObj.naturalHeight;
+            initCropW = imageObj.naturalHeight * frameAspect;
+            initCropX = (imageObj.naturalWidth - initCropW) / 2;
+            initCropY = 0;
+          }
+
+          // Update to crop mode with calculated values
+          setObjects((prev) =>
+            prev.map((o) => {
+              if (o.id !== imageObj.id) return o;
+              return {
+                ...o,
+                fillMode: "crop",
+                cropX: initCropX,
+                cropY: initCropY,
+                cropWidth: initCropW,
+                cropHeight: initCropH,
+              } as ImageObject;
+            })
+          );
+
+          // Update the refs so the crop logic below uses correct values
+          if (resizeBoundsStart.current) {
+            resizeBoundsStart.current.frames =
+              resizeBoundsStart.current.frames.map((f) => {
+                if (f.id !== imageObj.id) return f;
+                return {
+                  ...f,
+                  fillMode: "crop",
+                  cropX: initCropX,
+                  cropY: initCropY,
+                  cropWidth: initCropW,
+                  cropHeight: initCropH,
+                } as ImageObject;
+              });
+          }
+
+          return; // Let next frame handle the actual crop resize
+        }
         // CROP MODE: Change display size while keeping image scale constant
         // The image "stays in place" - we're moving the frame/mask edges
         const img = selectedObj as ImageObject;
@@ -141,7 +198,7 @@ export function useResize(config: ResizeConfig, actions: ResizeActions) {
           newCropX = origImg.cropX - cropWidthDelta;
           // Position moves with the edge
           newX = origImg.x + dx;
-          
+
           // Clamp: can't reveal more than available image on left
           if (newCropX < 0) {
             const overflow = -newCropX;
@@ -170,7 +227,7 @@ export function useResize(config: ResizeConfig, actions: ResizeActions) {
           newCropHeight = origImg.cropHeight + cropHeightDelta;
           newCropY = origImg.cropY - cropHeightDelta;
           newY = origImg.y + dy;
-          
+
           // Clamp: can't reveal more than available image on top
           if (newCropY < 0) {
             const overflow = -newCropY;
