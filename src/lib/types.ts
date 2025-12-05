@@ -137,6 +137,8 @@ export type CanvasObject = FrameObject | ImageObject | TextObject;
 
 export type Tool = "select" | "hand" | "frame" | "text" | "shader";
 
+export type SidebarMode = "show" | "hide";
+
 export type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
 
 export interface Guide {

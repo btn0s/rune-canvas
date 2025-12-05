@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ChevronRight, Frame, Type, Image } from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import type { SidebarMode } from "@/lib/types";
 
 interface LayerItem {
   id: string;
@@ -14,7 +15,13 @@ interface LayerItem {
 }
 
 // Icon component for layer type
-function LayerTypeIcon({ type, className }: { type: string; className?: string }) {
+function LayerTypeIcon({
+  type,
+  className,
+}: {
+  type: string;
+  className?: string;
+}) {
   const iconClass = className || "w-3 h-3 text-zinc-500 shrink-0";
   switch (type) {
     case "frame":
@@ -33,6 +40,7 @@ interface LayersPanelProps {
   selectedIds: string[];
   onSelect: (ids: string[] | null, addToSelection?: boolean) => void;
   debug?: boolean;
+  sidebarMode: SidebarMode;
 }
 
 // Get children of a parent item (in reverse z-order - highest first)
@@ -40,11 +48,14 @@ function getChildren(items: LayerItem[], parentId: string): LayerItem[] {
   return [...items.filter((item) => item.parentId === parentId)].reverse();
 }
 
+// =============================================================================
+// Layer Tree Item - renders a single layer with its children
+// =============================================================================
+
 function LayerTreeItem({
   item,
   items,
   depth,
-  isHovered,
   selectedIds,
   animatedIds,
   onSelect,
@@ -52,7 +63,6 @@ function LayerTreeItem({
   item: LayerItem;
   items: LayerItem[];
   depth: number;
-  isHovered: boolean;
   selectedIds: string[];
   animatedIds: Set<string>;
   onSelect: (ids: string[] | null, addToSelection?: boolean) => void;
@@ -77,47 +87,35 @@ function LayerTreeItem({
     setIsOpen(!isOpen);
   };
 
+  const itemStyle: React.CSSProperties = {
+    paddingLeft: 8 + depth * 16,
+    opacity: isNew ? 0 : 1,
+    transform: isNew ? "translateX(-10px)" : "translateX(0)",
+    animation: isNew ? "slideIn 300ms ease-out forwards" : undefined,
+  };
+
   if (!hasKids) {
     return (
       <div
-        className={`
-          relative flex items-center cursor-pointer transition-all duration-300 ease-out
-          ${isHovered ? "hover:bg-zinc-700/50 rounded" : "justify-end"}
-        `}
-        style={{
-          height: isHovered ? 24 : 2,
-          opacity: isNew ? 0 : 1,
-          transform: isNew ? "translateX(-10px)" : "translateX(0)",
-          animation: isNew ? "slideIn 300ms ease-out forwards" : undefined,
-          paddingLeft: isHovered ? 8 + depth * 16 : 0,
-          paddingRight: isHovered ? 8 : depth > 0 ? (depth - 1) * 4 : 0,
-          width: isHovered ? "auto" : 24,
-        }}
+        className="relative flex items-center h-6 cursor-pointer hover:bg-zinc-700/50 rounded pr-2"
+        style={itemStyle}
         onClick={handleClick}
       >
-        {!isHovered && (
-          <div
-            className={`h-[2px] rounded-full ${
-              isSelected ? "bg-blue-400/70" : "bg-zinc-600"
+        <div className="flex items-center gap-1.5">
+          <LayerTypeIcon
+            type={item.type}
+            className={`w-3 h-3 ${
+              isSelected ? "text-blue-400" : "text-zinc-500"
             }`}
-            style={{ width: depth > 0 ? 12 : 20 }}
           />
-        )}
-        {isHovered && (
-          <div className="flex items-center gap-1.5">
-            <LayerTypeIcon 
-              type={item.type} 
-              className={`w-3 h-3 ${isSelected ? "text-blue-400" : "text-zinc-500"}`} 
-            />
-            <span
-              className={`text-xs whitespace-nowrap ${
-                isSelected ? "text-blue-400" : "text-zinc-500"
-              }`}
-            >
-              {item.name}
-            </span>
-          </div>
-        )}
+          <span
+            className={`text-xs whitespace-nowrap ${
+              isSelected ? "text-blue-400" : "text-zinc-500"
+            }`}
+          >
+            {item.name}
+          </span>
+        </div>
       </div>
     );
   }
@@ -125,66 +123,41 @@ function LayerTreeItem({
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <div
-        className={`
-          relative flex items-center cursor-pointer transition-all duration-300 ease-out
-          ${isHovered ? "hover:bg-zinc-700/50 rounded" : "justify-end"}
-        `}
-        style={{
-          height: isHovered ? 24 : 2,
-          opacity: isNew ? 0 : 1,
-          transform: isNew ? "translateX(-10px)" : "translateX(0)",
-          animation: isNew ? "slideIn 300ms ease-out forwards" : undefined,
-          paddingLeft: isHovered ? 8 + depth * 16 : 0,
-          paddingRight: isHovered ? 8 : depth > 0 ? (depth - 1) * 4 : 0,
-          width: isHovered ? "auto" : 24,
-        }}
+        className="relative flex items-center h-6 cursor-pointer hover:bg-zinc-700/50 rounded pr-2"
+        style={itemStyle}
         onClick={handleClick}
       >
-        {!isHovered && (
-          <div
-            className={`h-[2px] rounded-full ${
-              isSelected ? "bg-blue-400/70" : "bg-zinc-600"
-            }`}
-            style={{ width: depth > 0 ? 12 : 20 }}
-          />
-        )}
-        {isHovered && (
-          <>
-            <CollapsibleTrigger asChild onClick={handleChevronClick}>
-              <button className="p-0.5 -ml-1 mr-0.5 hover:bg-zinc-600/50 rounded transition-colors">
-                <ChevronRight
-                  className={`w-3 h-3 text-zinc-500 transition-transform duration-200 ${
-                    isOpen ? "rotate-90" : ""
-                  }`}
-                />
-              </button>
-            </CollapsibleTrigger>
-            <LayerTypeIcon 
-              type={item.type} 
-              className={`w-3 h-3 ${isSelected ? "text-blue-400" : "text-zinc-500"}`} 
-            />
-            <span
-              className={`text-xs whitespace-nowrap ml-1 ${
-                isSelected ? "text-blue-400" : "text-zinc-500"
+        <CollapsibleTrigger asChild onClick={handleChevronClick}>
+          <button className="p-0.5 -ml-1 mr-0.5 hover:bg-zinc-600/50 rounded transition-colors">
+            <ChevronRight
+              className={`w-3 h-3 text-zinc-500 transition-transform duration-200 ${
+                isOpen ? "rotate-90" : ""
               }`}
-            >
-              {item.name}
-            </span>
-          </>
-        )}
+            />
+          </button>
+        </CollapsibleTrigger>
+        <LayerTypeIcon
+          type={item.type}
+          className={`w-3 h-3 ${
+            isSelected ? "text-blue-400" : "text-zinc-500"
+          }`}
+        />
+        <span
+          className={`text-xs whitespace-nowrap ml-1 ${
+            isSelected ? "text-blue-400" : "text-zinc-500"
+          }`}
+        >
+          {item.name}
+        </span>
       </div>
       <CollapsibleContent>
-        <div
-          className={`flex flex-col ${!isHovered ? "items-end" : ""}`}
-          style={{ gap: isHovered ? 4 : 2, paddingTop: isHovered ? 4 : 2 }}
-        >
+        <div className="flex flex-col gap-1 pt-1">
           {children.map((child) => (
             <LayerTreeItem
               key={child.id}
               item={child}
               items={items}
               depth={depth + 1}
-              isHovered={isHovered}
               selectedIds={selectedIds}
               animatedIds={animatedIds}
               onSelect={onSelect}
@@ -196,58 +169,62 @@ function LayerTreeItem({
   );
 }
 
+// =============================================================================
+// Collapsed Indicator - minimal 2px bars for hide mode
+// =============================================================================
+
+function CollapsedIndicator({
+  item,
+  items,
+  depth,
+  selectedIds,
+}: {
+  item: LayerItem;
+  items: LayerItem[];
+  depth: number;
+  selectedIds: string[];
+}) {
+  const isSelected = selectedIds.includes(item.id);
+  const children = getChildren(items, item.id);
+
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <div
+        className={`h-[2px] rounded-full ${
+          isSelected ? "bg-blue-400/70" : "bg-zinc-600"
+        }`}
+        style={{
+          width: depth > 0 ? 12 : 20,
+          marginRight: depth > 0 ? (depth - 1) * 4 : 0,
+        }}
+      />
+      {children.map((child) => (
+        <CollapsedIndicator
+          key={child.id}
+          item={child}
+          items={items}
+          depth={depth + 1}
+          selectedIds={selectedIds}
+        />
+      ))}
+    </div>
+  );
+}
+
+// =============================================================================
+// Main LayersPanel Component
+// =============================================================================
+
 export function LayersPanel({
   items,
   selectedIds,
   onSelect,
   debug = false,
+  sidebarMode,
 }: LayersPanelProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [animatedIds, setAnimatedIds] = useState<Set<string>>(new Set());
-  const [isOverlapping, setIsOverlapping] = useState(false);
-  const [minHeight, setMinHeight] = useState<number>(0);
   const prevItemIds = useRef<Set<string>>(new Set());
-  const contentRef = useRef<HTMLDivElement>(null);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-
-  // Check if panel overlaps with any item
-  const checkOverlap = useCallback(() => {
-    setIsOverlapping(items.length > 0);
-  }, [items]);
-
-  useEffect(() => {
-    checkOverlap();
-  }, [checkOverlap]);
-
-  // Track and lock height while hovered using RAF for performance
-  useEffect(() => {
-    if (!isHovered) {
-      setMinHeight(0);
-      return;
-    }
-
-    let rafId: number;
-    let isRunning = true;
-
-    const measureHeight = () => {
-      if (!isRunning) return;
-
-      if (wrapperRef.current) {
-        const rect = wrapperRef.current.getBoundingClientRect();
-        setMinHeight((prev) => Math.max(prev, rect.height));
-      }
-
-      rafId = requestAnimationFrame(measureHeight);
-    };
-
-    // Start RAF loop
-    rafId = requestAnimationFrame(measureHeight);
-
-    return () => {
-      isRunning = false;
-      cancelAnimationFrame(rafId);
-    };
-  }, [isHovered]);
 
   // Track new items for animation
   useEffect(() => {
@@ -275,55 +252,111 @@ export function LayersPanel({
   const rootItems = [
     ...items.filter((item) => item.parentId === null),
   ].reverse();
-  const showGlassyBg = isHovered && isOverlapping;
+
+  // No items to show
+  if (items.length === 0) return null;
+
+  // ==========================================================================
+  // SHOW MODE - Full height sidebar, always visible
+  // ==========================================================================
+  if (sidebarMode === "show") {
+    return (
+      <div
+        className="absolute left-0 top-0 bottom-0 w-56 bg-card border-r border-border select-none flex flex-col"
+        onMouseDown={(e) => e.stopPropagation()}
+        onMouseUp={(e) => e.stopPropagation()}
+      >
+        <div className="p-3 border-b border-border">
+          <span className="text-xs font-medium text-muted-foreground">
+            Layers
+          </span>
+        </div>
+        <div className="flex-1 overflow-y-auto p-2">
+          <div className="flex flex-col gap-1">
+            {rootItems.map((item) => (
+              <LayerTreeItem
+                key={item.id}
+                item={item}
+                items={items}
+                depth={0}
+                selectedIds={selectedIds}
+                animatedIds={animatedIds}
+                onSelect={onSelect}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================================================
+  // HIDE MODE - Hover-based with slide-in animation
+  // ==========================================================================
+  const isExpanded = isHovered;
 
   return (
     <div
-      ref={wrapperRef}
-      className="absolute left-4 top-1/2 -translate-y-1/2 select-none flex items-center"
+      className="absolute left-4 top-1/2 -translate-y-1/2 select-none"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onMouseDown={(e) => e.stopPropagation()}
       onMouseUp={(e) => e.stopPropagation()}
-      style={{
-        // Use min-height to prevent shrinking while hovered
-        minHeight: isHovered && minHeight > 0 ? minHeight : undefined,
-      }}
     >
       {/* Debug hitbox visualization */}
       {debug && (
         <div
           className="absolute border-2 border-dashed border-red-500/50 bg-red-500/10 pointer-events-none rounded"
-          style={{
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-          }}
+          style={{ inset: 0 }}
         />
       )}
+
+      {/* Collapsed state - minimal indicators */}
       <div
-        ref={contentRef}
-        className={`
-          flex flex-col transition-all duration-200 rounded-md p-3
-          ${showGlassyBg ? "bg-card border border-border" : ""}
-          ${!isHovered ? "items-end" : ""}
-        `}
-        style={{ gap: isHovered ? 4 : 2 }}
+        className="flex flex-col gap-0.5 p-2 transition-opacity duration-200"
+        style={{
+          opacity: isExpanded ? 0 : 1,
+          pointerEvents: isExpanded ? "none" : "auto",
+        }}
       >
         {rootItems.map((item) => (
-          <LayerTreeItem
+          <CollapsedIndicator
             key={item.id}
             item={item}
             items={items}
             depth={0}
-            isHovered={isHovered}
             selectedIds={selectedIds}
-            animatedIds={animatedIds}
-            onSelect={onSelect}
           />
         ))}
       </div>
+
+      {/* Expanded state - slides in from left */}
+      <div
+        className="absolute top-1/2 left-0 -translate-y-1/2 bg-card border border-border rounded-md p-3 transition-all duration-200 ease-out"
+        style={{
+          opacity: isExpanded ? 1 : 0,
+          transform: isExpanded
+            ? "translateX(0) translateY(-50%)"
+            : "translateX(-8px) translateY(-50%)",
+          pointerEvents: isExpanded ? "auto" : "none",
+          minWidth: 160,
+        }}
+      >
+        <div className="flex flex-col gap-1">
+          {rootItems.map((item) => (
+            <LayerTreeItem
+              key={item.id}
+              item={item}
+              items={items}
+              depth={0}
+              selectedIds={selectedIds}
+              animatedIds={animatedIds}
+              onSelect={onSelect}
+            />
+          ))}
+        </div>
+      </div>
+
       <style>{`
         @keyframes slideIn {
           from {

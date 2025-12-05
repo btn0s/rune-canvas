@@ -11,7 +11,7 @@ import {
   useKeyboardShortcuts,
   type Shortcut,
 } from "../lib/useKeyboardShortcuts";
-import type { ResizeHandle, Tool } from "../lib/types";
+import type { ResizeHandle, Tool, SidebarMode } from "../lib/types";
 import { getCanvasPosition } from "../lib/geometry";
 import {
   type CanvasObject,
@@ -311,6 +311,9 @@ export function Canvas() {
 
   // Debug mode for hitbox visualization
   const [debugMode, setDebugMode] = useState(false);
+
+  // Sidebar visibility mode: "show" = full sidebars, "hide" = hover-based
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>("hide");
 
   // Hovered resize handle for cursor
   const [hoveredHandle, setHoveredHandle] = useState<ResizeHandle | null>(null);
@@ -1099,6 +1102,13 @@ export function Canvas() {
         modifiers: { meta: true, alt: true },
         action: () => frameSelection(),
       },
+
+      // === View ===
+      {
+        key: ".",
+        modifiers: { meta: true },
+        action: () => setSidebarMode((m) => (m === "show" ? "hide" : "show")),
+      },
     ],
     [
       setTool,
@@ -1120,6 +1130,7 @@ export function Canvas() {
       bringForward,
       sendBackward,
       frameSelection,
+      setSidebarMode,
     ]
   );
 
@@ -1450,6 +1461,7 @@ export function Canvas() {
               selectedIds={selectedIds}
               onSelect={select}
               debug={debugMode}
+              sidebarMode={sidebarMode}
             />
 
             {/* Property panel */}
@@ -1457,6 +1469,7 @@ export function Canvas() {
               selectedObjects={selectedObjects}
               allObjects={objects}
               onUpdate={updateObject}
+              sidebarMode={sidebarMode}
             />
 
             {/* Zoom indicator */}

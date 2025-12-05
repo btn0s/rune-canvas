@@ -1,9 +1,10 @@
-import {
+import type {
   CanvasObject,
   FrameObject,
   TextObject,
   ImageObject,
   BlendMode,
+  SidebarMode,
 } from "../lib/types";
 import { useState, useRef } from "react";
 import { SelectItem } from "./ui/select";
@@ -58,6 +59,7 @@ interface PropertyPanelProps {
   selectedObjects: CanvasObject[];
   allObjects: CanvasObject[];
   onUpdate: (id: string, updates: Partial<CanvasObject>) => void;
+  sidebarMode: SidebarMode;
 }
 
 /** Props for type-specific property components - supports single or multiple objects */
@@ -875,6 +877,7 @@ export function PropertyPanel({
   selectedObjects,
   allObjects: _allObjects,
   onUpdate,
+  sidebarMode,
 }: PropertyPanelProps) {
   const [isHovered, setIsHovered] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -948,24 +951,52 @@ export function PropertyPanel({
     }
   };
 
+  // ==========================================================================
+  // SHOW MODE - Full height sidebar, always visible
+  // ==========================================================================
+  if (sidebarMode === "show") {
+    return (
+      <div
+        ref={panelRef}
+        className="absolute right-0 top-0 bottom-0 w-56 bg-card border-l border-border select-none flex flex-col"
+        onMouseDown={(e) => e.stopPropagation()}
+        onMouseUp={(e) => e.stopPropagation()}
+      >
+        <div className="p-3 border-b border-border">
+          <span className="text-xs font-medium text-muted-foreground">
+            Properties
+          </span>
+        </div>
+        <div className="flex-1 overflow-y-auto p-3">
+          <div className="flex flex-col gap-3">{renderContent()}</div>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================================================
+  // HIDE MODE - Hover-based with slide-in animation
+  // ==========================================================================
+  const isExpanded = isHovered;
+
   return (
     <div
       ref={panelRef}
-      className="absolute right-4 top-1/2 -translate-y-1/2 p-3 -m-3 select-none"
+      className="absolute right-4 top-1/2 -translate-y-1/2 select-none"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onMouseDown={(e) => e.stopPropagation()}
       onMouseUp={(e) => e.stopPropagation()}
     >
       <div
-        className={`
-          flex flex-col gap-3 transition-all duration-200 rounded-md p-3
-          bg-card border border-border
-          ${isHovered ? "opacity-100" : "opacity-50"}
-        `}
-        style={{ width: 220 }}
+        className="bg-card border border-border rounded-md p-3 transition-all duration-200 ease-out"
+        style={{
+          width: 220,
+          opacity: isExpanded ? 1 : 0.5,
+          transform: isExpanded ? "translateX(0)" : "translateX(8px)",
+        }}
       >
-        {renderContent()}
+        <div className="flex flex-col gap-3">{renderContent()}</div>
       </div>
     </div>
   );
