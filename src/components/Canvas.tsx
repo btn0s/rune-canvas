@@ -163,31 +163,6 @@ const TOOLS: {
     ),
   },
   {
-    id: "rectangle",
-    label: "Rectangle",
-    shortcut: "R",
-    icon: (
-      <svg
-        viewBox="0 0 20 20"
-        fill="none"
-        stroke="currentColor"
-        className="size-5"
-      >
-        <rect
-          x="3"
-          y="3"
-          width="14"
-          height="14"
-          rx="3"
-          ry="3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="2"
-        />
-      </svg>
-    ),
-  },
-  {
     id: "text",
     label: "Text",
     shortcut: "T",
@@ -882,7 +857,7 @@ export function Canvas() {
         }
         startMarquee(canvasPoint);
       }
-    } else if (tool === "frame" || tool === "rectangle") {
+    } else if (tool === "frame") {
       startCreate(canvasPoint);
     } else if (tool === "text") {
       createText(canvasPoint);
@@ -951,7 +926,6 @@ export function Canvas() {
       { key: "Escape", action: () => setTool("select") },
       { key: "h", action: () => setTool("hand") },
       { key: "f", action: () => setTool("frame") },
-      { key: "r", action: () => setTool("rectangle") },
       { key: "t", action: () => setTool("text") },
 
       // === Editing (Cmd/Ctrl) ===
@@ -1144,7 +1118,7 @@ export function Canvas() {
     ? getHandleCursor(hoveredHandle)
     : tool === "hand" || spaceHeld
     ? "grab"
-    : tool === "frame" || tool === "rectangle" || tool === "text"
+    : tool === "frame" || tool === "text"
     ? "crosshair"
     : hoveredHandle
     ? getHandleCursor(hoveredHandle)
@@ -1289,7 +1263,17 @@ export function Canvas() {
                               frame!.heightMode === "expand"
                                 ? "1"
                                 : undefined,
-                            backgroundColor: frame!.fill,
+                            backgroundColor: frame!.fill
+                              ? `rgba(${parseInt(
+                                  frame!.fill.slice(1, 3),
+                                  16
+                                )}, ${parseInt(
+                                  frame!.fill.slice(3, 5),
+                                  16
+                                )}, ${parseInt(frame!.fill.slice(5, 7), 16)}, ${
+                                  frame!.fillOpacity ?? 1
+                                })`
+                              : undefined,
                             boxSizing: "border-box",
                             // Blend mode
                             mixBlendMode: frame!.blendMode || undefined,

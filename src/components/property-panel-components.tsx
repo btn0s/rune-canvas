@@ -1,14 +1,18 @@
+import { useState, useEffect } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectTrigger,
-  SelectValue,
-} from "./ui/select";
+import { Select, SelectContent, SelectTrigger, SelectValue } from "./ui/select";
 import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Plus, Eye, EyeOff, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  ColorPicker,
+  ColorPickerSelection,
+  ColorPickerHue,
+  ColorPickerAlpha,
+  ColorPickerEyeDropper,
+} from "./ui/color-picker";
 
 // Consistent label color for all property panel labels
 const LABEL_COLOR = "text-muted-foreground";
@@ -107,7 +111,50 @@ export function NumberInput({
   );
 }
 
-// Color input with swatch, hex, and opacity
+// Editable text input that syncs with external value but allows free typing
+function EditableField({
+  value,
+  onChange,
+  onCommit,
+  className,
+  ...props
+}: {
+  value: string;
+  onChange?: (value: string) => void;
+  onCommit: (value: string) => void;
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange">) {
+  const [localValue, setLocalValue] = useState(value);
+  const [isFocused, setIsFocused] = useState(false);
+
+  // Sync from prop when not focused
+  useEffect(() => {
+    if (!isFocused) setLocalValue(value);
+  }, [value, isFocused]);
+
+  return (
+    <input
+      {...props}
+      value={localValue}
+      onChange={(e) => {
+        setLocalValue(e.target.value);
+        onChange?.(e.target.value);
+      }}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => {
+        setIsFocused(false);
+        onCommit(localValue);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.currentTarget.blur();
+        }
+      }}
+      className={className}
+    />
+  );
+}
+
+// Color input with swatch, hex, and opacity - swatch opens color picker popover
 export function ColorInput({
   color,
   opacity = 1,
@@ -119,51 +166,98 @@ export function ColorInput({
   onChange: (color: string) => void;
   onOpacityChange?: (opacity: number) => void;
 }) {
+  const hexDisplay = color.replace("#", "").toUpperCase();
+  const opacityDisplay = `${Math.round(opacity * 100)}`;
+
+  const commitHex = (val: string) => {
+    const hex = val.replace("#", "").toUpperCase();
+    if (!/^[0-9A-F]*$/i.test(hex) || hex.length === 0) return;
+
+    let expanded = hex;
+    if (hex.length === 1) {
+      // F → FFFFFF (grayscale)
+      expanded = hex.repeat(6);
+    } else if (hex.length === 2) {
+      // AB → ABABAB (grayscale)
+      expanded = hex.repeat(3);
+    } else if (hex.length === 3) {
+      // ABC → AABBCC (CSS shorthand)
+      expanded = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+    } else if (hex.length < 6) {
+      // Pad with zeros: ABCD → ABCD00
+      expanded = hex.padEnd(6, "0");
+    } else {
+      expanded = hex.slice(0, 6);
+    }
+
+    onChange(`#${expanded}`);
+  };
+
+  const commitOpacity = (val: string) => {
+    const num = parseInt(val.replace("%", "")) || 0;
+    onOpacityChange?.(Math.min(100, Math.max(0, num)) / 100);
+  };
+
   return (
-    <div className="grid grid-cols-2 gap-1.5">
-      {/* Swatch + Hex */}
-      <div className="flex items-center h-7 bg-input/30 border border-border rounded-md overflow-hidden">
-        <div className="relative h-full aspect-square shrink-0">
-          <input
-            type="color"
+    <div className="flex items-center h-7 w-full bg-input/30 border border-border rounded-md overflow-hidden">
+      {/* Color swatch - opens popover */}
+      <Popover>
+        <PopoverTrigger asChild>
+          <button className="h-full aspect-square shrink-0 p-1 hover:bg-input/50 transition-colors cursor-pointer">
+            <div
+              className="h-full w-full rounded"
+              style={{ backgroundColor: color }}
+            />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          className="w-56 p-3"
+          side="left"
+          align="start"
+          sideOffset={8}
+        >
+          <ColorPicker
             value={color}
-            onChange={(e) => onChange(e.target.value)}
-            className="absolute inset-0 w-full h-full cursor-pointer opacity-0"
-          />
-          <div
-            className="absolute inset-1 rounded"
-            style={{ backgroundColor: color }}
-          />
-        </div>
-        <Input
-          type="text"
-          value={color.replace("#", "").toUpperCase()}
-          onChange={(e) => {
-            const hex = e.target.value.replace("#", "");
-            if (/^[0-9A-Fa-f]{0,6}$/.test(hex)) {
-              onChange(`#${hex}`);
-            }
-          }}
-          className="flex-1 min-w-0 h-full px-2 text-xs font-mono text-foreground bg-transparent dark:bg-transparent border-0 shadow-none focus-visible:ring-0 rounded-none uppercase"
-          maxLength={6}
-        />
-      </div>
-      {/* Opacity */}
-      <div className="flex items-center h-7 bg-input/30 border border-border rounded-md">
-        <Input
-          type="number"
-          min={0}
-          max={100}
-          value={Math.round(opacity * 100)}
-          onChange={(e) =>
-            onOpacityChange?.(
-              Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) / 100
-            )
-          }
-          className="flex-1 min-w-0 h-full px-2 text-xs font-mono text-foreground bg-transparent dark:bg-transparent border-0 shadow-none focus-visible:ring-0 rounded-none"
-        />
-        <span className={cn("text-xs pr-2", LABEL_COLOR)}>%</span>
-      </div>
+            alpha={opacity}
+            onChange={onChange}
+            onAlphaChange={onOpacityChange}
+          >
+            <ColorPickerSelection />
+            <ColorPickerHue />
+            {onOpacityChange && <ColorPickerAlpha />}
+            <div className="flex items-center gap-1.5">
+              <Input
+                type="text"
+                value={hexDisplay}
+                onChange={(e) => {
+                  const hex = e.target.value.replace("#", "");
+                  if (/^[0-9A-Fa-f]{0,6}$/.test(hex)) {
+                    onChange(`#${hex}`);
+                  }
+                }}
+                className="flex-1 h-7 text-xs font-mono uppercase px-2"
+                maxLength={6}
+              />
+              <ColorPickerEyeDropper className="h-7 w-7" />
+            </div>
+          </ColorPicker>
+        </PopoverContent>
+      </Popover>
+      {/* Hex input */}
+      <EditableField
+        value={hexDisplay}
+        onCommit={commitHex}
+        className="flex-1 min-w-0 px-1 text-xs font-mono text-foreground bg-transparent border-0 outline-none uppercase"
+        maxLength={6}
+      />
+      <span className={cn("text-xs", LABEL_COLOR)}>/</span>
+      {/* Opacity input */}
+      <EditableField
+        value={opacityDisplay}
+        onCommit={commitOpacity}
+        className="w-10 px-1 text-xs font-mono text-foreground bg-transparent border-0 outline-none text-right"
+      />
+      <span className={cn("text-xs pr-1.5", LABEL_COLOR)}>%</span>
     </div>
   );
 }
@@ -283,4 +377,3 @@ export function PropertyButton({
     </Button>
   );
 }
-

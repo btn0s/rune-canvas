@@ -159,7 +159,7 @@ export function useCanvas() {
       let creatingId = selectedIds[0];
 
       // Create the frame on first drag movement
-      if (!creatingId && (tool === "frame" || tool === "rectangle")) {
+      if (!creatingId && tool === "frame") {
         pushHistory();
         const id = `frame-${Date.now()}`;
         const name = `Frame ${objectCounter.current++}`;
@@ -294,7 +294,7 @@ export function useCanvas() {
     const parentId = createParentId.current;
 
     // Single-click: create frame centered at click point
-    if (!creatingId && start && (tool === "frame" || tool === "rectangle")) {
+    if (!creatingId && start && tool === "frame") {
       pushHistory();
       const id = `frame-${Date.now()}`;
       const name = `Frame ${objectCounter.current++}`;

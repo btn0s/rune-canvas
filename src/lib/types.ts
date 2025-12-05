@@ -135,13 +135,7 @@ export interface TextObject extends BaseObject {
 
 export type CanvasObject = FrameObject | ImageObject | TextObject;
 
-export type Tool =
-  | "select"
-  | "hand"
-  | "frame"
-  | "rectangle"
-  | "text"
-  | "shader";
+export type Tool = "select" | "hand" | "frame" | "text" | "shader";
 
 export type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
 
