@@ -30,3 +30,4 @@ alwaysApply: true
 9. **Know what you're trading off.** Every design decision trades something. Be able to articulate what you're optimizing for and what you're sacrificing.
 
 10. **Don't abstract speculatively.** Create abstractions when you see real duplication or clear reuse—not because something "might" be reused later.
+

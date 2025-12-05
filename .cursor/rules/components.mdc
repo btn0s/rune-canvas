@@ -26,3 +26,4 @@ alwaysApply: true
 - **Lift state only as high as necessary.** Not everything belongs in global state. Start local, lift when needed.
 
 - **Derive don't duplicate.** If a value can be computed from other state, compute it. Don't store it separately.
+

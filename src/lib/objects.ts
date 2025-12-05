@@ -203,3 +203,4 @@ export function recalculateHugSizes(
     return update ? ({ ...o, ...update } as CanvasObject) : o;
   });
 }
+

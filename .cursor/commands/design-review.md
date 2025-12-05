@@ -59,3 +59,4 @@ For each of the 3 leverage points:
 - Abstractions for the sake of abstraction—only if there's real duplication or clear future reuse
 
 Be honest. If the design is sound, say so and explain what makes it work.
+

@@ -110,3 +110,4 @@ export function getBoundingRect(rects: Rect[]): Rect | null {
     height: maxY - minY,
   };
 }
+
