@@ -101,6 +101,17 @@ export function useKeyboardShortcuts(
       // Skip if disabled
       if (!enabled) return;
 
+      // Skip if focus is on an input element (forms, contenteditable, etc.)
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
       // Find and execute matching shortcut
       for (const shortcut of shortcuts) {
         if (matchesShortcut(e, shortcut)) {

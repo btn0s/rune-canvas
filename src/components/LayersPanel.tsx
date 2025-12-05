@@ -305,8 +305,8 @@ export function LayersPanel({
       <div
         ref={contentRef}
         className={`
-          flex flex-col transition-all duration-200 rounded-lg p-3
-          ${showGlassyBg ? "bg-zinc-900/70 backdrop-blur-sm" : ""}
+          flex flex-col transition-all duration-200 rounded-md p-3
+          ${showGlassyBg ? "bg-card border border-border" : ""}
           ${!isHovered ? "items-end" : ""}
         `}
         style={{ gap: isHovered ? 4 : 2 }}

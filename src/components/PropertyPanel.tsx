@@ -22,9 +22,6 @@ import {
   AlignEndHorizontal,
   StretchHorizontal,
   StretchVertical,
-  Rows3,
-  Grid3X3,
-  Square,
   WrapText,
   Bold,
   AlignLeft,
@@ -33,7 +30,9 @@ import {
   MoveHorizontal,
   MoveVertical,
   Lock,
+  Minus,
 } from "lucide-react";
+import { Button } from "./ui/button";
 import { Slider } from "./ui/slider";
 import { Checkbox } from "./ui/checkbox";
 import {
@@ -125,14 +124,9 @@ export function PropertyPanel({
     >
       <div
         className={`
-          flex flex-col gap-3 transition-all duration-200 rounded-xl p-3
-          ${
-            showGlassyBg
-              ? "bg-zinc-900/80 backdrop-blur-md"
-              : "bg-zinc-900/60 backdrop-blur-sm"
-          }
+          flex flex-col gap-3 transition-all duration-200 rounded-md p-3
+          bg-card border border-border
           ${isHovered ? "opacity-100" : "opacity-50"}
-          border border-zinc-800/50
         `}
         style={{ width: 220 }}
       >
@@ -187,20 +181,266 @@ export function PropertyPanel({
                     clipContent: checked === true,
                   } as Partial<FrameObject>)
                 }
-                className="w-3.5 h-3.5 rounded border-zinc-600 bg-zinc-800 data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500 data-[state=checked]:text-white"
+                className="w-3.5 h-3.5 rounded border-border bg-input/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground"
               />
-              <span className="text-[10px] text-zinc-500">Clip content</span>
-              <span className="text-[10px] text-zinc-600 ml-auto">⌥ C</span>
+              <span className="text-xs text-muted-foreground">
+                Clip content
+              </span>
+              <span className="text-xs text-muted-foreground ml-auto">⌥ C</span>
             </label>
           )}
         </div>
+
+        {/* Flex Layout Section - only for frames with layout enabled */}
+        {frame && frame.layoutMode === "flex" && (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <SectionLabel>Flex</SectionLabel>
+              <Button
+                variant="ghost"
+                onClick={() =>
+                  onUpdate(selectedObject.id, {
+                    layoutMode: "none",
+                  } as Partial<FrameObject>)
+                }
+                className="size-6 p-1 text-muted-foreground hover:text-destructive transition-colors"
+              >
+                <Minus className="size-3.5" />
+              </Button>
+            </div>
+
+            {/* Direction */}
+            <IconButtonGroup>
+              <IconButton
+                active={frame.flexDirection === "row"}
+                onClick={() =>
+                  onUpdate(selectedObject.id, {
+                    flexDirection: "row",
+                  } as Partial<FrameObject>)
+                }
+                tooltip="Row"
+              >
+                <ArrowRight className="size-4" />
+              </IconButton>
+              <IconButton
+                active={frame.flexDirection === "column"}
+                onClick={() =>
+                  onUpdate(selectedObject.id, {
+                    flexDirection: "column",
+                  } as Partial<FrameObject>)
+                }
+                tooltip="Column"
+              >
+                <ArrowDown className="size-4" />
+              </IconButton>
+              <IconButton
+                active={frame.flexDirection === "row-reverse"}
+                onClick={() =>
+                  onUpdate(selectedObject.id, {
+                    flexDirection: "row-reverse",
+                  } as Partial<FrameObject>)
+                }
+                tooltip="Row Reverse"
+              >
+                <ArrowLeft className="size-4" />
+              </IconButton>
+              <IconButton
+                active={frame.flexDirection === "column-reverse"}
+                onClick={() =>
+                  onUpdate(selectedObject.id, {
+                    flexDirection: "column-reverse",
+                  } as Partial<FrameObject>)
+                }
+                tooltip="Column Reverse"
+              >
+                <ArrowUp className="size-4" />
+              </IconButton>
+            </IconButtonGroup>
+
+            {/* Justify Content */}
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-muted-foreground">Justify</span>
+              <IconButtonGroup>
+                <IconButton
+                  active={frame.justifyContent === "flex-start"}
+                  onClick={() =>
+                    onUpdate(selectedObject.id, {
+                      justifyContent: "flex-start",
+                    } as Partial<FrameObject>)
+                  }
+                  tooltip="Start"
+                >
+                  {frame.flexDirection?.includes("column") ? (
+                    <AlignStartHorizontal className="size-4" />
+                  ) : (
+                    <AlignStartVertical className="size-4" />
+                  )}
+                </IconButton>
+                <IconButton
+                  active={frame.justifyContent === "center"}
+                  onClick={() =>
+                    onUpdate(selectedObject.id, {
+                      justifyContent: "center",
+                    } as Partial<FrameObject>)
+                  }
+                  tooltip="Center"
+                >
+                  {frame.flexDirection?.includes("column") ? (
+                    <AlignCenterHorizontal className="size-4" />
+                  ) : (
+                    <AlignCenterVertical className="size-4" />
+                  )}
+                </IconButton>
+                <IconButton
+                  active={frame.justifyContent === "flex-end"}
+                  onClick={() =>
+                    onUpdate(selectedObject.id, {
+                      justifyContent: "flex-end",
+                    } as Partial<FrameObject>)
+                  }
+                  tooltip="End"
+                >
+                  {frame.flexDirection?.includes("column") ? (
+                    <AlignEndHorizontal className="size-4" />
+                  ) : (
+                    <AlignEndVertical className="size-4" />
+                  )}
+                </IconButton>
+                <IconButton
+                  active={frame.justifyContent === "space-between"}
+                  onClick={() =>
+                    onUpdate(selectedObject.id, {
+                      justifyContent: "space-between",
+                    } as Partial<FrameObject>)
+                  }
+                  tooltip="Space Between"
+                >
+                  {frame.flexDirection?.includes("column") ? (
+                    <StretchVertical className="size-4" />
+                  ) : (
+                    <StretchHorizontal className="size-4" />
+                  )}
+                </IconButton>
+              </IconButtonGroup>
+            </div>
+
+            {/* Align Items */}
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-muted-foreground">Align</span>
+              <IconButtonGroup>
+                <IconButton
+                  active={frame.alignItems === "flex-start"}
+                  onClick={() =>
+                    onUpdate(selectedObject.id, {
+                      alignItems: "flex-start",
+                    } as Partial<FrameObject>)
+                  }
+                  tooltip="Start"
+                >
+                  {frame.flexDirection?.includes("column") ? (
+                    <AlignStartVertical className="size-4" />
+                  ) : (
+                    <AlignStartHorizontal className="size-4" />
+                  )}
+                </IconButton>
+                <IconButton
+                  active={frame.alignItems === "center"}
+                  onClick={() =>
+                    onUpdate(selectedObject.id, {
+                      alignItems: "center",
+                    } as Partial<FrameObject>)
+                  }
+                  tooltip="Center"
+                >
+                  {frame.flexDirection?.includes("column") ? (
+                    <AlignCenterVertical className="size-4" />
+                  ) : (
+                    <AlignCenterHorizontal className="size-4" />
+                  )}
+                </IconButton>
+                <IconButton
+                  active={frame.alignItems === "flex-end"}
+                  onClick={() =>
+                    onUpdate(selectedObject.id, {
+                      alignItems: "flex-end",
+                    } as Partial<FrameObject>)
+                  }
+                  tooltip="End"
+                >
+                  {frame.flexDirection?.includes("column") ? (
+                    <AlignEndVertical className="size-4" />
+                  ) : (
+                    <AlignEndHorizontal className="size-4" />
+                  )}
+                </IconButton>
+                <IconButton
+                  active={frame.alignItems === "stretch"}
+                  onClick={() =>
+                    onUpdate(selectedObject.id, {
+                      alignItems: "stretch",
+                    } as Partial<FrameObject>)
+                  }
+                  tooltip="Stretch"
+                >
+                  {frame.flexDirection?.includes("column") ? (
+                    <StretchHorizontal className="size-4" />
+                  ) : (
+                    <StretchVertical className="size-4" />
+                  )}
+                </IconButton>
+              </IconButtonGroup>
+            </div>
+
+            {/* Wrap toggle */}
+            <div className="flex items-center gap-2">
+              <IconButton
+                active={frame.flexWrap === "wrap"}
+                onClick={() =>
+                  onUpdate(selectedObject.id, {
+                    flexWrap: frame.flexWrap === "wrap" ? "nowrap" : "wrap",
+                  } as Partial<FrameObject>)
+                }
+                tooltip={frame.flexWrap === "wrap" ? "No Wrap" : "Wrap"}
+              >
+                <WrapText className="size-4" />
+              </IconButton>
+              <span className="text-xs text-muted-foreground">
+                {frame.flexWrap === "wrap" ? "Wrap" : "No wrap"}
+              </span>
+            </div>
+
+            {/* Gap and Padding */}
+            <div className="grid grid-cols-2 gap-1.5">
+              <NumberInput
+                label="Gap"
+                value={frame.gap || 0}
+                onChange={(v) =>
+                  onUpdate(selectedObject.id, {
+                    gap: v,
+                  } as Partial<FrameObject>)
+                }
+                min={0}
+              />
+              <NumberInput
+                label="Pad"
+                value={frame.padding || 0}
+                onChange={(v) =>
+                  onUpdate(selectedObject.id, {
+                    padding: v,
+                  } as Partial<FrameObject>)
+                }
+                min={0}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Radius Section - only for frames */}
         {frame && (
           <div className="flex flex-col gap-1.5">
             <SectionLabel>Radius</SectionLabel>
-            <div className="grid grid-cols-[1fr_auto] gap-1.5 items-center">
-              <div className="w-full [&_[data-slot=slider]]:w-full [&_[data-slot=slider-track]]:bg-zinc-700 [&_[data-slot=slider-track]]:h-1.5 [&_[data-slot=slider-thumb]]:bg-zinc-300 [&_[data-slot=slider-thumb]]:border-zinc-300 [&_[data-slot=slider-thumb]]:size-3 [&_[data-slot=slider-thumb]]:border-0 [&_[data-slot=slider-thumb]]:shadow-none">
+            <div className="grid grid-cols-[3fr_1fr] gap-1.5 items-center">
+              <div className="w-full [&_[data-slot=slider]]:w-full [&_[data-slot=slider-track]]:bg-input [&_[data-slot=slider-track]]:h-1.5 [&_[data-slot=slider-thumb]]:bg-foreground [&_[data-slot=slider-thumb]]:border-foreground [&_[data-slot=slider-thumb]]:size-3 [&_[data-slot=slider-thumb]]:border-0 [&_[data-slot=slider-thumb]]:shadow-none">
                 <Slider
                   min={0}
                   max={100}
@@ -262,7 +502,7 @@ export function PropertyPanel({
                   <SelectItem
                     key={mode}
                     value={mode}
-                    className="capitalize text-[10px]"
+                    className="capitalize text-xs"
                   >
                     {mode}
                   </SelectItem>
@@ -456,7 +696,7 @@ export function PropertyPanel({
                   <SelectItem
                     key={side}
                     value={side}
-                    className="capitalize text-[10px]"
+                    className="capitalize text-xs"
                   >
                     {side}
                   </SelectItem>
@@ -663,305 +903,6 @@ export function PropertyPanel({
           </CollapsibleSection>
         )}
 
-        {/* Flex Layout Section - only for frames with layout enabled */}
-        {frame && frame.layoutMode !== "none" && (
-          <div className="flex flex-col gap-1.5">
-            <SectionLabel>Flex</SectionLabel>
-
-            {/* Layout Mode */}
-            <IconButtonGroup>
-              <IconButton
-                active={(frame.layoutMode as string) === "none"}
-                onClick={() =>
-                  onUpdate(selectedObject.id, {
-                    layoutMode: "none",
-                  } as Partial<FrameObject>)
-                }
-                tooltip="No layout"
-              >
-                <Square className="size-4" />
-              </IconButton>
-              <IconButton
-                active={frame.layoutMode === "flex"}
-                onClick={() =>
-                  onUpdate(selectedObject.id, {
-                    layoutMode: "flex",
-                  } as Partial<FrameObject>)
-                }
-                tooltip="Flexbox"
-              >
-                <Rows3 className="size-4" />
-              </IconButton>
-              <IconButton
-                active={frame.layoutMode === "grid"}
-                onClick={() =>
-                  onUpdate(selectedObject.id, {
-                    layoutMode: "grid",
-                  } as Partial<FrameObject>)
-                }
-                tooltip="Grid"
-              >
-                <Grid3X3 className="size-4" />
-              </IconButton>
-            </IconButtonGroup>
-
-            {/* Flex options */}
-            {frame.layoutMode === "flex" && (
-              <>
-                {/* Direction */}
-                <IconButtonGroup>
-                  <IconButton
-                    active={frame.flexDirection === "row"}
-                    onClick={() =>
-                      onUpdate(selectedObject.id, {
-                        flexDirection: "row",
-                      } as Partial<FrameObject>)
-                    }
-                    tooltip="Row"
-                  >
-                    <ArrowRight className="size-4" />
-                  </IconButton>
-                  <IconButton
-                    active={frame.flexDirection === "column"}
-                    onClick={() =>
-                      onUpdate(selectedObject.id, {
-                        flexDirection: "column",
-                      } as Partial<FrameObject>)
-                    }
-                    tooltip="Column"
-                  >
-                    <ArrowDown className="size-4" />
-                  </IconButton>
-                  <IconButton
-                    active={frame.flexDirection === "row-reverse"}
-                    onClick={() =>
-                      onUpdate(selectedObject.id, {
-                        flexDirection: "row-reverse",
-                      } as Partial<FrameObject>)
-                    }
-                    tooltip="Row Reverse"
-                  >
-                    <ArrowLeft className="size-4" />
-                  </IconButton>
-                  <IconButton
-                    active={frame.flexDirection === "column-reverse"}
-                    onClick={() =>
-                      onUpdate(selectedObject.id, {
-                        flexDirection: "column-reverse",
-                      } as Partial<FrameObject>)
-                    }
-                    tooltip="Column Reverse"
-                  >
-                    <ArrowUp className="size-4" />
-                  </IconButton>
-                </IconButtonGroup>
-
-                {/* Justify Content */}
-                <div className="flex flex-col gap-1">
-                  <span className="text-[9px] text-zinc-600">Justify</span>
-                  <IconButtonGroup>
-                    <IconButton
-                      active={frame.justifyContent === "flex-start"}
-                      onClick={() =>
-                        onUpdate(selectedObject.id, {
-                          justifyContent: "flex-start",
-                        } as Partial<FrameObject>)
-                      }
-                      tooltip="Start"
-                    >
-                      {frame.flexDirection?.includes("column") ? (
-                        <AlignStartHorizontal className="size-4" />
-                      ) : (
-                        <AlignStartVertical className="size-4" />
-                      )}
-                    </IconButton>
-                    <IconButton
-                      active={frame.justifyContent === "center"}
-                      onClick={() =>
-                        onUpdate(selectedObject.id, {
-                          justifyContent: "center",
-                        } as Partial<FrameObject>)
-                      }
-                      tooltip="Center"
-                    >
-                      {frame.flexDirection?.includes("column") ? (
-                        <AlignCenterHorizontal className="size-4" />
-                      ) : (
-                        <AlignCenterVertical className="size-4" />
-                      )}
-                    </IconButton>
-                    <IconButton
-                      active={frame.justifyContent === "flex-end"}
-                      onClick={() =>
-                        onUpdate(selectedObject.id, {
-                          justifyContent: "flex-end",
-                        } as Partial<FrameObject>)
-                      }
-                      tooltip="End"
-                    >
-                      {frame.flexDirection?.includes("column") ? (
-                        <AlignEndHorizontal className="size-4" />
-                      ) : (
-                        <AlignEndVertical className="size-4" />
-                      )}
-                    </IconButton>
-                    <IconButton
-                      active={frame.justifyContent === "space-between"}
-                      onClick={() =>
-                        onUpdate(selectedObject.id, {
-                          justifyContent: "space-between",
-                        } as Partial<FrameObject>)
-                      }
-                      tooltip="Space Between"
-                    >
-                      {frame.flexDirection?.includes("column") ? (
-                        <StretchVertical className="size-4" />
-                      ) : (
-                        <StretchHorizontal className="size-4" />
-                      )}
-                    </IconButton>
-                  </IconButtonGroup>
-                </div>
-
-                {/* Align Items */}
-                <div className="flex flex-col gap-1">
-                  <span className="text-[9px] text-zinc-600">Align</span>
-                  <IconButtonGroup>
-                    <IconButton
-                      active={frame.alignItems === "flex-start"}
-                      onClick={() =>
-                        onUpdate(selectedObject.id, {
-                          alignItems: "flex-start",
-                        } as Partial<FrameObject>)
-                      }
-                      tooltip="Start"
-                    >
-                      {frame.flexDirection?.includes("column") ? (
-                        <AlignStartVertical className="size-4" />
-                      ) : (
-                        <AlignStartHorizontal className="size-4" />
-                      )}
-                    </IconButton>
-                    <IconButton
-                      active={frame.alignItems === "center"}
-                      onClick={() =>
-                        onUpdate(selectedObject.id, {
-                          alignItems: "center",
-                        } as Partial<FrameObject>)
-                      }
-                      tooltip="Center"
-                    >
-                      {frame.flexDirection?.includes("column") ? (
-                        <AlignCenterVertical className="size-4" />
-                      ) : (
-                        <AlignCenterHorizontal className="size-4" />
-                      )}
-                    </IconButton>
-                    <IconButton
-                      active={frame.alignItems === "flex-end"}
-                      onClick={() =>
-                        onUpdate(selectedObject.id, {
-                          alignItems: "flex-end",
-                        } as Partial<FrameObject>)
-                      }
-                      tooltip="End"
-                    >
-                      {frame.flexDirection?.includes("column") ? (
-                        <AlignEndVertical className="size-4" />
-                      ) : (
-                        <AlignEndHorizontal className="size-4" />
-                      )}
-                    </IconButton>
-                    <IconButton
-                      active={frame.alignItems === "stretch"}
-                      onClick={() =>
-                        onUpdate(selectedObject.id, {
-                          alignItems: "stretch",
-                        } as Partial<FrameObject>)
-                      }
-                      tooltip="Stretch"
-                    >
-                      {frame.flexDirection?.includes("column") ? (
-                        <StretchHorizontal className="size-4" />
-                      ) : (
-                        <StretchVertical className="size-4" />
-                      )}
-                    </IconButton>
-                  </IconButtonGroup>
-                </div>
-
-                {/* Wrap toggle */}
-                <div className="flex items-center gap-2">
-                  <IconButton
-                    active={frame.flexWrap === "wrap"}
-                    onClick={() =>
-                      onUpdate(selectedObject.id, {
-                        flexWrap: frame.flexWrap === "wrap" ? "nowrap" : "wrap",
-                      } as Partial<FrameObject>)
-                    }
-                    tooltip={frame.flexWrap === "wrap" ? "No Wrap" : "Wrap"}
-                  >
-                    <WrapText className="size-4" />
-                  </IconButton>
-                  <span className="text-[10px] text-zinc-500">
-                    {frame.flexWrap === "wrap" ? "Wrap" : "No wrap"}
-                  </span>
-                </div>
-
-                {/* Gap and Padding */}
-                <div className="grid grid-cols-2 gap-1.5">
-                  <NumberInput
-                    label="Gap"
-                    value={frame.gap || 0}
-                    onChange={(v) =>
-                      onUpdate(selectedObject.id, {
-                        gap: v,
-                      } as Partial<FrameObject>)
-                    }
-                    min={0}
-                  />
-                  <NumberInput
-                    label="Pad"
-                    value={frame.padding || 0}
-                    onChange={(v) =>
-                      onUpdate(selectedObject.id, {
-                        padding: v,
-                      } as Partial<FrameObject>)
-                    }
-                    min={0}
-                  />
-                </div>
-              </>
-            )}
-
-            {/* Grid options - just gap/padding for now */}
-            {frame.layoutMode === "grid" && (
-              <div className="grid grid-cols-2 gap-1.5">
-                <NumberInput
-                  label="Gap"
-                  value={frame.gap || 0}
-                  onChange={(v) =>
-                    onUpdate(selectedObject.id, {
-                      gap: v,
-                    } as Partial<FrameObject>)
-                  }
-                  min={0}
-                />
-                <NumberInput
-                  label="Pad"
-                  value={frame.padding || 0}
-                  onChange={(v) =>
-                    onUpdate(selectedObject.id, {
-                      padding: v,
-                    } as Partial<FrameObject>)
-                  }
-                  min={0}
-                />
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Text Section */}
         {selectedObject.type === "text" && (
           <div className="flex flex-col gap-2">
@@ -986,10 +927,10 @@ export function PropertyPanel({
                 <button
                   key={mode}
                   title={label}
-                  className={`flex-1 h-7 rounded text-[10px] transition-colors ${
+                  className={`flex-1 h-7 rounded-md text-xs transition-colors ${
                     (selectedObject as TextObject).sizeMode === mode
-                      ? "bg-blue-500/20 text-blue-400"
-                      : "bg-zinc-800/50 text-zinc-500 hover:text-zinc-300"
+                      ? "bg-primary/20 text-primary"
+                      : "bg-input/30 text-muted-foreground hover:text-foreground"
                   }`}
                   onClick={() =>
                     onUpdate(selectedObject.id, {
@@ -1013,7 +954,7 @@ export function PropertyPanel({
             />
             <div className="flex gap-1">
               <button
-                className={`flex-1 h-7 rounded text-[10px] font-medium transition-colors ${
+                className={`flex-1 h-7 rounded-md text-xs font-medium transition-colors ${
                   (selectedObject as TextObject).fontWeight >= 600
                     ? "bg-blue-500/20 text-blue-400"
                     : "bg-zinc-800/50 text-zinc-500 hover:text-zinc-300"
@@ -1034,10 +975,10 @@ export function PropertyPanel({
               {(["left", "center", "right"] as const).map((align) => (
                 <button
                   key={align}
-                  className={`flex-1 h-7 rounded text-[10px] transition-colors ${
+                  className={`flex-1 h-7 rounded-md text-xs transition-colors ${
                     (selectedObject as TextObject).textAlign === align
-                      ? "bg-blue-500/20 text-blue-400"
-                      : "bg-zinc-800/50 text-zinc-500 hover:text-zinc-300"
+                      ? "bg-primary/20 text-primary"
+                      : "bg-input/30 text-muted-foreground hover:text-foreground"
                   }`}
                   onClick={() =>
                     onUpdate(selectedObject.id, {
@@ -1064,7 +1005,7 @@ export function PropertyPanel({
         {selectedObject.type === "image" && (
           <div className="flex flex-col gap-1">
             <SectionLabel>Original</SectionLabel>
-            <span className="text-[10px] font-mono text-zinc-500">
+            <span className="text-xs font-mono text-muted-foreground">
               {(selectedObject as ImageObject).naturalWidth} ×{" "}
               {(selectedObject as ImageObject).naturalHeight}
             </span>

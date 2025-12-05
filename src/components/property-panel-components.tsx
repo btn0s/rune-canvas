@@ -11,7 +11,7 @@ import { Plus, Eye, EyeOff, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Consistent label color for all property panel labels
-const LABEL_COLOR = "text-zinc-500";
+const LABEL_COLOR = "text-muted-foreground";
 
 // Icon button component using shadcn Button
 export function IconButton({
@@ -28,13 +28,12 @@ export function IconButton({
   const button = (
     <Button
       variant="ghost"
-      size="icon-sm"
       onClick={onClick}
       className={cn(
-        "p-1.5 rounded transition-colors",
+        "size-7 p-1.5 rounded-md transition-colors",
         active
-          ? "bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
-          : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+          ? "bg-primary/20 text-primary hover:bg-primary/30"
+          : "text-muted-foreground hover:text-foreground hover:bg-accent"
       )}
     >
       {children}
@@ -58,7 +57,7 @@ export function IconButton({
 // Icon button group
 export function IconButtonGroup({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-0.5 bg-zinc-800/50 rounded p-0.5">
+    <div className="flex items-center gap-0.5 bg-input/30 rounded-md p-0.5">
       {children}
     </div>
   );
@@ -67,7 +66,7 @@ export function IconButtonGroup({ children }: { children: React.ReactNode }) {
 // Section label
 export function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <span className="text-[9px] uppercase tracking-wider text-zinc-600 font-medium">
+    <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
       {children}
     </span>
   );
@@ -88,11 +87,9 @@ export function NumberInput({
   suffix?: string;
 }) {
   return (
-    <div className="flex items-center h-7 bg-zinc-800/50 border border-zinc-700/50 rounded">
+    <div className="flex items-center h-7 bg-input/30 border border-border rounded-md">
       {label && (
-        <span className={cn("text-[10px] pl-2 pr-1", LABEL_COLOR)}>
-          {label}
-        </span>
+        <span className={cn("text-xs pl-2 pr-1", LABEL_COLOR)}>{label}</span>
       )}
       <Input
         type="number"
@@ -101,10 +98,10 @@ export function NumberInput({
           const v = parseFloat(e.target.value) || 0;
           onChange(min !== undefined ? Math.max(min, v) : v);
         }}
-        className="flex-1 min-w-0 h-full px-1 !text-[10px] font-mono text-zinc-300 bg-transparent border-0 shadow-none focus-visible:ring-0 rounded-none"
+        className="flex-1 min-w-0 h-full px-1 text-xs font-mono text-foreground bg-transparent dark:bg-transparent border-0 shadow-none focus-visible:ring-0 rounded-none"
       />
       {suffix && (
-        <span className={cn("text-[10px] pr-2", LABEL_COLOR)}>{suffix}</span>
+        <span className={cn("text-xs pr-2", LABEL_COLOR)}>{suffix}</span>
       )}
     </div>
   );
@@ -125,7 +122,7 @@ export function ColorInput({
   return (
     <div className="grid grid-cols-2 gap-1.5">
       {/* Swatch + Hex */}
-      <div className="flex items-center h-7 bg-zinc-800/50 border border-zinc-700/50 rounded overflow-hidden">
+      <div className="flex items-center h-7 bg-input/30 border border-border rounded-md overflow-hidden">
         <div className="relative h-full aspect-square shrink-0">
           <input
             type="color"
@@ -147,12 +144,12 @@ export function ColorInput({
               onChange(`#${hex}`);
             }
           }}
-          className="flex-1 min-w-0 h-full px-2 !text-[10px] font-mono text-zinc-300 bg-transparent border-0 shadow-none focus-visible:ring-0 rounded-none uppercase"
+          className="flex-1 min-w-0 h-full px-2 text-xs font-mono text-foreground bg-transparent dark:bg-transparent border-0 shadow-none focus-visible:ring-0 rounded-none uppercase"
           maxLength={6}
         />
       </div>
       {/* Opacity */}
-      <div className="flex items-center h-7 bg-zinc-800/50 border border-zinc-700/50 rounded">
+      <div className="flex items-center h-7 bg-input/30 border border-border rounded-md">
         <Input
           type="number"
           min={0}
@@ -163,9 +160,9 @@ export function ColorInput({
               Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) / 100
             )
           }
-          className="flex-1 min-w-0 h-full px-2 !text-[10px] font-mono text-zinc-300 bg-transparent border-0 shadow-none focus-visible:ring-0 rounded-none"
+          className="flex-1 min-w-0 h-full px-2 text-xs font-mono text-foreground bg-transparent dark:bg-transparent border-0 shadow-none focus-visible:ring-0 rounded-none"
         />
-        <span className={cn("text-[10px] pr-2", LABEL_COLOR)}>%</span>
+        <span className={cn("text-xs pr-2", LABEL_COLOR)}>%</span>
       </div>
     </div>
   );
@@ -196,9 +193,8 @@ export function CollapsibleSection({
         <SectionLabel>{label}</SectionLabel>
         <Button
           variant="ghost"
-          size="icon-sm"
           onClick={onAdd}
-          className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
+          className="size-6 p-1 text-muted-foreground hover:text-foreground transition-colors"
         >
           <Plus className="size-3.5" />
         </Button>
@@ -215,9 +211,8 @@ export function CollapsibleSection({
           {onToggleVisible && (
             <Button
               variant="ghost"
-              size="icon-sm"
               onClick={onToggleVisible}
-              className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
+              className="size-6 p-1 text-muted-foreground hover:text-foreground transition-colors"
             >
               {visible ? (
                 <Eye className="size-3.5" />
@@ -228,9 +223,8 @@ export function CollapsibleSection({
           )}
           <Button
             variant="ghost"
-            size="icon-sm"
             onClick={onRemove}
-            className="p-1 text-zinc-500 hover:text-red-400 transition-colors"
+            className="size-6 p-1 text-muted-foreground hover:text-destructive transition-colors"
           >
             <Minus className="size-3.5" />
           </Button>
@@ -257,11 +251,11 @@ export function PropertySelect({
     <Select value={value} onValueChange={onValueChange}>
       <SelectTrigger
         size="sm"
-        className="h-7 !w-full rounded border-zinc-700/50 bg-zinc-800/50 !text-[10px] px-2 py-0 shadow-none focus-visible:ring-1 focus-visible:ring-zinc-600 data-[size=sm]:h-7 [&>span]:!text-[10px] [&>span]:text-zinc-300"
+        className="h-7 !w-full rounded-md border-border bg-card text-xs px-2 py-0 shadow-none focus-visible:ring-1 focus-visible:ring-ring data-[size=sm]:h-7 [&>span]:text-xs [&>span]:text-foreground"
       >
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
-      <SelectContent className="rounded-md border-zinc-700/50 bg-zinc-800">
+      <SelectContent className="rounded-md border-border bg-popover">
         {children}
       </SelectContent>
     </Select>
@@ -280,7 +274,7 @@ export function PropertyButton({
       variant="outline"
       onClick={onClick}
       className={cn(
-        "w-full h-7 !text-[10px] text-zinc-400 hover:text-zinc-200 bg-zinc-800/50 hover:bg-zinc-800 border-zinc-700/50 rounded transition-colors",
+        "w-full h-7 text-xs text-muted-foreground hover:text-foreground transition-colors",
         className
       )}
       {...props}

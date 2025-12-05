@@ -1561,7 +1561,7 @@ export function Canvas() {
             />
 
             {/* Toolbar */}
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex gap-1 p-1.5 bg-card border border-border border-b-0 rounded-t-lg">
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex gap-1 p-1.5 bg-card border border-border border-b-0 rounded-t-md">
               {TOOLS.map((t) => (
                 <Tooltip key={t.id}>
                   <TooltipTrigger asChild>
