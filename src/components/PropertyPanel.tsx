@@ -3,10 +3,9 @@ import {
   FrameObject,
   TextObject,
   ImageObject,
-  Transform,
   BlendMode,
 } from "../lib/types";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useRef } from "react";
 import { SelectItem } from "./ui/select";
 import {
   ArrowRight,
@@ -58,8 +57,6 @@ import {
 interface PropertyPanelProps {
   selectedObjects: CanvasObject[];
   allObjects: CanvasObject[];
-  transform: Transform;
-  containerRef: React.RefObject<HTMLDivElement>;
   onUpdate: (id: string, updates: Partial<CanvasObject>) => void;
 }
 
@@ -877,43 +874,10 @@ function MixedTypeProperties({
 export function PropertyPanel({
   selectedObjects,
   allObjects: _allObjects,
-  transform,
-  containerRef,
   onUpdate,
 }: PropertyPanelProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const [isOverlapping, setIsOverlapping] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
-
-  // Check if panel overlaps with any object
-  const checkOverlap = useCallback(() => {
-    if (!panelRef.current || !containerRef.current) return;
-
-    const panelRect = panelRef.current.getBoundingClientRect();
-    const containerRect = containerRef.current.getBoundingClientRect();
-
-    const panelInCanvas = {
-      x: (panelRect.left - containerRect.left - transform.x) / transform.scale,
-      y: (panelRect.top - containerRect.top - transform.y) / transform.scale,
-      width: panelRect.width / transform.scale,
-      height: panelRect.height / transform.scale,
-    };
-
-    const overlaps = selectedObjects.some((o) => {
-      return !(
-        o.x + o.width < panelInCanvas.x ||
-        o.x > panelInCanvas.x + panelInCanvas.width ||
-        o.y + o.height < panelInCanvas.y ||
-        o.y > panelInCanvas.y + panelInCanvas.height
-      );
-    });
-
-    setIsOverlapping(overlaps);
-  }, [selectedObjects, transform, containerRef]);
-
-  useEffect(() => {
-    checkOverlap();
-  }, [checkOverlap]);
 
   // Nothing selected
   if (selectedObjects.length === 0) return null;

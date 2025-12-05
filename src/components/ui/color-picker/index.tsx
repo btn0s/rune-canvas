@@ -55,7 +55,10 @@ const parseColor = (colorValue: string | undefined, defaultValue: string) => {
   }
 };
 
-export type ColorPickerProps = HTMLAttributes<HTMLDivElement> & {
+export type ColorPickerProps = Omit<
+  HTMLAttributes<HTMLDivElement>,
+  "onChange"
+> & {
   value?: string;
   defaultValue?: string;
   alpha?: number;

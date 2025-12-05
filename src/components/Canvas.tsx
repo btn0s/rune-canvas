@@ -1456,8 +1456,6 @@ export function Canvas() {
             <PropertyPanel
               selectedObjects={selectedObjects}
               allObjects={objects}
-              transform={transform}
-              containerRef={containerRef as React.RefObject<HTMLDivElement>}
               onUpdate={updateObject}
             />
 
