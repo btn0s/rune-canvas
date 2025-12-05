@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import type { CanvasObject, Point, Guide, ResizeHandle } from "../types";
 import { getCanvasPosition } from "../geometry";
 import { calculateSnapping } from "../snapping";
-import { getSelectionBounds, recalculateHugSizes } from "../objects";
+import { getSelectionBounds, recalculateHugSizes } from "../objectUtils";
 import { useHistoryCapture } from "./useHistoryCapture";
 
 // ============================================================================

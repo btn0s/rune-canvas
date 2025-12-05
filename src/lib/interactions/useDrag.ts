@@ -7,7 +7,7 @@ import {
   getDescendants,
   duplicateTree,
   recalculateHugSizes,
-} from "../objects";
+} from "../objectUtils";
 import { useHistoryCapture } from "./useHistoryCapture";
 
 // ============================================================================

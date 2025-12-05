@@ -7,7 +7,7 @@ import {
   getDescendants,
   duplicateTree,
   recalculateHugSizes,
-} from "./objects";
+} from "./objectUtils";
 import { useDrag } from "./interactions/useDrag";
 import { useResize } from "./interactions/useResize";
 import type {

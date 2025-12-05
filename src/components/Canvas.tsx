@@ -11,15 +11,20 @@ import {
   useKeyboardShortcuts,
   type Shortcut,
 } from "../lib/useKeyboardShortcuts";
-import type {
-  ResizeHandle,
-  Tool,
-  CanvasObject,
-  FrameObject,
-  ImageObject,
-  TextObject,
-} from "../lib/types";
+import type { ResizeHandle, Tool } from "../lib/types";
 import { getCanvasPosition } from "../lib/geometry";
+import {
+  type CanvasObject,
+  type FrameObject,
+  type ImageObject,
+  type TextObject,
+  computeWrapperStyle,
+  computeFrameStyle,
+  computeTextStyle,
+  computeImageStyle,
+  getChildren,
+  isFrame,
+} from "../lib/objects";
 import { Toggle } from "@/components/ui/toggle";
 import {
   Tooltip,
@@ -1266,49 +1271,21 @@ export function Canvas() {
                   const isSelected = selectedIds.includes(obj.id);
                   const isEditing = editingTextId === obj.id;
                   const isPotentialParent = potentialParentId === obj.id;
-                  const frame =
-                    obj.type === "frame" ? (obj as FrameObject) : null;
-                  const isFlexLayout = frame && frame.layoutMode !== "none";
+                  const frame = isFrame(obj) ? obj : null;
 
                   // Get children for this object
-                  const children = objects.filter((o) => o.parentId === obj.id);
-
-                  // Determine parent context for positioning
-                  const parent = obj.parentId
-                    ? objects.find((o) => o.id === obj.parentId)
-                    : null;
-                  const parentFrame =
-                    parent?.type === "frame" ? (parent as FrameObject) : null;
-                  const isFlexChild =
-                    parentFrame && parentFrame.layoutMode !== "none";
+                  const children = getChildren(obj, objects);
 
                   // During drag (with actual movement), objects break out of flex flow
                   const isBeingDragged =
                     hasDragMovement && selectedIds.includes(obj.id);
 
-                  // Position style based on context:
-                  // - Root objects: canvas-space transform
-                  // - Flex children (not dragging): no explicit positioning (flex handles it)
-                  // - Absolute children OR dragging: position relative to parent
-                  const wrapperStyle: React.CSSProperties = !obj.parentId
-                    ? {
-                        position: "absolute",
-                        left: 0,
-                        top: 0,
-                        transform: `translate(${obj.x}px, ${obj.y}px)`,
-                        opacity: obj.opacity,
-                      }
-                    : isFlexChild && !isBeingDragged
-                    ? {
-                        opacity: obj.opacity,
-                        flexShrink: 0,
-                      }
-                    : {
-                        position: "absolute",
-                        left: obj.x,
-                        top: obj.y,
-                        opacity: obj.opacity,
-                      };
+                  // Compute wrapper style using centralized logic
+                  const wrapperStyle = computeWrapperStyle({
+                    object: obj,
+                    allObjects: objects,
+                    isBeingDragged,
+                  });
 
                   return (
                     <div
@@ -1334,174 +1311,15 @@ export function Canvas() {
                       )}
 
                       {/* Render based on object type */}
-                      {obj.type === "frame" && (
+                      {frame && (
                         <div
                           className={`transition-shadow duration-150 ${
                             isPotentialParent
                               ? "shadow-[inset_0_0_0_2px_#3b82f6]"
                               : ""
                           }`}
-                          style={{
-                            // Width/height are always stored values (calculated for fit mode)
-                            width:
-                              frame!.widthMode === "expand"
-                                ? undefined
-                                : obj.width,
-                            height:
-                              frame!.heightMode === "expand"
-                                ? undefined
-                                : obj.height,
-                            // Flex grow for expand mode (only works inside flex parent)
-                            flex:
-                              frame!.widthMode === "expand" ||
-                              frame!.heightMode === "expand"
-                                ? "1"
-                                : undefined,
-                            backgroundColor: frame!.fill
-                              ? `rgba(${parseInt(
-                                  frame!.fill.slice(1, 3),
-                                  16
-                                )}, ${parseInt(
-                                  frame!.fill.slice(3, 5),
-                                  16
-                                )}, ${parseInt(frame!.fill.slice(5, 7), 16)}, ${
-                                  frame!.fillOpacity ?? 1
-                                })`
-                              : undefined,
-                            boxSizing: "border-box",
-                            // Blend mode
-                            mixBlendMode: frame!.blendMode || undefined,
-                            // Border (inside - shrinks content)
-                            ...(frame!.border &&
-                            frame!.borderSide !== "all" &&
-                            frame!.borderSide
-                              ? {
-                                  [`border${
-                                    frame!.borderSide.charAt(0).toUpperCase() +
-                                    frame!.borderSide.slice(1)
-                                  }`]: `${frame!.borderWidth || 1}px ${
-                                    frame!.borderStyle || "solid"
-                                  } rgba(${parseInt(
-                                    frame!.border.slice(1, 3),
-                                    16
-                                  )}, ${parseInt(
-                                    frame!.border.slice(3, 5),
-                                    16
-                                  )}, ${parseInt(
-                                    frame!.border.slice(5, 7),
-                                    16
-                                  )}, ${frame!.borderOpacity ?? 1})`,
-                                }
-                              : {
-                                  border: frame!.border
-                                    ? `${frame!.borderWidth || 1}px ${
-                                        frame!.borderStyle || "solid"
-                                      } rgba(${parseInt(
-                                        frame!.border.slice(1, 3),
-                                        16
-                                      )}, ${parseInt(
-                                        frame!.border.slice(3, 5),
-                                        16
-                                      )}, ${parseInt(
-                                        frame!.border.slice(5, 7),
-                                        16
-                                      )}, ${frame!.borderOpacity ?? 1})`
-                                    : undefined,
-                                }),
-                            // Outline (outside - purely visual)
-                            outline: frame!.outline
-                              ? `${frame!.outlineWidth || 1}px ${
-                                  frame!.outlineStyle || "solid"
-                                } rgba(${parseInt(
-                                  frame!.outline.slice(1, 3),
-                                  16
-                                )}, ${parseInt(
-                                  frame!.outline.slice(3, 5),
-                                  16
-                                )}, ${parseInt(
-                                  frame!.outline.slice(5, 7),
-                                  16
-                                )}, ${frame!.outlineOpacity ?? 1})`
-                              : undefined,
-                            outlineOffset: frame!.outlineOffset ?? 0,
-                            // Border radius (individual corners or single value)
-                            borderRadius:
-                              frame!.radiusTL !== undefined ||
-                              frame!.radiusTR !== undefined ||
-                              frame!.radiusBR !== undefined ||
-                              frame!.radiusBL !== undefined
-                                ? `${frame!.radiusTL ?? frame!.radius}px ${
-                                    frame!.radiusTR ?? frame!.radius
-                                  }px ${frame!.radiusBR ?? frame!.radius}px ${
-                                    frame!.radiusBL ?? frame!.radius
-                                  }px`
-                                : frame!.radius,
-                            // Box shadow (drop shadow + inner shadow)
-                            boxShadow:
-                              [
-                                frame!.shadow
-                                  ? `${frame!.shadow.x}px ${
-                                      frame!.shadow.y
-                                    }px ${frame!.shadow.blur}px ${
-                                      frame!.shadow.spread
-                                    }px rgba(${parseInt(
-                                      frame!.shadow.color.slice(1, 3),
-                                      16
-                                    )}, ${parseInt(
-                                      frame!.shadow.color.slice(3, 5),
-                                      16
-                                    )}, ${parseInt(
-                                      frame!.shadow.color.slice(5, 7),
-                                      16
-                                    )}, ${frame!.shadow.opacity})`
-                                  : null,
-                                frame!.innerShadow
-                                  ? `inset ${frame!.innerShadow.x}px ${
-                                      frame!.innerShadow.y
-                                    }px ${frame!.innerShadow.blur}px ${
-                                      frame!.innerShadow.spread
-                                    }px rgba(${parseInt(
-                                      frame!.innerShadow.color.slice(1, 3),
-                                      16
-                                    )}, ${parseInt(
-                                      frame!.innerShadow.color.slice(3, 5),
-                                      16
-                                    )}, ${parseInt(
-                                      frame!.innerShadow.color.slice(5, 7),
-                                      16
-                                    )}, ${frame!.innerShadow.opacity})`
-                                  : null,
-                              ]
-                                .filter(Boolean)
-                                .join(", ") || undefined,
-                            overflow: frame!.clipContent ? "hidden" : "visible",
-                            // Always relative - creates positioning context for children
-                            position: "relative",
-                            // Layout styles (only when flex/grid enabled)
-                            display: isFlexLayout
-                              ? frame!.layoutMode === "flex"
-                                ? "flex"
-                                : "grid"
-                              : undefined,
-                            flexDirection:
-                              frame!.layoutMode === "flex"
-                                ? frame!.flexDirection
-                                : undefined,
-                            justifyContent: isFlexLayout
-                              ? frame!.justifyContent
-                              : undefined,
-                            alignItems: isFlexLayout
-                              ? frame!.alignItems
-                              : undefined,
-                            flexWrap:
-                              frame!.layoutMode === "flex"
-                                ? frame!.flexWrap
-                                : undefined,
-                            gap: isFlexLayout ? frame!.gap : undefined,
-                            padding: isFlexLayout ? frame!.padding : undefined,
-                          }}
+                          style={computeFrameStyle(frame)}
                         >
-                          {/* Always render children inside frame */}
                           {children.map((child) => renderObject(child))}
                         </div>
                       )}
@@ -1511,13 +1329,7 @@ export function Canvas() {
                           src={(obj as ImageObject).src}
                           alt={obj.name}
                           draggable={false}
-                          style={{
-                            width: obj.width,
-                            height: obj.height,
-                            maxWidth: "unset",
-                            objectFit: "cover",
-                            display: "block",
-                          }}
+                          style={computeImageStyle(obj as ImageObject)}
                         />
                       )}
 
@@ -1525,44 +1337,6 @@ export function Canvas() {
                         (() => {
                           const textObj = obj as TextObject;
                           const sizeMode = textObj.sizeMode;
-
-                          // Style based on size mode:
-                          // auto-width: both dimensions auto, no wrapping
-                          // auto-height: fixed width, auto height, wraps
-                          // fixed: both fixed, clips overflow
-                          const textStyle: React.CSSProperties = {
-                            color: textObj.color,
-                            fontSize: textObj.fontSize,
-                            fontFamily: textObj.fontFamily,
-                            fontWeight: textObj.fontWeight,
-                            textAlign: textObj.textAlign,
-                            outline: isEditing ? "1px solid #3b82f6" : "none",
-                            pointerEvents: isEditing ? "auto" : "none",
-                            cursor: isEditing ? "text" : "default",
-                            // Ensure minimum clickable area for empty text
-                            minWidth: sizeMode === "auto-width" ? 4 : undefined,
-                            minHeight: 4,
-                          };
-
-                          if (sizeMode === "auto-width") {
-                            // Auto width: no wrapping, both dimensions grow
-                            textStyle.whiteSpace = "pre";
-                            textStyle.width = "auto";
-                            textStyle.height = "auto";
-                          } else if (sizeMode === "auto-height") {
-                            // Auto height: fixed width, wraps, height grows
-                            textStyle.width = obj.width;
-                            textStyle.height = "auto";
-                            textStyle.whiteSpace = "pre-wrap";
-                            textStyle.wordWrap = "break-word";
-                          } else {
-                            // Fixed: both dimensions fixed, clips
-                            textStyle.width = obj.width;
-                            textStyle.height = obj.height;
-                            textStyle.whiteSpace = "pre-wrap";
-                            textStyle.wordWrap = "break-word";
-                            textStyle.overflow = "hidden";
-                          }
 
                           return (
                             <div
@@ -1615,7 +1389,7 @@ export function Canvas() {
                                   e.currentTarget.blur();
                                 }
                               }}
-                              style={textStyle}
+                              style={computeTextStyle(textObj, isEditing)}
                             >
                               {textObj.content || (isEditing ? "" : "\u200B")}
                             </div>
