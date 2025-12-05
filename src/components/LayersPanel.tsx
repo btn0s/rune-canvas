@@ -39,7 +39,6 @@ interface LayersPanelProps {
   items: LayerItem[];
   selectedIds: string[];
   onSelect: (ids: string[] | null, addToSelection?: boolean) => void;
-  debug?: boolean;
   sidebarMode: SidebarMode;
 }
 
@@ -219,7 +218,6 @@ export function LayersPanel({
   items,
   selectedIds,
   onSelect,
-  debug = false,
   sidebarMode,
 }: LayersPanelProps) {
   const [isHovered, setIsHovered] = useState(false);
@@ -312,14 +310,6 @@ export function LayersPanel({
         onMouseDown={(e) => e.stopPropagation()}
         onMouseUp={(e) => e.stopPropagation()}
       >
-        {/* Debug hitbox visualization */}
-        {debug && (
-          <div
-            className="absolute border-2 border-dashed border-red-500/50 bg-red-500/10 pointer-events-none rounded"
-            style={{ inset: 0 }}
-          />
-        )}
-
         {/* Collapsed indicator - layer bars (will be replaced with icon) */}
         <div
           className="flex flex-col items-end gap-0.5 p-2 transition-opacity duration-200"

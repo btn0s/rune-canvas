@@ -90,7 +90,7 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
   objects: [],
   selectedIds: [],
   transform: { x: 0, y: 0, scale: 1 },
-  tool: "frame",
+  tool: "select",
   editingTextId: null,
   canvasBackground: "#0a0a0a",
   history: { past: [], future: [] },

@@ -311,9 +311,6 @@ export function Canvas() {
   // Space key held for temporary pan
   const [spaceHeld, setSpaceHeld] = useState(false);
 
-  // Debug mode for hitbox visualization
-  const [debugMode, setDebugMode] = useState(false);
-
   // Sidebar visibility mode: "show" = full sidebars, "hide" = hover-based
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>("hide");
 
@@ -675,29 +672,12 @@ export function Canvas() {
       ctx.fillRect(mx, my, mw, mh);
       ctx.strokeRect(mx, my, mw, mh);
     }
-
-    // Debug mode visualizations
-    if (debugMode && selectionBounds) {
-      ctx.font = "10px monospace";
-      ctx.fillStyle = "rgba(59, 130, 246, 0.9)";
-      ctx.fillRect(10, 10, 180, 40);
-      ctx.fillStyle = "#fff";
-      ctx.fillText(
-        `Bounds: ${Math.round(selectionBounds.x)},${Math.round(
-          selectionBounds.y
-        )}`,
-        15,
-        25
-      );
-      ctx.fillText(`Selected: ${selectedIds.length} objects`, 15, 45);
-    }
   }, [
     transform,
     selectionBounds,
     guides,
     marqueeRect,
     isMarqueeSelecting,
-    debugMode,
     hoveredObjectId,
     objects,
   ]);
@@ -1435,7 +1415,6 @@ export function Canvas() {
               }))}
               selectedIds={selectedIds}
               onSelect={select}
-              debug={debugMode}
               sidebarMode={sidebarMode}
             />
 
@@ -1482,18 +1461,6 @@ export function Canvas() {
                   </Tooltip>
                 ))}
               </div>
-
-              {/* Debug toggle */}
-              <button
-                onClick={() => setDebugMode(!debugMode)}
-                className={`px-2 py-1 text-xs font-mono rounded transition-colors ${
-                  debugMode
-                    ? "bg-red-500/20 text-red-400 border border-red-500/50"
-                    : "bg-zinc-800/50 text-zinc-500 border border-zinc-700 hover:bg-zinc-700/50"
-                }`}
-              >
-                {debugMode ? "Debug ON" : "Debug"}
-              </button>
             </div>
           </div>
         </ContextMenuTrigger>

@@ -45,10 +45,37 @@ export const useColorPicker = () => {
 const parseColor = (colorValue: string | undefined, defaultValue: string) => {
   try {
     const color = Color(colorValue || defaultValue);
+    // #region agent log
+    const rawH = color.hue();
+    const rawS = color.saturationl();
+    const rawL = color.lightness();
+    fetch("http://127.0.0.1:7242/ingest/489067f9-1dbe-4235-9816-21c1c421f1e2", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        location: "color-picker/index.tsx:parseColor",
+        message: "parseColor raw values (POST-FIX)",
+        data: {
+          colorValue,
+          defaultValue,
+          rawH,
+          rawS,
+          rawL,
+          finalH: rawH ?? 0,
+          finalS: rawS ?? 100,
+          finalL: rawL ?? 50,
+        },
+        timestamp: Date.now(),
+        sessionId: "debug-session",
+        runId: "post-fix",
+        hypothesisId: "A,B,E",
+      }),
+    }).catch(() => {});
+    // #endregion
     return {
-      h: color.hue() || 0,
-      s: color.saturationl() || 100,
-      l: color.lightness() || 50,
+      h: color.hue() ?? 0,
+      s: color.saturationl() ?? 100,
+      l: color.lightness() ?? 50,
     };
   } catch {
     return { h: 0, s: 100, l: 50 };
@@ -135,7 +162,31 @@ export const ColorPickerSelection = memo(
       const topLightness =
         saturation < 1 ? 100 : 50 + 50 * (1 - saturation / 100);
       if (topLightness === 0) return 1;
-      return Math.max(0, Math.min(1, 1 - lightness / topLightness));
+      const result = Math.max(0, Math.min(1, 1 - lightness / topLightness));
+      // #region agent log
+      fetch(
+        "http://127.0.0.1:7242/ingest/489067f9-1dbe-4235-9816-21c1c421f1e2",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            location: "color-picker/index.tsx:positionY",
+            message: "position calculation",
+            data: {
+              saturation,
+              lightness,
+              topLightness,
+              positionY: result,
+              positionX: saturation / 100,
+            },
+            timestamp: Date.now(),
+            sessionId: "debug-session",
+            hypothesisId: "C",
+          }),
+        }
+      ).catch(() => {});
+      // #endregion
+      return result;
     }, [saturation, lightness]);
 
     const backgroundGradient = useMemo(() => {
@@ -156,6 +207,33 @@ export const ColorPickerSelection = memo(
         const topLightness = x < 0.01 ? 100 : 50 + 50 * (1 - x);
         const newLightness = topLightness * (1 - y);
 
+        // #region agent log
+        fetch(
+          "http://127.0.0.1:7242/ingest/489067f9-1dbe-4235-9816-21c1c421f1e2",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              location: "color-picker/index.tsx:updateFromPosition",
+              message: "drag update",
+              data: {
+                clientX,
+                clientY,
+                rectLeft: rect.left,
+                rectTop: rect.top,
+                x,
+                y,
+                newSaturation,
+                newLightness,
+                hue,
+              },
+              timestamp: Date.now(),
+              sessionId: "debug-session",
+              hypothesisId: "D",
+            }),
+          }
+        ).catch(() => {});
+        // #endregion
         setColor(hue, newSaturation, newLightness);
       },
       [hue, setColor]
