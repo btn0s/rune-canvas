@@ -22,6 +22,7 @@ import {
   computeFrameStyle,
   computeTextStyle,
   computeImageStyle,
+  computeImageWrapperStyle,
   getChildren,
   isFrame,
 } from "../lib/objects";
@@ -322,6 +323,9 @@ export function Canvas() {
 
   // Context menu position (canvas space)
   const [contextMenuPoint, setContextMenuPoint] = useState<Point | null>(null);
+
+  // Crop mode state (meta key held during resize of an image)
+  const [isCropMode, setIsCropMode] = useState(false);
 
   // Focus text element when editing starts
   useEffect(() => {
@@ -931,7 +935,10 @@ export function Canvas() {
       updateDrag(canvasPoint, e.shiftKey, e.altKey);
       setHoveredObjectId(null);
     } else if (isResizing) {
-      updateResize(canvasPoint, e.shiftKey, e.altKey);
+      updateResize(canvasPoint, e.shiftKey, e.altKey, e.metaKey);
+      // Track crop mode: meta key + resizing a single image
+      const selectedObj = selectedIds.length === 1 ? objects.find(o => o.id === selectedIds[0]) : null;
+      setIsCropMode(e.metaKey && selectedObj?.type === "image");
       setHoveredObjectId(null);
     } else if (isMarqueeSelecting) {
       updateMarquee(canvasPoint);
@@ -964,6 +971,7 @@ export function Canvas() {
     if (isResizing) {
       endResize();
       setHoveredHandle(null);
+      setIsCropMode(false);
     }
     if (isMarqueeSelecting) endMarquee();
   };
@@ -1296,7 +1304,9 @@ export function Canvas() {
                             bottom: "100%",
                             left: 0,
                             marginBottom: 4,
-                            fontSize: `${Math.max(10, 11 / transform.scale)}px`,
+                            fontSize: "11px",
+                            transform: `scale(${1 / transform.scale})`,
+                            transformOrigin: "bottom left",
                           }}
                         >
                           {obj.name}
@@ -1317,14 +1327,53 @@ export function Canvas() {
                         </div>
                       )}
 
-                      {obj.type === "image" && (
-                        <img
-                          src={(obj as ImageObject).src}
-                          alt={obj.name}
-                          draggable={false}
-                          style={computeImageStyle(obj as ImageObject)}
-                        />
-                      )}
+                      {obj.type === "image" &&
+                        (() => {
+                          const imgObj = obj as ImageObject;
+                          const showCropPreview = isCropMode && isSelected;
+
+                          return (
+                            <>
+                              {/* Dimmed full image preview during crop mode */}
+                              {showCropPreview && (
+                                <img
+                                  src={imgObj.src}
+                                  alt=""
+                                  draggable={false}
+                                  style={{
+                                    position: "absolute",
+                                    // Scale to match the current display scale
+                                    width:
+                                      imgObj.naturalWidth *
+                                      (imgObj.width / imgObj.cropWidth),
+                                    height:
+                                      imgObj.naturalHeight *
+                                      (imgObj.height / imgObj.cropHeight),
+                                    // Position to align with the cropped area
+                                    left:
+                                      -imgObj.cropX *
+                                      (imgObj.width / imgObj.cropWidth),
+                                    top:
+                                      -imgObj.cropY *
+                                      (imgObj.height / imgObj.cropHeight),
+                                    opacity: 0.3,
+                                    pointerEvents: "none",
+                                    maxWidth: "unset",
+                                  }}
+                                />
+                              )}
+                              {/* Main cropped image */}
+                              <div style={computeImageWrapperStyle(imgObj)}>
+                                <img
+                                  src={imgObj.src}
+                                  alt={obj.name}
+                                  draggable={false}
+                                  style={computeImageStyle(imgObj)}
+                                />
+                              </div>
+                            </>
+                          );
+                        })()}
 
                       {obj.type === "text" &&
                         (() => {

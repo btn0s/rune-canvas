@@ -811,6 +811,15 @@ function ImageProperties({
   const commonUpdate = onUpdate as (updates: Partial<CanvasObject>) => void;
   const isSingle = images.length === 1;
 
+  // Check if any image is cropped (crop differs from full image)
+  const isCropped = images.some(
+    (img) =>
+      img.cropX !== 0 ||
+      img.cropY !== 0 ||
+      img.cropWidth !== img.naturalWidth ||
+      img.cropHeight !== img.naturalHeight
+  );
+
   return (
     <>
       {/* Layout */}
@@ -823,6 +832,57 @@ function ImageProperties({
           <OpacityInput objects={images} onUpdate={commonUpdate} />
           <div />
         </div>
+      </div>
+
+      {/* Crop Section */}
+      <div className="flex flex-col gap-1.5">
+        <SectionLabel>Crop</SectionLabel>
+        <div className="grid grid-cols-2 gap-1.5">
+          <NumberInput
+            label="X"
+            value={getMixedValue(images, "cropX")}
+            onChange={(v) => onUpdate({ cropX: Math.max(0, v) })}
+            min={0}
+          />
+          <NumberInput
+            label="Y"
+            value={getMixedValue(images, "cropY")}
+            onChange={(v) => onUpdate({ cropY: Math.max(0, v) })}
+            min={0}
+          />
+          <NumberInput
+            label="W"
+            value={getMixedValue(images, "cropWidth")}
+            onChange={(v) => onUpdate({ cropWidth: Math.max(1, v) })}
+            min={1}
+          />
+          <NumberInput
+            label="H"
+            value={getMixedValue(images, "cropHeight")}
+            onChange={(v) => onUpdate({ cropHeight: Math.max(1, v) })}
+            min={1}
+          />
+        </div>
+        {isCropped && (
+          <PropertyButton
+            onClick={() => {
+              // Reset each image's crop to its full natural size
+              images.forEach((img) => {
+                onUpdate({
+                  cropX: 0,
+                  cropY: 0,
+                  cropWidth: img.naturalWidth,
+                  cropHeight: img.naturalHeight,
+                });
+              });
+            }}
+          >
+            Reset crop
+          </PropertyButton>
+        )}
+        <span className="text-[10px] text-muted-foreground">
+          Hold ⌘ while resizing to crop
+        </span>
       </div>
 
       {/* Original dimensions - only show for single selection */}

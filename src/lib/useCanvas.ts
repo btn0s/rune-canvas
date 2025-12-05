@@ -887,6 +887,11 @@ export function useCanvas() {
         src,
         naturalWidth,
         naturalHeight,
+        // Initialize crop to full image (no cropping)
+        cropX: 0,
+        cropY: 0,
+        cropWidth: naturalWidth,
+        cropHeight: naturalHeight,
       };
       pushHistory();
       setObjects((prev) => [...prev, newImage]);

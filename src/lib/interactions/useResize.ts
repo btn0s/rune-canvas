@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import type { CanvasObject, Point, Guide, ResizeHandle } from "../types";
+import type { CanvasObject, ImageObject, Point, Guide, ResizeHandle } from "../types";
 import { getCanvasPosition } from "../geometry";
 import { calculateSnapping } from "../snapping";
 import { getSelectionBounds, recalculateHugSizes } from "../objectUtils";
@@ -75,7 +75,7 @@ export function useResize(config: ResizeConfig, actions: ResizeActions) {
   );
 
   const updateResize = useCallback(
-    (canvasPoint: Point, shiftKey = false, altKey = false) => {
+    (canvasPoint: Point, shiftKey = false, altKey = false, metaKey = false) => {
       if (!isResizing || !resizeStart.current || !resizeBoundsStart.current)
         return;
 
@@ -91,6 +91,123 @@ export function useResize(config: ResizeConfig, actions: ResizeActions) {
         history.captureOnce();
       }
 
+      // Check if we're in crop mode (meta key + single image selected)
+      const selectedObj = objects.find((o) => o.id === selectedIds[0]);
+      const isCropMode = metaKey && selectedIds.length === 1 && selectedObj?.type === "image";
+
+      if (isCropMode) {
+        // CROP MODE: Change display size while keeping image scale constant
+        // The image "stays in place" - we're moving the frame/mask edges
+        const img = selectedObj as ImageObject;
+        const origImg = origObjects.find((o) => o.id === img.id) as ImageObject;
+        if (!origImg) return;
+
+        // Calculate the current scale (display pixels per image pixel)
+        // This scale remains constant during crop - we're just revealing more/less
+        const scaleX = origImg.width / origImg.cropWidth;
+        const scaleY = origImg.height / origImg.cropHeight;
+
+        // Start with original values
+        let newWidth = origImg.width;
+        let newHeight = origImg.height;
+        let newX = origImg.x;
+        let newY = origImg.y;
+        let newCropX = origImg.cropX;
+        let newCropY = origImg.cropY;
+        let newCropWidth = origImg.cropWidth;
+        let newCropHeight = origImg.cropHeight;
+
+        // Adjust based on handle - change display size, crop adjusts to maintain scale
+        if (handle.includes("e")) {
+          // East edge: expand/contract right side
+          newWidth = Math.max(1, origImg.width + dx);
+          // Crop width changes to maintain scale
+          newCropWidth = newWidth / scaleX;
+          // Clamp: can't show more than available image on right
+          const maxCropWidth = img.naturalWidth - newCropX;
+          if (newCropWidth > maxCropWidth) {
+            newCropWidth = maxCropWidth;
+            newWidth = newCropWidth * scaleX;
+          }
+        }
+        if (handle.includes("w")) {
+          // West edge: expand/contract left side, position changes
+          const widthDelta = -dx;
+          newWidth = Math.max(1, origImg.width + widthDelta);
+          // Crop width changes to maintain scale
+          const cropWidthDelta = widthDelta / scaleX;
+          newCropWidth = origImg.cropWidth + cropWidthDelta;
+          // Crop X moves in opposite direction (revealing more on left = lower cropX)
+          newCropX = origImg.cropX - cropWidthDelta;
+          // Position moves with the edge
+          newX = origImg.x + dx;
+          
+          // Clamp: can't reveal more than available image on left
+          if (newCropX < 0) {
+            const overflow = -newCropX;
+            newCropX = 0;
+            newCropWidth = newCropWidth - overflow;
+            newWidth = newCropWidth * scaleX;
+            newX = origImg.x + (origImg.width - newWidth);
+          }
+        }
+        if (handle.includes("s")) {
+          // South edge: expand/contract bottom
+          newHeight = Math.max(1, origImg.height + dy);
+          newCropHeight = newHeight / scaleY;
+          // Clamp: can't show more than available image on bottom
+          const maxCropHeight = img.naturalHeight - newCropY;
+          if (newCropHeight > maxCropHeight) {
+            newCropHeight = maxCropHeight;
+            newHeight = newCropHeight * scaleY;
+          }
+        }
+        if (handle.includes("n")) {
+          // North edge: expand/contract top, position changes
+          const heightDelta = -dy;
+          newHeight = Math.max(1, origImg.height + heightDelta);
+          const cropHeightDelta = heightDelta / scaleY;
+          newCropHeight = origImg.cropHeight + cropHeightDelta;
+          newCropY = origImg.cropY - cropHeightDelta;
+          newY = origImg.y + dy;
+          
+          // Clamp: can't reveal more than available image on top
+          if (newCropY < 0) {
+            const overflow = -newCropY;
+            newCropY = 0;
+            newCropHeight = newCropHeight - overflow;
+            newHeight = newCropHeight * scaleY;
+            newY = origImg.y + (origImg.height - newHeight);
+          }
+        }
+
+        // Enforce minimums
+        newWidth = Math.max(1, newWidth);
+        newHeight = Math.max(1, newHeight);
+        newCropWidth = Math.max(1, newCropWidth);
+        newCropHeight = Math.max(1, newCropHeight);
+
+        setObjects((prev) =>
+          prev.map((o) => {
+            if (o.id !== selectedObj.id) return o;
+            return {
+              ...o,
+              x: newX,
+              y: newY,
+              width: newWidth,
+              height: newHeight,
+              cropX: newCropX,
+              cropY: newCropY,
+              cropWidth: newCropWidth,
+              cropHeight: newCropHeight,
+            } as ImageObject;
+          })
+        );
+
+        return; // Don't do normal resize
+      }
+
+      // NORMAL RESIZE MODE
       // Shift: lock aspect ratio
       if (shiftKey && origBounds.width > 0 && origBounds.height > 0) {
         const aspectRatio = origBounds.width / origBounds.height;

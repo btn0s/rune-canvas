@@ -118,6 +118,12 @@ export interface ImageObject extends BaseObject {
   src: string;
   naturalWidth: number;
   naturalHeight: number;
+  // Crop state - defines which portion of the image is visible
+  // Values are in image pixels (0 to naturalWidth/Height)
+  cropX: number; // Left edge of visible area
+  cropY: number; // Top edge of visible area
+  cropWidth: number; // Width of visible area
+  cropHeight: number; // Height of visible area
 }
 
 export type TextSizeMode = "auto-width" | "auto-height" | "fixed";

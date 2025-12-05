@@ -249,14 +249,52 @@ export function computeTextStyle(
 // ============================================================================
 
 /**
- * Compute styles for image content.
+ * Compute styles for the image wrapper (handles overflow clipping for crop).
  */
-export function computeImageStyle(image: ImageObject): CSSProperties {
+export function computeImageWrapperStyle(image: ImageObject): CSSProperties {
   return {
     width: image.width,
     height: image.height,
+    overflow: "hidden",
+    position: "relative",
+  };
+}
+
+/**
+ * Compute styles for image content (the actual <img> element).
+ * Handles crop by scaling and positioning the image within its wrapper.
+ */
+export function computeImageStyle(image: ImageObject): CSSProperties {
+  // If no crop data, render at display size
+  if (!image.cropWidth || !image.cropHeight) {
+    return {
+      width: image.width,
+      height: image.height,
+      maxWidth: "unset",
+      objectFit: "cover",
+      display: "block",
+    };
+  }
+
+  // Calculate scale: display size / crop size
+  const scaleX = image.width / image.cropWidth;
+  const scaleY = image.height / image.cropHeight;
+
+  // The full image size when scaled
+  const scaledWidth = image.naturalWidth * scaleX;
+  const scaledHeight = image.naturalHeight * scaleY;
+
+  // Offset based on crop position
+  const offsetX = -image.cropX * scaleX;
+  const offsetY = -image.cropY * scaleY;
+
+  return {
+    position: "absolute",
+    width: scaledWidth,
+    height: scaledHeight,
+    left: offsetX,
+    top: offsetY,
     maxWidth: "unset",
-    objectFit: "cover",
     display: "block",
   };
 }
