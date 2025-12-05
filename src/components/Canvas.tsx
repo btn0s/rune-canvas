@@ -256,8 +256,10 @@ export function Canvas() {
     isMarqueeSelecting,
     marqueeRect,
     guides,
+    canvasBackground,
     setTool,
     setEditingTextId,
+    setCanvasBackground,
     screenToCanvas,
     handleWheel,
     startCreate,
@@ -1259,7 +1261,8 @@ export function Canvas() {
         <ContextMenuTrigger asChild>
           <div
             ref={containerRef}
-            className="relative w-full h-full overflow-hidden bg-background"
+            className="relative w-full h-full overflow-hidden"
+            style={{ backgroundColor: canvasBackground, cursor }}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
@@ -1267,7 +1270,6 @@ export function Canvas() {
             onDragOver={handleDragOver}
             onDrop={handleDrop}
             onContextMenu={handleContextMenu}
-            style={{ cursor }}
           >
             {/* DOM layer - objects */}
             <div
@@ -1423,33 +1425,6 @@ export function Canvas() {
               className="absolute inset-0 w-full h-full pointer-events-none"
             />
 
-            {/* Toolbar */}
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex gap-1 p-1.5 bg-card border border-border border-b-0 rounded-t-md">
-              {TOOLS.map((t) => (
-                <Tooltip key={t.id}>
-                  <TooltipTrigger asChild>
-                    <span>
-                      <Toggle
-                        size="sm"
-                        pressed={tool === t.id}
-                        onPressedChange={() => setTool(t.id)}
-                        aria-label={t.label}
-                      >
-                        {t.icon}
-                      </Toggle>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent
-                    side="top"
-                    className="flex items-center gap-2"
-                  >
-                    <span>{t.label}</span>
-                    <Kbd>{t.shortcut}</Kbd>
-                  </TooltipContent>
-                </Tooltip>
-              ))}
-            </div>
-
             {/* Layers panel */}
             <LayersPanel
               items={objects.map((o) => ({
@@ -1470,24 +1445,56 @@ export function Canvas() {
               allObjects={objects}
               onUpdate={updateObject}
               sidebarMode={sidebarMode}
+              canvasBackground={canvasBackground}
+              onCanvasBackgroundChange={setCanvasBackground}
             />
 
-            {/* Zoom indicator */}
-            <div className="absolute bottom-4 left-4 px-3 py-1.5 bg-card border border-border rounded-md text-xs font-mono text-muted-foreground">
-              {Math.round(transform.scale * 100)}%
-            </div>
+            {/* Bottom toolbar container */}
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex items-center gap-4">
+              {/* Zoom indicator */}
+              <div className="px-3 py-1.5 bg-card border border-border rounded-md text-xs font-mono text-muted-foreground">
+                {Math.round(transform.scale * 100)}%
+              </div>
 
-            {/* Debug toggle */}
-            <button
-              onClick={() => setDebugMode(!debugMode)}
-              className={`absolute top-4 right-4 px-2 py-1 text-xs font-mono rounded transition-colors ${
-                debugMode
-                  ? "bg-red-500/20 text-red-400 border border-red-500/50"
-                  : "bg-zinc-800/50 text-zinc-500 border border-zinc-700 hover:bg-zinc-700/50"
-              }`}
-            >
-              {debugMode ? "Debug ON" : "Debug"}
-            </button>
+              {/* Toolbar */}
+              <div className="flex gap-1 p-1.5 bg-card border border-border border-b-0 rounded-t-md">
+                {TOOLS.map((t) => (
+                  <Tooltip key={t.id}>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Toggle
+                          size="sm"
+                          pressed={tool === t.id}
+                          onPressedChange={() => setTool(t.id)}
+                          aria-label={t.label}
+                        >
+                          {t.icon}
+                        </Toggle>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="top"
+                      className="flex items-center gap-2"
+                    >
+                      <span>{t.label}</span>
+                      <Kbd>{t.shortcut}</Kbd>
+                    </TooltipContent>
+                  </Tooltip>
+                ))}
+              </div>
+
+              {/* Debug toggle */}
+              <button
+                onClick={() => setDebugMode(!debugMode)}
+                className={`px-2 py-1 text-xs font-mono rounded transition-colors ${
+                  debugMode
+                    ? "bg-red-500/20 text-red-400 border border-red-500/50"
+                    : "bg-zinc-800/50 text-zinc-500 border border-zinc-700 hover:bg-zinc-700/50"
+                }`}
+              >
+                {debugMode ? "Debug ON" : "Debug"}
+              </button>
+            </div>
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>

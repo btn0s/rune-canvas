@@ -7,6 +7,7 @@ type SceneState = {
   transform: Transform;
   tool: Tool;
   editingTextId: string | null;
+  canvasBackground: string;
 };
 
 type SceneUpdate<T> = T | ((prev: T) => T);
@@ -39,6 +40,10 @@ interface CanvasStoreState extends SceneState {
     value: SceneUpdate<string | null>,
     options?: SceneUpdateOptions
   ) => void;
+  setCanvasBackground: (
+    value: SceneUpdate<string>,
+    options?: SceneUpdateOptions
+  ) => void;
   pushHistory: () => void;
   undo: () => void;
   redo: () => void;
@@ -58,6 +63,7 @@ const cloneScene = (scene: SceneState): SceneState => ({
   transform: { ...scene.transform },
   tool: scene.tool,
   editingTextId: scene.editingTextId,
+  canvasBackground: scene.canvasBackground,
 });
 
 const getScene = (state: CanvasStoreState): SceneState => ({
@@ -66,6 +72,7 @@ const getScene = (state: CanvasStoreState): SceneState => ({
   transform: state.transform,
   tool: state.tool,
   editingTextId: state.editingTextId,
+  canvasBackground: state.canvasBackground,
 });
 
 const resolveUpdate = <T>(value: SceneUpdate<T>, prev: T): T =>
@@ -85,6 +92,7 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
   transform: { x: 0, y: 0, scale: 1 },
   tool: "frame",
   editingTextId: null,
+  canvasBackground: "#0a0a0a",
   history: { past: [], future: [] },
   setScene: (updater, options = {}) =>
     set((state) => {
@@ -146,6 +154,13 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
     get().setScene(
       (scene) => ({
         editingTextId: resolveUpdate(value, scene.editingTextId),
+      }),
+      options
+    ),
+  setCanvasBackground: (value, options) =>
+    get().setScene(
+      (scene) => ({
+        canvasBackground: resolveUpdate(value, scene.canvasBackground),
       }),
       options
     ),

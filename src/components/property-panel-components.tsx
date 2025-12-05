@@ -246,11 +246,13 @@ export function ColorInput({
   opacity = 1,
   onChange,
   onOpacityChange,
+  showOpacity = true,
 }: {
   color: string | MixedValue;
   opacity?: number | MixedValue;
   onChange: (color: string) => void;
   onOpacityChange?: (opacity: number) => void;
+  showOpacity?: boolean;
 }) {
   const colorMixed = isMixed(color);
   const opacityMixed = isMixed(opacity);
@@ -351,24 +353,29 @@ export function ColorInput({
           "flex-1 min-w-0 px-1 text-xs font-mono bg-transparent border-0 outline-none uppercase",
           colorMixed
             ? "text-muted-foreground placeholder:text-muted-foreground"
-            : "text-foreground"
+            : "text-foreground",
+          !showOpacity && "pr-1.5"
         )}
         maxLength={6}
       />
-      <span className={cn("text-xs", LABEL_COLOR)}>/</span>
-      {/* Opacity input */}
-      <EditableField
-        value={opacityDisplay}
-        onCommit={commitOpacity}
-        placeholder={opacityMixed ? "—" : undefined}
-        className={cn(
-          "w-10 px-1 text-xs font-mono bg-transparent border-0 outline-none text-right",
-          opacityMixed
-            ? "text-muted-foreground placeholder:text-muted-foreground"
-            : "text-foreground"
-        )}
-      />
-      <span className={cn("text-xs pr-1.5", LABEL_COLOR)}>%</span>
+      {showOpacity && (
+        <>
+          <span className={cn("text-xs", LABEL_COLOR)}>/</span>
+          {/* Opacity input */}
+          <EditableField
+            value={opacityDisplay}
+            onCommit={commitOpacity}
+            placeholder={opacityMixed ? "—" : undefined}
+            className={cn(
+              "w-10 px-1 text-xs font-mono bg-transparent border-0 outline-none text-right",
+              opacityMixed
+                ? "text-muted-foreground placeholder:text-muted-foreground"
+                : "text-foreground"
+            )}
+          />
+          <span className={cn("text-xs pr-1.5", LABEL_COLOR)}>%</span>
+        </>
+      )}
     </div>
   );
 }

@@ -253,8 +253,12 @@ export function LayersPanel({
     ...items.filter((item) => item.parentId === null),
   ].reverse();
 
-  // No items to show
-  if (items.length === 0) return null;
+  const isEmpty = items.length === 0;
+
+  // Empty state content
+  const emptyContent = (
+    <span className="text-xs text-muted-foreground">No layers</span>
+  );
 
   // ==========================================================================
   // SHOW MODE - Full height sidebar, always visible
@@ -271,20 +275,24 @@ export function LayersPanel({
             Layers
           </span>
         </div>
-        <div className="flex-1 overflow-y-auto p-2">
-          <div className="flex flex-col gap-1">
-            {rootItems.map((item) => (
-              <LayerTreeItem
-                key={item.id}
-                item={item}
-                items={items}
-                depth={0}
-                selectedIds={selectedIds}
-                animatedIds={animatedIds}
-                onSelect={onSelect}
-              />
-            ))}
-          </div>
+        <div className="flex-1 overflow-y-auto p-3">
+          {isEmpty ? (
+            emptyContent
+          ) : (
+            <div className="flex flex-col gap-1">
+              {rootItems.map((item) => (
+                <LayerTreeItem
+                  key={item.id}
+                  item={item}
+                  items={items}
+                  depth={0}
+                  selectedIds={selectedIds}
+                  animatedIds={animatedIds}
+                  onSelect={onSelect}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -317,15 +325,19 @@ export function LayersPanel({
           className="flex flex-col items-end gap-0.5 p-2 transition-opacity duration-200"
           style={{ opacity: isHovered ? 0 : 1 }}
         >
-          {rootItems.map((item) => (
-            <CollapsedIndicator
-              key={item.id}
-              item={item}
-              items={items}
-              depth={0}
-              selectedIds={selectedIds}
-            />
-          ))}
+          {isEmpty ? (
+            <div className="h-[2px] w-4 rounded-full bg-zinc-600" />
+          ) : (
+            rootItems.map((item) => (
+              <CollapsedIndicator
+                key={item.id}
+                item={item}
+                items={items}
+                depth={0}
+                selectedIds={selectedIds}
+              />
+            ))
+          )}
         </div>
       </div>
 
@@ -343,19 +355,23 @@ export function LayersPanel({
         onMouseDown={(e) => e.stopPropagation()}
         onMouseUp={(e) => e.stopPropagation()}
       >
-        <div className="flex flex-col gap-1">
-          {rootItems.map((item) => (
-            <LayerTreeItem
-              key={item.id}
-              item={item}
-              items={items}
-              depth={0}
-              selectedIds={selectedIds}
-              animatedIds={animatedIds}
-              onSelect={onSelect}
-            />
-          ))}
-        </div>
+        {isEmpty ? (
+          emptyContent
+        ) : (
+          <div className="flex flex-col gap-1">
+            {rootItems.map((item) => (
+              <LayerTreeItem
+                key={item.id}
+                item={item}
+                items={items}
+                depth={0}
+                selectedIds={selectedIds}
+                animatedIds={animatedIds}
+                onSelect={onSelect}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       <style>{`

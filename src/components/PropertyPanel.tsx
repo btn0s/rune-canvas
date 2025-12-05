@@ -60,6 +60,8 @@ interface PropertyPanelProps {
   allObjects: CanvasObject[];
   onUpdate: (id: string, updates: Partial<CanvasObject>) => void;
   sidebarMode: SidebarMode;
+  canvasBackground: string;
+  onCanvasBackgroundChange: (color: string) => void;
 }
 
 /** Props for type-specific property components - supports single or multiple objects */
@@ -878,12 +880,90 @@ export function PropertyPanel({
   allObjects: _allObjects,
   onUpdate,
   sidebarMode,
+  canvasBackground,
+  onCanvasBackgroundChange,
 }: PropertyPanelProps) {
   const [isHovered, setIsHovered] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Nothing selected
-  if (selectedObjects.length === 0) return null;
+  // ==========================================================================
+  // EMPTY STATE - Canvas properties when nothing selected
+  // ==========================================================================
+  if (selectedObjects.length === 0) {
+    const emptyContent = (
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
+          <span className="text-xs text-muted-foreground">
+            Canvas Background
+          </span>
+          <ColorInput
+            color={canvasBackground}
+            onChange={onCanvasBackgroundChange}
+            showOpacity={false}
+          />
+        </div>
+      </div>
+    );
+
+    // SHOW MODE - full sidebar
+    if (sidebarMode === "show") {
+      return (
+        <div
+          ref={panelRef}
+          className="absolute right-0 top-0 bottom-0 w-56 bg-card border-l border-border select-none flex flex-col"
+          onMouseDown={(e) => e.stopPropagation()}
+          onMouseUp={(e) => e.stopPropagation()}
+        >
+          <div className="p-3 border-b border-border">
+            <span className="text-xs font-medium text-muted-foreground">
+              Properties
+            </span>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3">{emptyContent}</div>
+        </div>
+      );
+    }
+
+    // HIDE MODE - hover panel
+    return (
+      <>
+        {/* Hover trigger zone */}
+        <div
+          ref={panelRef}
+          className="absolute right-4 top-1/2 -translate-y-1/2 select-none"
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+          onMouseDown={(e) => e.stopPropagation()}
+          onMouseUp={(e) => e.stopPropagation()}
+        >
+          {/* Collapsed indicator */}
+          <div
+            className="flex flex-col items-start gap-1 p-2 transition-opacity duration-200"
+            style={{ opacity: isHovered ? 0 : 1 }}
+          >
+            <div className="h-[2px] w-4 rounded-full bg-zinc-600" />
+          </div>
+        </div>
+
+        {/* Panel */}
+        <div
+          className="absolute right-4 top-1/2 -translate-y-1/2 bg-card border border-border rounded-md p-3 select-none transition-all duration-200 ease-out"
+          style={{
+            width: 220,
+            opacity: isHovered ? 1 : 0,
+            transform: isHovered ? "translateX(0)" : "translateX(8px)",
+            pointerEvents: isHovered ? "auto" : "none",
+          }}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+          onMouseDown={(e) => e.stopPropagation()}
+          onMouseUp={(e) => e.stopPropagation()}
+        >
+          {emptyContent}
+        </div>
+      </>
+    );
+  }
 
   // Update function that applies to ALL selected objects
   const handleUpdateAll = <T extends CanvasObject>(updates: Partial<T>) => {
