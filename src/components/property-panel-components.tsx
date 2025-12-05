@@ -377,3 +377,161 @@ export function PropertyButton({
     </Button>
   );
 }
+
+// ============================================================================
+// EFFECT SECTIONS - Reusable property sections for visual effects
+// ============================================================================
+
+import type { ShadowProps, BorderSide } from "@/lib/types";
+import { SelectItem } from "./ui/select";
+
+// Default values for new shadows
+const DEFAULT_SHADOW: ShadowProps = {
+  x: 0,
+  y: 2,
+  blur: 4,
+  spread: 0,
+  color: "#000000",
+  opacity: 0.2,
+};
+
+/**
+ * Shadow section - handles both drop shadow and inner shadow
+ * Provides X/Y offset, blur, spread, color, and opacity controls
+ */
+export function ShadowSection({
+  label,
+  shadow,
+  onChange,
+}: {
+  label: string;
+  shadow: ShadowProps | undefined;
+  onChange: (shadow: ShadowProps | undefined) => void;
+}) {
+  return (
+    <CollapsibleSection
+      label={label}
+      isOpen={!!shadow}
+      onAdd={() => onChange({ ...DEFAULT_SHADOW })}
+      onRemove={() => onChange(undefined)}
+      visible={(shadow?.opacity ?? 0) > 0}
+      onToggleVisible={() =>
+        onChange(
+          shadow
+            ? { ...shadow, opacity: shadow.opacity > 0 ? 0 : 0.2 }
+            : undefined
+        )
+      }
+    >
+      <div className="grid grid-cols-2 gap-1.5">
+        <NumberInput
+          label="X"
+          value={shadow?.x || 0}
+          onChange={(v) => onChange({ ...shadow!, x: v })}
+        />
+        <NumberInput
+          label="Y"
+          value={shadow?.y || 0}
+          onChange={(v) => onChange({ ...shadow!, y: v })}
+        />
+        <NumberInput
+          label="Blur"
+          value={shadow?.blur || 0}
+          onChange={(v) => onChange({ ...shadow!, blur: Math.max(0, v) })}
+          min={0}
+        />
+        <NumberInput
+          label="Spread"
+          value={shadow?.spread || 0}
+          onChange={(v) => onChange({ ...shadow!, spread: v })}
+        />
+      </div>
+      <ColorInput
+        color={shadow?.color || "#000000"}
+        opacity={shadow?.opacity ?? 0.2}
+        onChange={(color) => onChange({ ...shadow!, color })}
+        onOpacityChange={(opacity) => onChange({ ...shadow!, opacity })}
+      />
+    </CollapsibleSection>
+  );
+}
+
+// Stroke section props - shared between border and outline
+interface StrokeSectionProps {
+  label: string;
+  color: string | undefined;
+  width: number;
+  opacity: number;
+  onChange: (updates: {
+    color?: string;
+    width?: number;
+    opacity?: number;
+  }) => void;
+  onAdd: () => void;
+  onRemove: () => void;
+  /** Additional controls to render after width input (e.g., side selector, offset) */
+  children?: React.ReactNode;
+}
+
+/**
+ * Stroke section - handles border and outline properties
+ * Provides width, color, and opacity controls with optional additional controls
+ */
+export function StrokeSection({
+  label,
+  color,
+  width,
+  opacity,
+  onChange,
+  onAdd,
+  onRemove,
+  children,
+}: StrokeSectionProps) {
+  return (
+    <CollapsibleSection
+      label={label}
+      isOpen={!!color}
+      onAdd={onAdd}
+      onRemove={onRemove}
+      visible={opacity > 0}
+      onToggleVisible={() => onChange({ opacity: opacity > 0 ? 0 : 1 })}
+    >
+      <div className="grid grid-cols-2 gap-1.5">
+        <NumberInput
+          label="W"
+          value={width}
+          onChange={(v) => onChange({ width: Math.max(0, v) })}
+          min={0}
+        />
+        {children}
+      </div>
+      <ColorInput
+        color={color!}
+        opacity={opacity}
+        onChange={(c) => onChange({ color: c })}
+        onOpacityChange={(o) => onChange({ opacity: o })}
+      />
+    </CollapsibleSection>
+  );
+}
+
+/**
+ * Border side selector - for selecting which sides to apply border to
+ */
+export function BorderSideSelect({
+  value,
+  onChange,
+}: {
+  value: BorderSide;
+  onChange: (side: BorderSide) => void;
+}) {
+  return (
+    <PropertySelect value={value} onValueChange={(v) => onChange(v as BorderSide)}>
+      {(["all", "top", "right", "bottom", "left"] as BorderSide[]).map((side) => (
+        <SelectItem key={side} value={side} className="capitalize text-xs">
+          {side}
+        </SelectItem>
+      ))}
+    </PropertySelect>
+  );
+}

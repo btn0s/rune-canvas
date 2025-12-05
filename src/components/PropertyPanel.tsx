@@ -5,7 +5,6 @@ import {
   ImageObject,
   Transform,
   BlendMode,
-  BorderSide,
 } from "../lib/types";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { SelectItem } from "./ui/select";
@@ -44,6 +43,9 @@ import {
   CollapsibleSection,
   PropertySelect,
   PropertyButton,
+  ShadowSection,
+  StrokeSection,
+  BorderSideSelect,
 } from "./property-panel-components";
 
 interface PropertyPanelProps {
@@ -575,9 +577,18 @@ export function PropertyPanel({
 
         {/* Outline Section - outside stroke (purely visual) */}
         {frame && (
-          <CollapsibleSection
+          <StrokeSection
             label="Outline"
-            isOpen={!!frame.outline}
+            color={frame.outline}
+            width={frame.outlineWidth || 1}
+            opacity={frame.outlineOpacity ?? 1}
+            onChange={(updates) =>
+              onUpdate(selectedObject.id, {
+                outline: updates.color ?? frame.outline,
+                outlineWidth: updates.width ?? frame.outlineWidth,
+                outlineOpacity: updates.opacity ?? frame.outlineOpacity,
+              } as Partial<FrameObject>)
+            }
             onAdd={() =>
               onUpdate(selectedObject.id, {
                 outline: "#000000",
@@ -596,56 +607,33 @@ export function PropertyPanel({
                 outlineOffset: undefined,
               } as Partial<FrameObject>)
             }
-            visible={(frame.outlineOpacity ?? 1) > 0}
-            onToggleVisible={() =>
-              onUpdate(selectedObject.id, {
-                outlineOpacity: (frame.outlineOpacity ?? 1) > 0 ? 0 : 1,
-              } as Partial<FrameObject>)
-            }
           >
-            <div className="grid grid-cols-2 gap-1.5">
-              <NumberInput
-                label="W"
-                value={frame.outlineWidth || 1}
-                onChange={(v) =>
-                  onUpdate(selectedObject.id, {
-                    outlineWidth: Math.max(0, v),
-                  } as Partial<FrameObject>)
-                }
-                min={0}
-              />
-              <NumberInput
-                label="Off"
-                value={frame.outlineOffset || 0}
-                onChange={(v) =>
-                  onUpdate(selectedObject.id, {
-                    outlineOffset: v,
-                  } as Partial<FrameObject>)
-                }
-              />
-            </div>
-            <ColorInput
-              color={frame.outline!}
-              opacity={frame.outlineOpacity ?? 1}
-              onChange={(color) =>
+            <NumberInput
+              label="Off"
+              value={frame.outlineOffset || 0}
+              onChange={(v) =>
                 onUpdate(selectedObject.id, {
-                  outline: color,
-                } as Partial<FrameObject>)
-              }
-              onOpacityChange={(opacity) =>
-                onUpdate(selectedObject.id, {
-                  outlineOpacity: opacity,
+                  outlineOffset: v,
                 } as Partial<FrameObject>)
               }
             />
-          </CollapsibleSection>
+          </StrokeSection>
         )}
 
         {/* Border Section - inside stroke (shrinks content) */}
         {frame && (
-          <CollapsibleSection
+          <StrokeSection
             label="Border"
-            isOpen={!!frame.border}
+            color={frame.border}
+            width={frame.borderWidth || 1}
+            opacity={frame.borderOpacity ?? 1}
+            onChange={(updates) =>
+              onUpdate(selectedObject.id, {
+                border: updates.color ?? frame.border,
+                borderWidth: updates.width ?? frame.borderWidth,
+                borderOpacity: updates.opacity ?? frame.borderOpacity,
+              } as Partial<FrameObject>)
+            }
             onAdd={() =>
               onUpdate(selectedObject.id, {
                 border: "#000000",
@@ -664,243 +652,40 @@ export function PropertyPanel({
                 borderSide: undefined,
               } as Partial<FrameObject>)
             }
-            visible={(frame.borderOpacity ?? 1) > 0}
-            onToggleVisible={() =>
-              onUpdate(selectedObject.id, {
-                borderOpacity: (frame.borderOpacity ?? 1) > 0 ? 0 : 1,
-              } as Partial<FrameObject>)
-            }
           >
-            <div className="grid grid-cols-2 gap-1.5">
-              <NumberInput
-                label="W"
-                value={frame.borderWidth || 1}
-                onChange={(v) =>
-                  onUpdate(selectedObject.id, {
-                    borderWidth: Math.max(0, v),
-                  } as Partial<FrameObject>)
-                }
-                min={0}
-              />
-              <PropertySelect
-                value={frame.borderSide || "all"}
-                onValueChange={(value) =>
-                  onUpdate(selectedObject.id, {
-                    borderSide: value as BorderSide,
-                  } as Partial<FrameObject>)
-                }
-              >
-                {(
-                  ["all", "top", "right", "bottom", "left"] as BorderSide[]
-                ).map((side) => (
-                  <SelectItem
-                    key={side}
-                    value={side}
-                    className="capitalize text-xs"
-                  >
-                    {side}
-                  </SelectItem>
-                ))}
-              </PropertySelect>
-            </div>
-            <ColorInput
-              color={frame.border!}
-              opacity={frame.borderOpacity ?? 1}
-              onChange={(color) =>
+            <BorderSideSelect
+              value={frame.borderSide || "all"}
+              onChange={(side) =>
                 onUpdate(selectedObject.id, {
-                  border: color,
-                } as Partial<FrameObject>)
-              }
-              onOpacityChange={(opacity) =>
-                onUpdate(selectedObject.id, {
-                  borderOpacity: opacity,
+                  borderSide: side,
                 } as Partial<FrameObject>)
               }
             />
-          </CollapsibleSection>
+          </StrokeSection>
         )}
 
         {/* Shadow Section */}
         {frame && (
-          <CollapsibleSection
+          <ShadowSection
             label="Shadow"
-            isOpen={!!frame.shadow}
-            onAdd={() =>
-              onUpdate(selectedObject.id, {
-                shadow: {
-                  x: 0,
-                  y: 2,
-                  blur: 4,
-                  spread: 0,
-                  color: "#000000",
-                  opacity: 0.2,
-                },
-              } as Partial<FrameObject>)
+            shadow={frame.shadow}
+            onChange={(shadow) =>
+              onUpdate(selectedObject.id, { shadow } as Partial<FrameObject>)
             }
-            onRemove={() =>
-              onUpdate(selectedObject.id, {
-                shadow: undefined,
-              } as Partial<FrameObject>)
-            }
-            visible={(frame.shadow?.opacity ?? 0) > 0}
-            onToggleVisible={() =>
-              onUpdate(selectedObject.id, {
-                shadow: frame.shadow
-                  ? {
-                      ...frame.shadow,
-                      opacity: frame.shadow.opacity > 0 ? 0 : 0.2,
-                    }
-                  : undefined,
-              } as Partial<FrameObject>)
-            }
-          >
-            <div className="grid grid-cols-2 gap-1.5">
-              <NumberInput
-                label="X"
-                value={frame.shadow?.x || 0}
-                onChange={(v) =>
-                  onUpdate(selectedObject.id, {
-                    shadow: { ...frame.shadow!, x: v },
-                  } as Partial<FrameObject>)
-                }
-              />
-              <NumberInput
-                label="Y"
-                value={frame.shadow?.y || 0}
-                onChange={(v) =>
-                  onUpdate(selectedObject.id, {
-                    shadow: { ...frame.shadow!, y: v },
-                  } as Partial<FrameObject>)
-                }
-              />
-              <NumberInput
-                label="Blur"
-                value={frame.shadow?.blur || 0}
-                onChange={(v) =>
-                  onUpdate(selectedObject.id, {
-                    shadow: { ...frame.shadow!, blur: Math.max(0, v) },
-                  } as Partial<FrameObject>)
-                }
-                min={0}
-              />
-              <NumberInput
-                label="Spread"
-                value={frame.shadow?.spread || 0}
-                onChange={(v) =>
-                  onUpdate(selectedObject.id, {
-                    shadow: { ...frame.shadow!, spread: v },
-                  } as Partial<FrameObject>)
-                }
-              />
-            </div>
-            <ColorInput
-              color={frame.shadow?.color || "#000000"}
-              opacity={frame.shadow?.opacity ?? 0.2}
-              onChange={(color) =>
-                onUpdate(selectedObject.id, {
-                  shadow: { ...frame.shadow!, color },
-                } as Partial<FrameObject>)
-              }
-              onOpacityChange={(opacity) =>
-                onUpdate(selectedObject.id, {
-                  shadow: { ...frame.shadow!, opacity },
-                } as Partial<FrameObject>)
-              }
-            />
-          </CollapsibleSection>
+          />
         )}
 
         {/* Inner Shadow Section */}
         {frame && (
-          <CollapsibleSection
+          <ShadowSection
             label="Inner shadow"
-            isOpen={!!frame.innerShadow}
-            onAdd={() =>
+            shadow={frame.innerShadow}
+            onChange={(innerShadow) =>
               onUpdate(selectedObject.id, {
-                innerShadow: {
-                  x: 0,
-                  y: 2,
-                  blur: 4,
-                  spread: 0,
-                  color: "#000000",
-                  opacity: 0.2,
-                },
+                innerShadow,
               } as Partial<FrameObject>)
             }
-            onRemove={() =>
-              onUpdate(selectedObject.id, {
-                innerShadow: undefined,
-              } as Partial<FrameObject>)
-            }
-            visible={(frame.innerShadow?.opacity ?? 0) > 0}
-            onToggleVisible={() =>
-              onUpdate(selectedObject.id, {
-                innerShadow: frame.innerShadow
-                  ? {
-                      ...frame.innerShadow,
-                      opacity: frame.innerShadow.opacity > 0 ? 0 : 0.2,
-                    }
-                  : undefined,
-              } as Partial<FrameObject>)
-            }
-          >
-            <div className="grid grid-cols-2 gap-1.5">
-              <NumberInput
-                label="X"
-                value={frame.innerShadow?.x || 0}
-                onChange={(v) =>
-                  onUpdate(selectedObject.id, {
-                    innerShadow: { ...frame.innerShadow!, x: v },
-                  } as Partial<FrameObject>)
-                }
-              />
-              <NumberInput
-                label="Y"
-                value={frame.innerShadow?.y || 0}
-                onChange={(v) =>
-                  onUpdate(selectedObject.id, {
-                    innerShadow: { ...frame.innerShadow!, y: v },
-                  } as Partial<FrameObject>)
-                }
-              />
-              <NumberInput
-                label="Blur"
-                value={frame.innerShadow?.blur || 0}
-                onChange={(v) =>
-                  onUpdate(selectedObject.id, {
-                    innerShadow: {
-                      ...frame.innerShadow!,
-                      blur: Math.max(0, v),
-                    },
-                  } as Partial<FrameObject>)
-                }
-                min={0}
-              />
-              <NumberInput
-                label="Spread"
-                value={frame.innerShadow?.spread || 0}
-                onChange={(v) =>
-                  onUpdate(selectedObject.id, {
-                    innerShadow: { ...frame.innerShadow!, spread: v },
-                  } as Partial<FrameObject>)
-                }
-              />
-            </div>
-            <ColorInput
-              color={frame.innerShadow?.color || "#000000"}
-              opacity={frame.innerShadow?.opacity ?? 0.2}
-              onChange={(color) =>
-                onUpdate(selectedObject.id, {
-                  innerShadow: { ...frame.innerShadow!, color },
-                } as Partial<FrameObject>)
-              }
-              onOpacityChange={(opacity) =>
-                onUpdate(selectedObject.id, {
-                  innerShadow: { ...frame.innerShadow!, opacity },
-                } as Partial<FrameObject>)
-              }
-            />
-          </CollapsibleSection>
+          />
         )}
 
         {/* Text Section */}
