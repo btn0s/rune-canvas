@@ -27,9 +27,18 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Kbd } from "@/components/ui/kbd";
 import { LayersPanel } from "./LayersPanel";
 import { PropertyPanel } from "./PropertyPanel";
+import type { Point } from "../lib/types";
 
 const HANDLE_SIZE = 8;
 const EDGE_HIT_WIDTH = 6; // Pixels from edge to trigger edge resize
@@ -309,6 +318,12 @@ export function Canvas() {
     redo,
     canUndo,
     canRedo,
+    bringToFront,
+    sendToBack,
+    bringForward,
+    sendBackward,
+    frameSelection,
+    pasteAt,
   } = useCanvas();
 
   // Space key held for temporary pan
@@ -319,6 +334,9 @@ export function Canvas() {
 
   // Hovered resize handle for cursor
   const [hoveredHandle, setHoveredHandle] = useState<ResizeHandle | null>(null);
+
+  // Context menu position (canvas space)
+  const [contextMenuPoint, setContextMenuPoint] = useState<Point | null>(null);
 
   // Focus text element when editing starts
   useEffect(() => {
@@ -760,10 +778,12 @@ export function Canvas() {
   );
 
   // Hit test objects (canvas space) - includes label area for root objects
+  // Returns the smallest (most nested) object containing the point
   const hitTestObject = useCallback(
     (canvasX: number, canvasY: number): string | null => {
-      for (let i = objects.length - 1; i >= 0; i--) {
-        const obj = objects[i];
+      let bestMatch: { id: string; area: number } | null = null;
+
+      for (const obj of objects) {
         const canvasPos = getCanvasPosition(obj, objects);
 
         // Check object bounds
@@ -786,10 +806,15 @@ export function Canvas() {
           canvasY <= canvasPos.y;
 
         if (inObject || inLabel) {
-          return obj.id;
+          const area = obj.width * obj.height;
+          // Prefer smaller objects (more nested/specific)
+          if (!bestMatch || area < bestMatch.area) {
+            bestMatch = { id: obj.id, area };
+          }
         }
       }
-      return null;
+
+      return bestMatch?.id ?? null;
     },
     [objects]
   );
@@ -803,6 +828,23 @@ export function Canvas() {
     // Middle click, hand tool, or space held to pan
     if (e.button === 1 || (e.button === 0 && (tool === "hand" || spaceHeld))) {
       startPan({ x: e.clientX, y: e.clientY });
+      return;
+    }
+
+    // Right-click: handle selection for context menu
+    if (e.button === 2) {
+      const objectId = hitTestObject(canvasPoint.x, canvasPoint.y);
+      if (objectId) {
+        // If clicking on an already-selected object, keep the multi-selection
+        if (!selectedIds.includes(objectId)) {
+          // Clicking on unselected object - select just that one
+          select([objectId]);
+        }
+        // If already selected, do nothing - keep current selection
+      } else {
+        // Right-click on empty space - clear selection
+        select(null);
+      }
       return;
     }
 
@@ -969,6 +1011,19 @@ export function Canvas() {
         modifiers: { shift: true },
         action: () => moveSelected(10, 0),
       },
+
+      // === Z-order ===
+      { key: "]", action: bringToFront },
+      { key: "[", action: sendToBack },
+      { key: "]", modifiers: { meta: true }, action: bringForward },
+      { key: "[", modifiers: { meta: true }, action: sendBackward },
+
+      // === Grouping ===
+      {
+        key: "g",
+        modifiers: { meta: true, alt: true },
+        action: frameSelection,
+      },
     ],
     [
       setTool,
@@ -985,6 +1040,11 @@ export function Canvas() {
       alignCenterV,
       toggleFlex,
       moveSelected,
+      bringToFront,
+      sendToBack,
+      bringForward,
+      sendBackward,
+      frameSelection,
     ]
   );
 
@@ -1086,143 +1146,158 @@ export function Canvas() {
     ? getHandleCursor(hoveredHandle)
     : "default";
 
+  // Handle context menu to capture position
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
+      setContextMenuPoint(screenToCanvas(screenX, screenY));
+    },
+    [screenToCanvas]
+  );
+
+  // Handle paste at context menu location
+  const handlePasteHere = useCallback(() => {
+    if (contextMenuPoint) {
+      pasteAt(contextMenuPoint);
+    }
+  }, [contextMenuPoint, pasteAt]);
+
   return (
     <TooltipProvider delayDuration={300}>
-      <div
-        ref={containerRef}
-        className="relative w-full h-full overflow-hidden bg-background"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
-        style={{ cursor }}
-      >
-        {/* DOM layer - objects */}
-        <div
-          className="absolute top-0 left-0 origin-top-left pointer-events-none"
-          style={{
-            transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
-          }}
-        >
-          {(() => {
-            // Render an object (always recursive - children render inside parent)
-            const renderObject = (obj: CanvasObject): React.ReactNode => {
-              const isSelected = selectedIds.includes(obj.id);
-              const isEditing = editingTextId === obj.id;
-              const isPotentialParent = potentialParentId === obj.id;
-              const frame = obj.type === "frame" ? (obj as FrameObject) : null;
-              const isFlexLayout = frame && frame.layoutMode !== "none";
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div
+            ref={containerRef}
+            className="relative w-full h-full overflow-hidden bg-background"
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onContextMenu={handleContextMenu}
+            style={{ cursor }}
+          >
+            {/* DOM layer - objects */}
+            <div
+              className="absolute top-0 left-0 origin-top-left pointer-events-none"
+              style={{
+                transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
+              }}
+            >
+              {(() => {
+                // Render an object (always recursive - children render inside parent)
+                const renderObject = (obj: CanvasObject): React.ReactNode => {
+                  const isSelected = selectedIds.includes(obj.id);
+                  const isEditing = editingTextId === obj.id;
+                  const isPotentialParent = potentialParentId === obj.id;
+                  const frame =
+                    obj.type === "frame" ? (obj as FrameObject) : null;
+                  const isFlexLayout = frame && frame.layoutMode !== "none";
 
-              // Get children for this object
-              const children = objects.filter((o) => o.parentId === obj.id);
+                  // Get children for this object
+                  const children = objects.filter((o) => o.parentId === obj.id);
 
-              // Determine parent context for positioning
-              const parent = obj.parentId
-                ? objects.find((o) => o.id === obj.parentId)
-                : null;
-              const parentFrame =
-                parent?.type === "frame" ? (parent as FrameObject) : null;
-              const isFlexChild =
-                parentFrame && parentFrame.layoutMode !== "none";
+                  // Determine parent context for positioning
+                  const parent = obj.parentId
+                    ? objects.find((o) => o.id === obj.parentId)
+                    : null;
+                  const parentFrame =
+                    parent?.type === "frame" ? (parent as FrameObject) : null;
+                  const isFlexChild =
+                    parentFrame && parentFrame.layoutMode !== "none";
 
-              // During drag (with actual movement), objects break out of flex flow
-              const isBeingDragged =
-                hasDragMovement && selectedIds.includes(obj.id);
+                  // During drag (with actual movement), objects break out of flex flow
+                  const isBeingDragged =
+                    hasDragMovement && selectedIds.includes(obj.id);
 
-              // Position style based on context:
-              // - Root objects: canvas-space transform
-              // - Flex children (not dragging): no explicit positioning (flex handles it)
-              // - Absolute children OR dragging: position relative to parent
-              const wrapperStyle: React.CSSProperties = !obj.parentId
-                ? {
-                    position: "absolute",
-                    left: 0,
-                    top: 0,
-                    transform: `translate(${obj.x}px, ${obj.y}px)`,
-                    opacity: obj.opacity,
-                  }
-                : isFlexChild && !isBeingDragged
-                ? {
-                    opacity: obj.opacity,
-                    flexShrink: 0,
-                  }
-                : {
-                    position: "absolute",
-                    left: obj.x,
-                    top: obj.y,
-                    opacity: obj.opacity,
-                  };
-
-              return (
-                <div key={obj.id} data-object-id={obj.id} style={wrapperStyle}>
-                  {/* Object label - hidden for nested objects */}
-                  {!obj.parentId && (
-                    <div
-                      className={`absolute whitespace-nowrap pointer-events-none select-none ${
-                        isSelected ? "text-blue-400" : "text-zinc-500"
-                      }`}
-                      style={{
-                        bottom: "100%",
+                  // Position style based on context:
+                  // - Root objects: canvas-space transform
+                  // - Flex children (not dragging): no explicit positioning (flex handles it)
+                  // - Absolute children OR dragging: position relative to parent
+                  const wrapperStyle: React.CSSProperties = !obj.parentId
+                    ? {
+                        position: "absolute",
                         left: 0,
-                        marginBottom: 4,
-                        fontSize: `${Math.max(10, 11 / transform.scale)}px`,
-                      }}
-                    >
-                      {obj.name}
-                    </div>
-                  )}
+                        top: 0,
+                        transform: `translate(${obj.x}px, ${obj.y}px)`,
+                        opacity: obj.opacity,
+                      }
+                    : isFlexChild && !isBeingDragged
+                    ? {
+                        opacity: obj.opacity,
+                        flexShrink: 0,
+                      }
+                    : {
+                        position: "absolute",
+                        left: obj.x,
+                        top: obj.y,
+                        opacity: obj.opacity,
+                      };
 
-                  {/* Render based on object type */}
-                  {obj.type === "frame" && (
+                  return (
                     <div
-                      className={`transition-shadow duration-150 ${
-                        isPotentialParent
-                          ? "shadow-[inset_0_0_0_2px_#3b82f6]"
-                          : ""
-                      }`}
-                      style={{
-                        // Width/height are always stored values (calculated for fit mode)
-                        width:
-                          frame!.widthMode === "expand" ? undefined : obj.width,
-                        height:
-                          frame!.heightMode === "expand"
-                            ? undefined
-                            : obj.height,
-                        // Flex grow for expand mode (only works inside flex parent)
-                        flex:
-                          frame!.widthMode === "expand" ||
-                          frame!.heightMode === "expand"
-                            ? "1"
-                            : undefined,
-                        backgroundColor: frame!.fill,
-                        boxSizing: "border-box",
-                        // Blend mode
-                        mixBlendMode: frame!.blendMode || undefined,
-                        // Border (inside - shrinks content)
-                        ...(frame!.border &&
-                        frame!.borderSide !== "all" &&
-                        frame!.borderSide
-                          ? {
-                              [`border${
-                                frame!.borderSide.charAt(0).toUpperCase() +
-                                frame!.borderSide.slice(1)
-                              }`]: `${frame!.borderWidth || 1}px ${
-                                frame!.borderStyle || "solid"
-                              } rgba(${parseInt(
-                                frame!.border.slice(1, 3),
-                                16
-                              )}, ${parseInt(
-                                frame!.border.slice(3, 5),
-                                16
-                              )}, ${parseInt(frame!.border.slice(5, 7), 16)}, ${
-                                frame!.borderOpacity ?? 1
-                              })`,
-                            }
-                          : {
-                              border: frame!.border
-                                ? `${frame!.borderWidth || 1}px ${
+                      key={obj.id}
+                      data-object-id={obj.id}
+                      style={wrapperStyle}
+                    >
+                      {/* Object label - hidden for nested objects */}
+                      {!obj.parentId && (
+                        <div
+                          className={`absolute whitespace-nowrap pointer-events-none select-none ${
+                            isSelected ? "text-blue-400" : "text-zinc-500"
+                          }`}
+                          style={{
+                            bottom: "100%",
+                            left: 0,
+                            marginBottom: 4,
+                            fontSize: `${Math.max(10, 11 / transform.scale)}px`,
+                          }}
+                        >
+                          {obj.name}
+                        </div>
+                      )}
+
+                      {/* Render based on object type */}
+                      {obj.type === "frame" && (
+                        <div
+                          className={`transition-shadow duration-150 ${
+                            isPotentialParent
+                              ? "shadow-[inset_0_0_0_2px_#3b82f6]"
+                              : ""
+                          }`}
+                          style={{
+                            // Width/height are always stored values (calculated for fit mode)
+                            width:
+                              frame!.widthMode === "expand"
+                                ? undefined
+                                : obj.width,
+                            height:
+                              frame!.heightMode === "expand"
+                                ? undefined
+                                : obj.height,
+                            // Flex grow for expand mode (only works inside flex parent)
+                            flex:
+                              frame!.widthMode === "expand" ||
+                              frame!.heightMode === "expand"
+                                ? "1"
+                                : undefined,
+                            backgroundColor: frame!.fill,
+                            boxSizing: "border-box",
+                            // Blend mode
+                            mixBlendMode: frame!.blendMode || undefined,
+                            // Border (inside - shrinks content)
+                            ...(frame!.border &&
+                            frame!.borderSide !== "all" &&
+                            frame!.borderSide
+                              ? {
+                                  [`border${
+                                    frame!.borderSide.charAt(0).toUpperCase() +
+                                    frame!.borderSide.slice(1)
+                                  }`]: `${frame!.borderWidth || 1}px ${
                                     frame!.borderStyle || "solid"
                                   } rgba(${parseInt(
                                     frame!.border.slice(1, 3),
@@ -1233,291 +1308,382 @@ export function Canvas() {
                                   )}, ${parseInt(
                                     frame!.border.slice(5, 7),
                                     16
-                                  )}, ${frame!.borderOpacity ?? 1})`
+                                  )}, ${frame!.borderOpacity ?? 1})`,
+                                }
+                              : {
+                                  border: frame!.border
+                                    ? `${frame!.borderWidth || 1}px ${
+                                        frame!.borderStyle || "solid"
+                                      } rgba(${parseInt(
+                                        frame!.border.slice(1, 3),
+                                        16
+                                      )}, ${parseInt(
+                                        frame!.border.slice(3, 5),
+                                        16
+                                      )}, ${parseInt(
+                                        frame!.border.slice(5, 7),
+                                        16
+                                      )}, ${frame!.borderOpacity ?? 1})`
+                                    : undefined,
+                                }),
+                            // Outline (outside - purely visual)
+                            outline: frame!.outline
+                              ? `${frame!.outlineWidth || 1}px ${
+                                  frame!.outlineStyle || "solid"
+                                } rgba(${parseInt(
+                                  frame!.outline.slice(1, 3),
+                                  16
+                                )}, ${parseInt(
+                                  frame!.outline.slice(3, 5),
+                                  16
+                                )}, ${parseInt(
+                                  frame!.outline.slice(5, 7),
+                                  16
+                                )}, ${frame!.outlineOpacity ?? 1})`
+                              : undefined,
+                            outlineOffset: frame!.outlineOffset ?? 0,
+                            // Border radius (individual corners or single value)
+                            borderRadius:
+                              frame!.radiusTL !== undefined ||
+                              frame!.radiusTR !== undefined ||
+                              frame!.radiusBR !== undefined ||
+                              frame!.radiusBL !== undefined
+                                ? `${frame!.radiusTL ?? frame!.radius}px ${
+                                    frame!.radiusTR ?? frame!.radius
+                                  }px ${frame!.radiusBR ?? frame!.radius}px ${
+                                    frame!.radiusBL ?? frame!.radius
+                                  }px`
+                                : frame!.radius,
+                            // Box shadow (drop shadow + inner shadow)
+                            boxShadow:
+                              [
+                                frame!.shadow
+                                  ? `${frame!.shadow.x}px ${
+                                      frame!.shadow.y
+                                    }px ${frame!.shadow.blur}px ${
+                                      frame!.shadow.spread
+                                    }px rgba(${parseInt(
+                                      frame!.shadow.color.slice(1, 3),
+                                      16
+                                    )}, ${parseInt(
+                                      frame!.shadow.color.slice(3, 5),
+                                      16
+                                    )}, ${parseInt(
+                                      frame!.shadow.color.slice(5, 7),
+                                      16
+                                    )}, ${frame!.shadow.opacity})`
+                                  : null,
+                                frame!.innerShadow
+                                  ? `inset ${frame!.innerShadow.x}px ${
+                                      frame!.innerShadow.y
+                                    }px ${frame!.innerShadow.blur}px ${
+                                      frame!.innerShadow.spread
+                                    }px rgba(${parseInt(
+                                      frame!.innerShadow.color.slice(1, 3),
+                                      16
+                                    )}, ${parseInt(
+                                      frame!.innerShadow.color.slice(3, 5),
+                                      16
+                                    )}, ${parseInt(
+                                      frame!.innerShadow.color.slice(5, 7),
+                                      16
+                                    )}, ${frame!.innerShadow.opacity})`
+                                  : null,
+                              ]
+                                .filter(Boolean)
+                                .join(", ") || undefined,
+                            overflow: frame!.clipContent ? "hidden" : "visible",
+                            // Always relative - creates positioning context for children
+                            position: "relative",
+                            // Layout styles (only when flex/grid enabled)
+                            display: isFlexLayout
+                              ? frame!.layoutMode === "flex"
+                                ? "flex"
+                                : "grid"
+                              : undefined,
+                            flexDirection:
+                              frame!.layoutMode === "flex"
+                                ? frame!.flexDirection
                                 : undefined,
-                            }),
-                        // Outline (outside - purely visual)
-                        outline: frame!.outline
-                          ? `${frame!.outlineWidth || 1}px ${
-                              frame!.outlineStyle || "solid"
-                            } rgba(${parseInt(
-                              frame!.outline.slice(1, 3),
-                              16
-                            )}, ${parseInt(
-                              frame!.outline.slice(3, 5),
-                              16
-                            )}, ${parseInt(frame!.outline.slice(5, 7), 16)}, ${
-                              frame!.outlineOpacity ?? 1
-                            })`
-                          : undefined,
-                        outlineOffset: frame!.outlineOffset ?? 0,
-                        // Border radius (individual corners or single value)
-                        borderRadius:
-                          frame!.radiusTL !== undefined ||
-                          frame!.radiusTR !== undefined ||
-                          frame!.radiusBR !== undefined ||
-                          frame!.radiusBL !== undefined
-                            ? `${frame!.radiusTL ?? frame!.radius}px ${
-                                frame!.radiusTR ?? frame!.radius
-                              }px ${frame!.radiusBR ?? frame!.radius}px ${
-                                frame!.radiusBL ?? frame!.radius
-                              }px`
-                            : frame!.radius,
-                        // Box shadow (drop shadow + inner shadow)
-                        boxShadow:
-                          [
-                            frame!.shadow
-                              ? `${frame!.shadow.x}px ${frame!.shadow.y}px ${
-                                  frame!.shadow.blur
-                                }px ${frame!.shadow.spread}px rgba(${parseInt(
-                                  frame!.shadow.color.slice(1, 3),
-                                  16
-                                )}, ${parseInt(
-                                  frame!.shadow.color.slice(3, 5),
-                                  16
-                                )}, ${parseInt(
-                                  frame!.shadow.color.slice(5, 7),
-                                  16
-                                )}, ${frame!.shadow.opacity})`
-                              : null,
-                            frame!.innerShadow
-                              ? `inset ${frame!.innerShadow.x}px ${
-                                  frame!.innerShadow.y
-                                }px ${frame!.innerShadow.blur}px ${
-                                  frame!.innerShadow.spread
-                                }px rgba(${parseInt(
-                                  frame!.innerShadow.color.slice(1, 3),
-                                  16
-                                )}, ${parseInt(
-                                  frame!.innerShadow.color.slice(3, 5),
-                                  16
-                                )}, ${parseInt(
-                                  frame!.innerShadow.color.slice(5, 7),
-                                  16
-                                )}, ${frame!.innerShadow.opacity})`
-                              : null,
-                          ]
-                            .filter(Boolean)
-                            .join(", ") || undefined,
-                        overflow: frame!.clipContent ? "hidden" : "visible",
-                        // Always relative - creates positioning context for children
-                        position: "relative",
-                        // Layout styles (only when flex/grid enabled)
-                        display: isFlexLayout
-                          ? frame!.layoutMode === "flex"
-                            ? "flex"
-                            : "grid"
-                          : undefined,
-                        flexDirection:
-                          frame!.layoutMode === "flex"
-                            ? frame!.flexDirection
-                            : undefined,
-                        justifyContent: isFlexLayout
-                          ? frame!.justifyContent
-                          : undefined,
-                        alignItems: isFlexLayout
-                          ? frame!.alignItems
-                          : undefined,
-                        flexWrap:
-                          frame!.layoutMode === "flex"
-                            ? frame!.flexWrap
-                            : undefined,
-                        gap: isFlexLayout ? frame!.gap : undefined,
-                        padding: isFlexLayout ? frame!.padding : undefined,
-                      }}
-                    >
-                      {/* Always render children inside frame */}
-                      {children.map((child) => renderObject(child))}
-                    </div>
-                  )}
-
-                  {obj.type === "image" && (
-                    <img
-                      src={(obj as ImageObject).src}
-                      alt={obj.name}
-                      draggable={false}
-                      style={{
-                        width: obj.width,
-                        height: obj.height,
-                        maxWidth: "unset",
-                        objectFit: "cover",
-                        display: "block",
-                      }}
-                    />
-                  )}
-
-                  {obj.type === "text" &&
-                    (() => {
-                      const textObj = obj as TextObject;
-                      const sizeMode = textObj.sizeMode;
-
-                      // Style based on size mode:
-                      // auto-width: both dimensions auto, no wrapping
-                      // auto-height: fixed width, auto height, wraps
-                      // fixed: both fixed, clips overflow
-                      const textStyle: React.CSSProperties = {
-                        color: textObj.color,
-                        fontSize: textObj.fontSize,
-                        fontFamily: textObj.fontFamily,
-                        fontWeight: textObj.fontWeight,
-                        textAlign: textObj.textAlign,
-                        outline: isEditing ? "1px solid #3b82f6" : "none",
-                        pointerEvents: isEditing ? "auto" : "none",
-                        cursor: isEditing ? "text" : "default",
-                        // Ensure minimum clickable area for empty text
-                        minWidth: sizeMode === "auto-width" ? 4 : undefined,
-                        minHeight: 4,
-                      };
-
-                      if (sizeMode === "auto-width") {
-                        // Auto width: no wrapping, both dimensions grow
-                        textStyle.whiteSpace = "pre";
-                        textStyle.width = "auto";
-                        textStyle.height = "auto";
-                      } else if (sizeMode === "auto-height") {
-                        // Auto height: fixed width, wraps, height grows
-                        textStyle.width = obj.width;
-                        textStyle.height = "auto";
-                        textStyle.whiteSpace = "pre-wrap";
-                        textStyle.wordWrap = "break-word";
-                      } else {
-                        // Fixed: both dimensions fixed, clips
-                        textStyle.width = obj.width;
-                        textStyle.height = obj.height;
-                        textStyle.whiteSpace = "pre-wrap";
-                        textStyle.wordWrap = "break-word";
-                        textStyle.overflow = "hidden";
-                      }
-
-                      return (
-                        <div
-                          data-text-id={obj.id}
-                          contentEditable={isEditing}
-                          suppressContentEditableWarning
-                          onBlur={(e) => {
-                            updateTextContent(
-                              obj.id,
-                              e.currentTarget.innerText || ""
-                            );
-                            setEditingTextId(null);
+                            justifyContent: isFlexLayout
+                              ? frame!.justifyContent
+                              : undefined,
+                            alignItems: isFlexLayout
+                              ? frame!.alignItems
+                              : undefined,
+                            flexWrap:
+                              frame!.layoutMode === "flex"
+                                ? frame!.flexWrap
+                                : undefined,
+                            gap: isFlexLayout ? frame!.gap : undefined,
+                            padding: isFlexLayout ? frame!.padding : undefined,
                           }}
-                          onInput={(e) => {
-                            // Sync size in real-time while typing
-                            const el = e.currentTarget;
-                            const updates: Partial<TextObject> = {};
-
-                            if (sizeMode === "auto-width") {
-                              // Sync both width and height
-                              if (Math.abs(obj.width - el.offsetWidth) > 1) {
-                                updates.width = el.offsetWidth;
-                              }
-                              if (Math.abs(obj.height - el.offsetHeight) > 1) {
-                                updates.height = el.offsetHeight;
-                              }
-                            } else if (sizeMode === "auto-height") {
-                              // Only sync height
-                              if (Math.abs(obj.height - el.offsetHeight) > 1) {
-                                updates.height = el.offsetHeight;
-                              }
-                            }
-                            // Fixed mode: don't sync anything
-
-                            if (Object.keys(updates).length > 0) {
-                              updateObject(obj.id, updates, { commit: false });
-                            }
-                          }}
-                          onKeyDown={(e) => {
-                            e.stopPropagation();
-                            if (e.key === "Escape") {
-                              e.currentTarget.blur();
-                            }
-                          }}
-                          style={textStyle}
                         >
-                          {textObj.content || (isEditing ? "" : "\u200B")}
+                          {/* Always render children inside frame */}
+                          {children.map((child) => renderObject(child))}
                         </div>
-                      );
-                    })()}
-                </div>
-              );
-            };
+                      )}
 
-            // Render only root objects - children render recursively inside parents
-            return objects
-              .filter((obj) => obj.parentId === null)
-              .map((obj) => renderObject(obj));
-          })()}
-        </div>
+                      {obj.type === "image" && (
+                        <img
+                          src={(obj as ImageObject).src}
+                          alt={obj.name}
+                          draggable={false}
+                          style={{
+                            width: obj.width,
+                            height: obj.height,
+                            maxWidth: "unset",
+                            objectFit: "cover",
+                            display: "block",
+                          }}
+                        />
+                      )}
 
-        {/* Canvas layer - selection + handles */}
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0 w-full h-full pointer-events-none"
-        />
+                      {obj.type === "text" &&
+                        (() => {
+                          const textObj = obj as TextObject;
+                          const sizeMode = textObj.sizeMode;
 
-        {/* Toolbar */}
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex gap-1 p-1.5 bg-card border border-border border-b-0 rounded-t-lg">
-          {TOOLS.map((t) => (
-            <Tooltip key={t.id}>
-              <TooltipTrigger asChild>
-                <span>
-                  <Toggle
-                    size="sm"
-                    pressed={tool === t.id}
-                    onPressedChange={() => setTool(t.id)}
-                    aria-label={t.label}
+                          // Style based on size mode:
+                          // auto-width: both dimensions auto, no wrapping
+                          // auto-height: fixed width, auto height, wraps
+                          // fixed: both fixed, clips overflow
+                          const textStyle: React.CSSProperties = {
+                            color: textObj.color,
+                            fontSize: textObj.fontSize,
+                            fontFamily: textObj.fontFamily,
+                            fontWeight: textObj.fontWeight,
+                            textAlign: textObj.textAlign,
+                            outline: isEditing ? "1px solid #3b82f6" : "none",
+                            pointerEvents: isEditing ? "auto" : "none",
+                            cursor: isEditing ? "text" : "default",
+                            // Ensure minimum clickable area for empty text
+                            minWidth: sizeMode === "auto-width" ? 4 : undefined,
+                            minHeight: 4,
+                          };
+
+                          if (sizeMode === "auto-width") {
+                            // Auto width: no wrapping, both dimensions grow
+                            textStyle.whiteSpace = "pre";
+                            textStyle.width = "auto";
+                            textStyle.height = "auto";
+                          } else if (sizeMode === "auto-height") {
+                            // Auto height: fixed width, wraps, height grows
+                            textStyle.width = obj.width;
+                            textStyle.height = "auto";
+                            textStyle.whiteSpace = "pre-wrap";
+                            textStyle.wordWrap = "break-word";
+                          } else {
+                            // Fixed: both dimensions fixed, clips
+                            textStyle.width = obj.width;
+                            textStyle.height = obj.height;
+                            textStyle.whiteSpace = "pre-wrap";
+                            textStyle.wordWrap = "break-word";
+                            textStyle.overflow = "hidden";
+                          }
+
+                          return (
+                            <div
+                              data-text-id={obj.id}
+                              contentEditable={isEditing}
+                              suppressContentEditableWarning
+                              onBlur={(e) => {
+                                updateTextContent(
+                                  obj.id,
+                                  e.currentTarget.innerText || ""
+                                );
+                                setEditingTextId(null);
+                              }}
+                              onInput={(e) => {
+                                // Sync size in real-time while typing
+                                const el = e.currentTarget;
+                                const updates: Partial<TextObject> = {};
+
+                                if (sizeMode === "auto-width") {
+                                  // Sync both width and height
+                                  if (
+                                    Math.abs(obj.width - el.offsetWidth) > 1
+                                  ) {
+                                    updates.width = el.offsetWidth;
+                                  }
+                                  if (
+                                    Math.abs(obj.height - el.offsetHeight) > 1
+                                  ) {
+                                    updates.height = el.offsetHeight;
+                                  }
+                                } else if (sizeMode === "auto-height") {
+                                  // Only sync height
+                                  if (
+                                    Math.abs(obj.height - el.offsetHeight) > 1
+                                  ) {
+                                    updates.height = el.offsetHeight;
+                                  }
+                                }
+                                // Fixed mode: don't sync anything
+
+                                if (Object.keys(updates).length > 0) {
+                                  updateObject(obj.id, updates, {
+                                    commit: false,
+                                  });
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                e.stopPropagation();
+                                if (e.key === "Escape") {
+                                  e.currentTarget.blur();
+                                }
+                              }}
+                              style={textStyle}
+                            >
+                              {textObj.content || (isEditing ? "" : "\u200B")}
+                            </div>
+                          );
+                        })()}
+                    </div>
+                  );
+                };
+
+                // Render only root objects - children render recursively inside parents
+                return objects
+                  .filter((obj) => obj.parentId === null)
+                  .map((obj) => renderObject(obj));
+              })()}
+            </div>
+
+            {/* Canvas layer - selection + handles */}
+            <canvas
+              ref={canvasRef}
+              className="absolute inset-0 w-full h-full pointer-events-none"
+            />
+
+            {/* Toolbar */}
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex gap-1 p-1.5 bg-card border border-border border-b-0 rounded-t-lg">
+              {TOOLS.map((t) => (
+                <Tooltip key={t.id}>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Toggle
+                        size="sm"
+                        pressed={tool === t.id}
+                        onPressedChange={() => setTool(t.id)}
+                        aria-label={t.label}
+                      >
+                        {t.icon}
+                      </Toggle>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="top"
+                    className="flex items-center gap-2"
                   >
-                    {t.icon}
-                  </Toggle>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="flex items-center gap-2">
-                <span>{t.label}</span>
-                <Kbd>{t.shortcut}</Kbd>
-              </TooltipContent>
-            </Tooltip>
-          ))}
-        </div>
+                    <span>{t.label}</span>
+                    <Kbd>{t.shortcut}</Kbd>
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+            </div>
 
-        {/* Layers panel */}
-        <LayersPanel
-          items={objects.map((o) => ({
-            id: o.id,
-            name: o.name,
-            parentId: o.parentId,
-            type: o.type,
-          }))}
-          selectedIds={selectedIds}
-          onSelect={select}
-          debug={debugMode}
-        />
+            {/* Layers panel */}
+            <LayersPanel
+              items={objects.map((o) => ({
+                id: o.id,
+                name: o.name,
+                parentId: o.parentId,
+                type: o.type,
+              }))}
+              selectedIds={selectedIds}
+              onSelect={select}
+              debug={debugMode}
+            />
 
-        {/* Property panel */}
-        <PropertyPanel
-          selectedObjects={selectedObjects}
-          allObjects={objects}
-          transform={transform}
-          containerRef={containerRef as React.RefObject<HTMLDivElement>}
-          onUpdate={updateObject}
-        />
+            {/* Property panel */}
+            <PropertyPanel
+              selectedObjects={selectedObjects}
+              allObjects={objects}
+              transform={transform}
+              containerRef={containerRef as React.RefObject<HTMLDivElement>}
+              onUpdate={updateObject}
+            />
 
-        {/* Zoom indicator */}
-        <div className="absolute bottom-4 left-4 px-3 py-1.5 bg-card border border-border rounded-md text-xs font-mono text-muted-foreground">
-          {Math.round(transform.scale * 100)}%
-        </div>
+            {/* Zoom indicator */}
+            <div className="absolute bottom-4 left-4 px-3 py-1.5 bg-card border border-border rounded-md text-xs font-mono text-muted-foreground">
+              {Math.round(transform.scale * 100)}%
+            </div>
 
-        {/* Debug toggle */}
-        <button
-          onClick={() => setDebugMode(!debugMode)}
-          className={`absolute top-4 right-4 px-2 py-1 text-xs font-mono rounded transition-colors ${
-            debugMode
-              ? "bg-red-500/20 text-red-400 border border-red-500/50"
-              : "bg-zinc-800/50 text-zinc-500 border border-zinc-700 hover:bg-zinc-700/50"
-          }`}
-        >
-          {debugMode ? "Debug ON" : "Debug"}
-        </button>
-      </div>
+            {/* Debug toggle */}
+            <button
+              onClick={() => setDebugMode(!debugMode)}
+              className={`absolute top-4 right-4 px-2 py-1 text-xs font-mono rounded transition-colors ${
+                debugMode
+                  ? "bg-red-500/20 text-red-400 border border-red-500/50"
+                  : "bg-zinc-800/50 text-zinc-500 border border-zinc-700 hover:bg-zinc-700/50"
+              }`}
+            >
+              {debugMode ? "Debug ON" : "Debug"}
+            </button>
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          {selectedIds.length > 0 ? (
+            <>
+              <ContextMenuItem onClick={copySelected}>
+                Copy
+                <ContextMenuShortcut>⌘C</ContextMenuShortcut>
+              </ContextMenuItem>
+              <ContextMenuItem onClick={pasteClipboard}>
+                Paste
+                <ContextMenuShortcut>⌘V</ContextMenuShortcut>
+              </ContextMenuItem>
+              <ContextMenuItem onClick={duplicateSelected}>
+                Duplicate
+                <ContextMenuShortcut>⌘D</ContextMenuShortcut>
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem onClick={deleteSelected} variant="destructive">
+                Delete
+                <ContextMenuShortcut>⌫</ContextMenuShortcut>
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem onClick={frameSelection}>
+                Frame selection
+                <ContextMenuShortcut>⌘⌥G</ContextMenuShortcut>
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem onClick={bringToFront}>
+                Bring to front
+                <ContextMenuShortcut>]</ContextMenuShortcut>
+              </ContextMenuItem>
+              <ContextMenuItem onClick={bringForward}>
+                Bring forward
+                <ContextMenuShortcut>⌘]</ContextMenuShortcut>
+              </ContextMenuItem>
+              <ContextMenuItem onClick={sendBackward}>
+                Send backward
+                <ContextMenuShortcut>⌘[</ContextMenuShortcut>
+              </ContextMenuItem>
+              <ContextMenuItem onClick={sendToBack}>
+                Send to back
+                <ContextMenuShortcut>[</ContextMenuShortcut>
+              </ContextMenuItem>
+            </>
+          ) : (
+            <>
+              <ContextMenuItem onClick={pasteClipboard}>
+                Paste
+                <ContextMenuShortcut>⌘V</ContextMenuShortcut>
+              </ContextMenuItem>
+              <ContextMenuItem onClick={handlePasteHere}>
+                Paste here
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem onClick={selectAllSiblings}>
+                Select all
+                <ContextMenuShortcut>⌘A</ContextMenuShortcut>
+              </ContextMenuItem>
+            </>
+          )}
+        </ContextMenuContent>
+      </ContextMenu>
     </TooltipProvider>
   );
 }

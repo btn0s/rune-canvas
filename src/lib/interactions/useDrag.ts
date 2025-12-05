@@ -516,6 +516,7 @@ export function useDrag(config: DragConfig, actions: DragActions) {
 
       setSelectedIds(newRootIds);
       setIsDragging(true);
+      isDuplicateMode.current = true; // Mark as duplicate mode to prevent double-duplication
       dragStart.current = canvasPoint;
 
       const rootObjects = newObjects.filter((o) => newRootIds.includes(o.id));

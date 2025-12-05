@@ -18,9 +18,9 @@ Move completed plans to `../done/` folder.
 ### Phase 1: Core Foundation (Critical)
 | # | Feature | Priority | Difficulty | Est. Time |
 |---|---------|----------|------------|-----------|
-| 01 | [Alt-drag duplicate bug](./01-alt-drag-duplicate-bug.md) | 🔴 | Easy | 30 min |
-| 02 | [Layers panel: all objects](./02-layers-panel-all-objects.md) | 🔴 | Easy | 45 min |
-| 03 | [Context menu](./03-context-menu.md) | 🔴 | Medium | 2 hrs |
+| ~~01~~ | ~~[Alt-drag duplicate bug](../done/01-alt-drag-duplicate-bug.md)~~ | ✅ | Easy | 30 min |
+| ~~02~~ | ~~[Layers panel: all objects](../done/02-layers-panel-all-objects.md)~~ | ✅ | Easy | 45 min |
+| ~~03~~ | ~~[Context menu](../done/03-context-menu.md)~~ | ✅ | Medium | 2 hrs |
 | 04 | [Image crop mode](./04-image-crop-mode.md) | 🔴 | Medium | 2 hrs |
 
 ### Phase 2: Fill System (High)

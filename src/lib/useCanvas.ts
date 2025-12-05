@@ -71,6 +71,7 @@ export function useCanvas() {
   const [guides, setGuides] = useState<Guide[]>([]);
 
   const createStart = useRef<Point | null>(null);
+  const createParentId = useRef<string | null>(null);
   const objectCounter = useRef(1);
   const panStart = useRef<Point | null>(null);
   const marqueeStart = useRef<Point | null>(null);
@@ -134,32 +135,55 @@ export function useCanvas() {
         }
       }
 
-      const parentId = targetParent?.id ?? null;
-
-      // Convert canvas point to relative position if nested
-      let relativePoint = canvasPoint;
-      if (targetParent) {
-        const parentCanvasPos = getCanvasPosition(targetParent, objects);
-        relativePoint = {
-          x: canvasPoint.x - parentCanvasPos.x,
-          y: canvasPoint.y - parentCanvasPos.y,
-        };
-      }
-
-      pushHistory();
+      // Store start point and parent - don't create object yet
       setIsCreating(true);
-      createStart.current = canvasPoint; // Store canvas point for drag calculation
+      createStart.current = canvasPoint;
+      createParentId.current = targetParent?.id ?? null;
+      setSelectedIds([]);
+      // Note: Text tool is handled separately via createText()
+    },
+    [objects]
+  );
 
-      if (tool === "frame" || tool === "rectangle") {
+  const updateCreate = useCallback(
+    (canvasPoint: Point) => {
+      if (!isCreating || !createStart.current) return;
+      const start = createStart.current;
+      const parentId = createParentId.current;
+
+      // Check if we've started dragging (moved enough to create)
+      const dx = Math.abs(canvasPoint.x - start.x);
+      const dy = Math.abs(canvasPoint.y - start.y);
+      if (dx < 3 && dy < 3) return; // Not dragging yet
+
+      let creatingId = selectedIds[0];
+
+      // Create the frame on first drag movement
+      if (!creatingId && (tool === "frame" || tool === "rectangle")) {
+        pushHistory();
         const id = `frame-${Date.now()}`;
         const name = `Frame ${objectCounter.current++}`;
+
+        // Convert start to relative position if nested
+        let relativeStart = start;
+        if (parentId) {
+          const parent = objects.find((o) => o.id === parentId);
+          if (parent) {
+            const parentCanvasPos = getCanvasPosition(parent, objects);
+            relativeStart = {
+              x: start.x - parentCanvasPos.x,
+              y: start.y - parentCanvasPos.y,
+            };
+          }
+        }
+
         const newFrame: FrameObject = {
           id,
           name,
           type: "frame",
           parentId,
-          x: relativePoint.x,
-          y: relativePoint.y,
+          x: relativeStart.x,
+          y: relativeStart.y,
           width: 0,
           height: 0,
           opacity: 1,
@@ -178,19 +202,11 @@ export function useCanvas() {
         };
         setObjects((prev) => [...prev, newFrame]);
         setSelectedIds([id]);
+        creatingId = id;
       }
-      // Note: Text tool is handled separately via createText()
-    },
-    [tool, objects, pushHistory]
-  );
 
-  const updateCreate = useCallback(
-    (canvasPoint: Point) => {
-      const creatingId = selectedIds[0];
-      if (!isCreating || !createStart.current || !creatingId) return;
-      const start = createStart.current;
+      if (!creatingId) return;
       const creatingObj = objects.find((o) => o.id === creatingId);
-      if (!creatingObj) return;
 
       // For creation, the start point is FIXED - only snap the end point
       let endX = canvasPoint.x;
@@ -198,7 +214,6 @@ export function useCanvas() {
       const guides: Guide[] = [];
 
       // Collect snap targets from sibling objects (same parent scope)
-      const parentId = creatingObj.parentId ?? null;
       const otherObjects = objects.filter(
         (o) => o.id !== creatingId && o.parentId === parentId
       );
@@ -246,7 +261,7 @@ export function useCanvas() {
       // Convert to relative if object has a parent
       let relativeX = finalX;
       let relativeY = finalY;
-      if (creatingObj.parentId) {
+      if (creatingObj?.parentId) {
         const parent = objects.find((o) => o.id === creatingObj.parentId);
         if (parent) {
           const parentCanvasPos = getCanvasPosition(parent, objects);
@@ -270,30 +285,90 @@ export function useCanvas() {
         )
       );
     },
-    [isCreating, selectedIds, objects]
+    [isCreating, selectedIds, objects, tool, pushHistory]
   );
 
   const endCreate = useCallback(() => {
     const creatingId = selectedIds[0];
-    if (!creatingId) return;
-    setObjects((prev) => {
-      let updated = prev;
-      const obj = prev.find((o) => o.id === creatingId);
-      if (!obj) return prev;
-      // For frames/rectangles that are too small, give them a default size
-      if (obj.type !== "text" && obj.width < 10 && obj.height < 10) {
-        updated = prev.map((o) =>
-          o.id === creatingId ? { ...o, width: 100, height: 100 } : o
-        );
+    const start = createStart.current;
+    const parentId = createParentId.current;
+
+    // Single-click: create frame centered at click point
+    if (!creatingId && start && (tool === "frame" || tool === "rectangle")) {
+      pushHistory();
+      const id = `frame-${Date.now()}`;
+      const name = `Frame ${objectCounter.current++}`;
+      const defaultSize = 100;
+
+      // Convert start to relative position if nested, then center
+      let relativeX = start.x - defaultSize / 2;
+      let relativeY = start.y - defaultSize / 2;
+      if (parentId) {
+        const parent = objects.find((o) => o.id === parentId);
+        if (parent) {
+          const parentCanvasPos = getCanvasPosition(parent, objects);
+          relativeX = start.x - parentCanvasPos.x - defaultSize / 2;
+          relativeY = start.y - parentCanvasPos.y - defaultSize / 2;
+        }
       }
-      // Recalculate hug sizes for parent frames
-      return recalculateHugSizes(updated);
-    });
+
+      const newFrame: FrameObject = {
+        id,
+        name,
+        type: "frame",
+        parentId,
+        x: relativeX,
+        y: relativeY,
+        width: defaultSize,
+        height: defaultSize,
+        opacity: 1,
+        fill: "#ffffff",
+        radius: 0,
+        clipContent: false,
+        widthMode: "fixed",
+        heightMode: "fixed",
+        layoutMode: "none",
+        flexDirection: "row",
+        justifyContent: "flex-start",
+        alignItems: "flex-start",
+        flexWrap: "nowrap",
+        gap: 0,
+        padding: 0,
+      };
+      setObjects((prev) => recalculateHugSizes([...prev, newFrame]));
+      setSelectedIds([id]);
+    } else if (creatingId) {
+      // Dragged: finalize the frame (ensure minimum size)
+      setObjects((prev) => {
+        let updated = prev;
+        const obj = prev.find((o) => o.id === creatingId);
+        if (!obj) return prev;
+        // For frames/rectangles that are too small, give them a default size centered at start
+        if (obj.type !== "text" && obj.width < 10 && obj.height < 10) {
+          const defaultSize = 100;
+          updated = prev.map((o) =>
+            o.id === creatingId
+              ? {
+                  ...o,
+                  x: o.x - defaultSize / 2,
+                  y: o.y - defaultSize / 2,
+                  width: defaultSize,
+                  height: defaultSize,
+                }
+              : o
+          );
+        }
+        // Recalculate hug sizes for parent frames
+        return recalculateHugSizes(updated);
+      });
+    }
+
     setIsCreating(false);
     setGuides([]);
     createStart.current = null;
+    createParentId.current = null;
     setTool("select");
-  }, [selectedIds]);
+  }, [selectedIds, tool, objects, pushHistory]);
 
   // ---- Drag Interaction (extracted hook) ----
   const drag = useDrag(
@@ -385,7 +460,7 @@ export function useCanvas() {
           canvasPos.y > y + height
         );
       });
-      
+
       // Filter out children whose parent is also selected (select outermost only)
       const intersectingIds = new Set(intersecting.map((o) => o.id));
       const outermostOnly = intersecting.filter((o) => {
@@ -400,7 +475,7 @@ export function useCanvas() {
         }
         return true;
       });
-      
+
       setSelectedIds(outermostOnly.map((o) => o.id));
     },
     [isMarqueeSelecting, objects]
@@ -631,6 +706,149 @@ export function useCanvas() {
       );
     },
     [selectedIds, pushHistory]
+  );
+
+  // Z-order functions
+  const bringToFront = useCallback(() => {
+    if (selectedIds.length === 0) return;
+    pushHistory();
+    setObjects((prev) => {
+      const selected = prev.filter((o) => selectedIds.includes(o.id));
+      const rest = prev.filter((o) => !selectedIds.includes(o.id));
+      return [...rest, ...selected];
+    });
+  }, [selectedIds, pushHistory]);
+
+  const sendToBack = useCallback(() => {
+    if (selectedIds.length === 0) return;
+    pushHistory();
+    setObjects((prev) => {
+      const selected = prev.filter((o) => selectedIds.includes(o.id));
+      const rest = prev.filter((o) => !selectedIds.includes(o.id));
+      return [...selected, ...rest];
+    });
+  }, [selectedIds, pushHistory]);
+
+  const bringForward = useCallback(() => {
+    if (selectedIds.length === 0) return;
+    pushHistory();
+    setObjects((prev) => {
+      const result = [...prev];
+      // Process each selected object from end to start to avoid index issues
+      for (let i = result.length - 2; i >= 0; i--) {
+        if (
+          selectedIds.includes(result[i].id) &&
+          !selectedIds.includes(result[i + 1].id)
+        ) {
+          // Swap with next object
+          [result[i], result[i + 1]] = [result[i + 1], result[i]];
+        }
+      }
+      return result;
+    });
+  }, [selectedIds, pushHistory]);
+
+  const sendBackward = useCallback(() => {
+    if (selectedIds.length === 0) return;
+    pushHistory();
+    setObjects((prev) => {
+      const result = [...prev];
+      // Process each selected object from start to end to avoid index issues
+      for (let i = 1; i < result.length; i++) {
+        if (
+          selectedIds.includes(result[i].id) &&
+          !selectedIds.includes(result[i - 1].id)
+        ) {
+          // Swap with previous object
+          [result[i - 1], result[i]] = [result[i], result[i - 1]];
+        }
+      }
+      return result;
+    });
+  }, [selectedIds, pushHistory]);
+
+  // Frame selection - wrap selected objects in a new frame
+  const frameSelection = useCallback(() => {
+    if (selectedIds.length === 0) return;
+    pushHistory();
+
+    // Get bounding box of selection
+    const bounds = getSelectionBounds(objects, selectedIds);
+    if (!bounds) return;
+
+    const frameId = `frame-${Date.now()}`;
+    const newFrame: FrameObject = {
+      id: frameId,
+      name: `Frame ${objectCounter.current++}`,
+      type: "frame",
+      parentId: null,
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+      opacity: 1,
+      fill: "#ffffff",
+      radius: 0,
+      clipContent: false,
+      widthMode: "fixed",
+      heightMode: "fixed",
+      layoutMode: "none",
+      flexDirection: "row",
+      justifyContent: "flex-start",
+      alignItems: "flex-start",
+      flexWrap: "nowrap",
+      gap: 0,
+      padding: 0,
+    };
+
+    setObjects((prev) => {
+      // Reparent selected objects to new frame, adjusting positions
+      const updated = prev.map((o) => {
+        if (selectedIds.includes(o.id)) {
+          const canvasPos = getCanvasPosition(o, prev);
+          return {
+            ...o,
+            parentId: frameId,
+            x: canvasPos.x - bounds.x,
+            y: canvasPos.y - bounds.y,
+          };
+        }
+        return o;
+      });
+      return [...updated, newFrame];
+    });
+
+    setSelectedIds([frameId]);
+  }, [selectedIds, objects, pushHistory]);
+
+  // Paste at specific canvas position
+  const pasteAt = useCallback(
+    (position: Point) => {
+      if (clipboard.current.length === 0) return;
+      pushHistory();
+
+      // Calculate offset from clipboard bounds to paste position
+      const clipboardBounds = getSelectionBounds(
+        clipboard.current,
+        clipboard.current.map((o) => o.id)
+      );
+      const offsetX = position.x - (clipboardBounds?.x ?? 0);
+      const offsetY = position.y - (clipboardBounds?.y ?? 0);
+
+      const newObjects = duplicateTree(
+        clipboard.current,
+        { x: offsetX, y: offsetY },
+        false
+      );
+      setObjects((prev) => [...prev, ...newObjects]);
+      const newRootIds = newObjects
+        .filter(
+          (o) => !o.parentId || !newObjects.some((c) => c.id === o.parentId)
+        )
+        .map((o) => o.id);
+      setSelectedIds(newRootIds);
+    },
+    [pushHistory]
   );
 
   // Add image object
@@ -869,5 +1087,11 @@ export function useCanvas() {
     updateTextContent,
     createText,
     setParent,
+    bringToFront,
+    sendToBack,
+    bringForward,
+    sendBackward,
+    frameSelection,
+    pasteAt,
   };
 }
