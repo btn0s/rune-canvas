@@ -1,10 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { ChevronRight, Frame, Type, Image } from "lucide-react";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import type { SidebarMode } from "@/lib/types";
 
 interface LayerItem {
@@ -97,88 +93,67 @@ function LayerTreeItem({
     onHoverLayer?.(null);
   };
 
-  const itemStyle: React.CSSProperties = {
-    paddingLeft: 8 + depth * 16,
-    opacity: isNew ? 0 : 1,
-    transform: isNew ? "translateX(-10px)" : "translateX(0)",
-    animation: isNew ? "slideIn 300ms ease-out forwards" : undefined,
-  };
-
-  if (!hasKids) {
-    return (
-      <div
-        className="relative flex items-center h-6 cursor-pointer hover:bg-zinc-700/50 rounded pr-2"
-        style={itemStyle}
-        onClick={handleClick}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-      >
-        <div className="flex items-center gap-1.5">
-          <LayerTypeIcon
-            type={item.type}
-            className={`w-3 h-3 ${
-              isSelected ? "text-blue-400" : "text-zinc-500"
+  const rowContent = (
+    <div
+      className={`flex items-center h-7 cursor-pointer rounded-sm transition-colors ${
+        isSelected
+          ? "bg-primary/15 text-primary"
+          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+      }`}
+      style={{
+        paddingLeft: depth * 12 + (hasKids ? 0 : 16),
+        opacity: isNew ? 0 : 1,
+        transform: isNew ? "translateX(-10px)" : "translateX(0)",
+        animation: isNew ? "slideIn 300ms ease-out forwards" : undefined,
+      }}
+      onClick={handleClick}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      {/* Chevron for expandable items */}
+      {hasKids && (
+        <button
+          className="w-4 h-7 flex items-center justify-center shrink-0 hover:text-foreground"
+          onClick={handleChevronClick}
+        >
+          <ChevronRight
+            className={`w-3 h-3 transition-transform duration-150 ${
+              isOpen ? "rotate-90" : ""
             }`}
           />
-          <span
-            className={`text-xs whitespace-nowrap ${
-              isSelected ? "text-blue-400" : "text-zinc-500"
-            }`}
-          >
-            {item.name}
-          </span>
-        </div>
-      </div>
-    );
+        </button>
+      )}
+
+      {/* Icon */}
+      <span className="w-4 h-7 flex items-center justify-center shrink-0">
+        <LayerTypeIcon type={item.type} className="w-3 h-3" />
+      </span>
+
+      {/* Name */}
+      <span className="text-xs truncate ml-1.5 pr-2">{item.name}</span>
+    </div>
+  );
+
+  if (!hasKids) {
+    return rowContent;
   }
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <div
-        className="relative flex items-center h-6 cursor-pointer hover:bg-zinc-700/50 rounded pr-2"
-        style={itemStyle}
-        onClick={handleClick}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-      >
-        <CollapsibleTrigger asChild onClick={handleChevronClick}>
-          <button className="p-0.5 -ml-1 mr-0.5 hover:bg-zinc-600/50 rounded transition-colors">
-            <ChevronRight
-              className={`w-3 h-3 text-zinc-500 transition-transform duration-200 ${
-                isOpen ? "rotate-90" : ""
-              }`}
-            />
-          </button>
-        </CollapsibleTrigger>
-        <LayerTypeIcon
-          type={item.type}
-          className={`w-3 h-3 ${
-            isSelected ? "text-blue-400" : "text-zinc-500"
-          }`}
-        />
-        <span
-          className={`text-xs whitespace-nowrap ml-1 ${
-            isSelected ? "text-blue-400" : "text-zinc-500"
-          }`}
-        >
-          {item.name}
-        </span>
-      </div>
+      {rowContent}
       <CollapsibleContent>
-        <div className="flex flex-col gap-1 pt-1">
-          {children.map((child) => (
-            <LayerTreeItem
-              key={child.id}
-              item={child}
-              items={items}
-              depth={depth + 1}
-              selectedIds={selectedIds}
-              animatedIds={animatedIds}
-              onSelect={onSelect}
-              onHoverLayer={onHoverLayer}
-            />
-          ))}
-        </div>
+        {children.map((child) => (
+          <LayerTreeItem
+            key={child.id}
+            item={child}
+            items={items}
+            depth={depth + 1}
+            selectedIds={selectedIds}
+            animatedIds={animatedIds}
+            onSelect={onSelect}
+            onHoverLayer={onHoverLayer}
+          />
+        ))}
       </CollapsibleContent>
     </Collapsible>
   );
@@ -292,11 +267,11 @@ export function LayersPanel({
             Layers
           </span>
         </div>
-        <div className="flex-1 overflow-y-auto p-3">
+        <div className="flex-1 overflow-y-auto px-1.5 py-1">
           {isEmpty ? (
-            emptyContent
+            <div className="px-1.5">{emptyContent}</div>
           ) : (
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col">
               {rootItems.map((item) => (
                 <LayerTreeItem
                   key={item.id}
@@ -373,7 +348,7 @@ export function LayersPanel({
         {isEmpty ? (
           emptyContent
         ) : (
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col">
             {rootItems.map((item) => (
               <LayerTreeItem
                 key={item.id}
