@@ -979,66 +979,99 @@ function FrameProperties({
       </div>
 
       {/* Fill Section - Stackable Fills */}
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center justify-between">
-          <SectionLabel>Fill</SectionLabel>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="size-5 p-0 text-muted-foreground hover:text-foreground"
-            onClick={() => {
-              // Add a new solid fill to each selected frame
-              onUpdateEach((frame) => ({
-                fills: [...frame.fills, createSolidFill("#DDDDDD")],
-              }));
-            }}
-          >
-            <Plus className="size-3" />
-          </Button>
-        </div>
+      {(() => {
+        // Check if all frames have the same fills
+        const fillsAreSame = frames.every((frame) => {
+          if (frame.fills.length !== frames[0].fills.length) return false;
+          return frame.fills.every((fill, i) => {
+            const ref = frames[0].fills[i];
+            if (fill.type !== ref.type) return false;
+            if (fill.type === "solid" && ref.type === "solid") {
+              return fill.color === ref.color && fill.opacity === ref.opacity;
+            }
+            // For gradient/image, just check type matches (detailed comparison not needed)
+            return fill.type === ref.type;
+          });
+        });
 
-        {/* Render fills for single selection, or "multiple" indicator */}
-        {frames.length === 1 ? (
-          <div className="flex flex-col gap-1">
-            {/* Render fills in reverse order (top to bottom visually = last to first in array) */}
-            {[...frames[0].fills].reverse().map((fill, reversedIndex) => {
-              const fillIndex = frames[0].fills.length - 1 - reversedIndex;
-              return (
-                <FillRow
-                  key={fill.id}
-                  fill={fill}
-                  onUpdate={(updates) => {
-                    const newFills = [...frames[0].fills];
-                    newFills[fillIndex] = {
-                      ...newFills[fillIndex],
-                      ...updates,
-                    } as Fill;
-                    onUpdate({ fills: newFills });
-                  }}
-                  onChangeFill={(newFill) => {
-                    const newFills = [...frames[0].fills];
-                    newFills[fillIndex] = newFill;
-                    onUpdate({ fills: newFills });
-                  }}
-                  onRemove={() => {
-                    const newFills = frames[0].fills.filter(
-                      (_, i) => i !== fillIndex
-                    );
-                    onUpdate({ fills: newFills });
-                  }}
-                />
-              );
-            })}
-            {frames[0].fills.length === 0 && (
-              <span className="text-xs text-muted-foreground">No fills</span>
+        const isMixedFills = !fillsAreSame;
+
+        return (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <SectionLabel>Fill</SectionLabel>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="size-5 p-0 text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  if (isMixedFills) {
+                    // Mixed: replace all with a single new fill
+                    onUpdate({ fills: [createSolidFill("#DDDDDD")] });
+                  } else {
+                    // Same: add a new fill to all
+                    onUpdateEach((frame) => ({
+                      fills: [...frame.fills, createSolidFill("#DDDDDD")],
+                    }));
+                  }
+                }}
+              >
+                <Plus className="size-3" />
+              </Button>
+            </div>
+
+            {isMixedFills ? (
+              <span className="text-xs text-muted-foreground">Mixed</span>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {[...frames[0].fills].reverse().map((fill, reversedIndex) => {
+                  const fillIndex = frames[0].fills.length - 1 - reversedIndex;
+                  return (
+                    <FillRow
+                      key={fill.id}
+                      fill={fill}
+                      onUpdate={(updates) => {
+                        onUpdateEach((frame) => {
+                          if (fillIndex >= frame.fills.length) return {};
+                          const newFills = [...frame.fills];
+                          newFills[fillIndex] = {
+                            ...newFills[fillIndex],
+                            ...updates,
+                          } as Fill;
+                          return { fills: newFills };
+                        });
+                      }}
+                      onChangeFill={(newFill) => {
+                        onUpdateEach((frame) => {
+                          if (fillIndex >= frame.fills.length) return {};
+                          const newFills = [...frame.fills];
+                          newFills[fillIndex] = newFill;
+                          return { fills: newFills };
+                        });
+                      }}
+                      onRemove={() => {
+                        onUpdateEach((frame) => {
+                          if (fillIndex >= frame.fills.length) return {};
+                          return {
+                            fills: frame.fills.filter(
+                              (_, i) => i !== fillIndex
+                            ),
+                          };
+                        });
+                      }}
+                    />
+                  );
+                })}
+                {frames[0].fills.length === 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    No fills
+                  </span>
+                )}
+              </div>
             )}
           </div>
-        ) : (
-          <span className="text-xs text-muted-foreground">
-            {frames.length} frames selected
-          </span>
-        )}
-      </div>
+        );
+      })()}
 
       {/* Outline Section */}
       <StrokeSection

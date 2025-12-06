@@ -133,7 +133,9 @@ export function NumberInput({
   suffix?: string;
 }) {
   const mixed = isMixed(value);
-  const [localValue, setLocalValue] = useState(mixed ? "" : String(Math.round(value)));
+  const [localValue, setLocalValue] = useState(
+    mixed ? "" : String(Math.round(value))
+  );
   const [isFocused, setIsFocused] = useState(false);
 
   // Sync from prop when not focused (and not mixed)
@@ -172,7 +174,10 @@ export function NumberInput({
         value={localValue}
         placeholder={mixed ? "—" : undefined}
         onChange={(e) => setLocalValue(e.target.value)}
-        onFocus={() => setIsFocused(true)}
+        onFocus={(e) => {
+          setIsFocused(true);
+          e.target.select();
+        }}
         onBlur={() => {
           setIsFocused(false);
           commitValue();
@@ -224,7 +229,10 @@ function EditableField({
         setLocalValue(e.target.value);
         onChange?.(e.target.value);
       }}
-      onFocus={() => setIsFocused(true)}
+      onFocus={(e) => {
+        setIsFocused(true);
+        e.target.select();
+      }}
       onBlur={() => {
         setIsFocused(false);
         onCommit(localValue);
@@ -234,7 +242,10 @@ function EditableField({
           e.currentTarget.blur();
         }
       }}
-      className={className}
+      className={cn(
+        "selection:bg-primary selection:text-primary-foreground",
+        className
+      )}
     />
   );
 }
@@ -336,6 +347,7 @@ export function ColorInput({
                     onChange(`#${hex}`);
                   }
                 }}
+                onFocus={(e) => e.target.select()}
                 className="flex-1 h-7 text-xs font-mono uppercase px-2"
                 maxLength={6}
               />
