@@ -219,15 +219,32 @@ export interface FrameObject extends BaseObject {
 // Text Object
 // ============================================================================
 
+export type FontStyle = "normal" | "italic";
+export type TextDecoration = "none" | "underline" | "strikethrough";
+export type TextTransform = "none" | "uppercase" | "lowercase" | "capitalize";
+export type VerticalAlign = "top" | "center" | "bottom";
+
 export interface TextObject extends BaseObject {
   type: "text";
 
   content: string;
+  // Font
   fontSize: number;
   fontFamily: string;
   fontWeight: number;
-  textAlign: "left" | "center" | "right";
+  fontStyle: FontStyle;
+  // Spacing
+  lineHeight: number; // multiplier (1.2 = 120%), 0 = auto
+  letterSpacing: number; // em units (0.05 = 5% of font size)
+  // Alignment
+  textAlign: "left" | "center" | "right" | "justify";
+  verticalAlign: VerticalAlign;
+  // Decoration
+  textDecoration: TextDecoration;
+  textTransform: TextTransform;
+  // Color
   color: string;
+  // Sizing
   sizeMode: TextSizeMode;
 }
 

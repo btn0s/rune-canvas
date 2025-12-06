@@ -221,7 +221,18 @@ export function computeTextStyle(
     fontSize: text.fontSize,
     fontFamily: text.fontFamily,
     fontWeight: text.fontWeight,
+    fontStyle: text.fontStyle,
     textAlign: text.textAlign,
+    lineHeight: text.lineHeight === 0 ? "normal" : text.lineHeight,
+    letterSpacing: text.letterSpacing ? `${text.letterSpacing}em` : undefined,
+    textDecoration:
+      text.textDecoration === "strikethrough"
+        ? "line-through"
+        : text.textDecoration === "underline"
+        ? "underline"
+        : undefined,
+    textTransform:
+      text.textTransform !== "none" ? text.textTransform : undefined,
     outline: isEditing ? "1px solid #3b82f6" : "none",
     pointerEvents: isEditing ? "auto" : "none",
     cursor: isEditing ? "text" : "default",
@@ -250,6 +261,12 @@ export function computeTextStyle(
       style.wordWrap = "break-word";
       style.overflow = "hidden";
       break;
+  }
+
+  // Vertical alignment via flexbox (for fixed/auto-height modes)
+  if (text.sizeMode !== "auto-width" && text.verticalAlign !== "top") {
+    style.display = "flex";
+    style.alignItems = text.verticalAlign === "center" ? "center" : "flex-end";
   }
 
   return style;

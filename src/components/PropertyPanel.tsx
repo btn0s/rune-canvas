@@ -28,9 +28,16 @@ import {
   StretchVertical,
   WrapText,
   Bold,
+  Italic,
+  Underline,
+  Strikethrough,
   AlignLeft,
   AlignCenter,
   AlignRight,
+  AlignJustify,
+  AlignVerticalJustifyStart,
+  AlignVerticalJustifyCenter,
+  AlignVerticalJustifyEnd,
   MoveHorizontal,
   MoveVertical,
   Lock,
@@ -42,6 +49,8 @@ import {
   Blend,
   Image,
   ChevronDown,
+  CaseSensitive,
+  CaseUpper,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Slider } from "./ui/slider";
@@ -1225,7 +1234,13 @@ function TextProperties({
   const sizeMode = getMixedValue(texts, "sizeMode");
   const fontSize = getMixedValue(texts, "fontSize");
   const fontWeight = getMixedValue(texts, "fontWeight");
+  const fontStyle = getMixedValue(texts, "fontStyle");
   const textAlign = getMixedValue(texts, "textAlign");
+  const verticalAlign = getMixedValue(texts, "verticalAlign");
+  const textDecoration = getMixedValue(texts, "textDecoration");
+  const textTransform = getMixedValue(texts, "textTransform");
+  const lineHeight = getMixedValue(texts, "lineHeight");
+  const letterSpacing = getMixedValue(texts, "letterSpacing");
 
   return (
     <>
@@ -1282,20 +1297,46 @@ function TextProperties({
           ))}
         </div>
 
+        {/* Font Size */}
         <NumberInput
           label="Size"
           value={fontSize}
           onChange={(v) => onUpdate({ fontSize: v })}
-          min={8}
+          min={1}
         />
 
-        {/* Bold toggle */}
+        {/* Line Height & Letter Spacing */}
+        <div className="grid grid-cols-2 gap-1.5">
+          <NumberInput
+            label="Line"
+            value={
+              isMixed(lineHeight)
+                ? MIXED
+                : lineHeight === 0
+                ? 0
+                : Math.round(lineHeight * 100)
+            }
+            onChange={(v) => onUpdate({ lineHeight: v === 0 ? 0 : v / 100 })}
+            suffix="%"
+          />
+          <NumberInput
+            label="Letter"
+            value={
+              isMixed(letterSpacing) ? MIXED : Math.round(letterSpacing * 100)
+            }
+            onChange={(v) => onUpdate({ letterSpacing: v / 100 })}
+            suffix="%"
+          />
+        </div>
+
+        {/* Style toggles: Bold, Italic, Underline, Strikethrough */}
         <div className="flex gap-1">
           <button
-            className={`flex-1 h-7 rounded-md text-xs font-medium transition-colors ${
+            title="Bold"
+            className={`flex-1 h-7 rounded-md text-xs transition-colors ${
               !isMixed(fontWeight) && fontWeight >= 600
-                ? "bg-blue-500/20 text-blue-400"
-                : "bg-zinc-800/50 text-zinc-500 hover:text-zinc-300"
+                ? "bg-primary/20 text-primary"
+                : "bg-input/30 text-muted-foreground hover:text-foreground"
             }`}
             onClick={() => {
               const currentWeight = isMixed(fontWeight) ? 400 : fontWeight;
@@ -1304,13 +1345,63 @@ function TextProperties({
           >
             <Bold className="size-3.5 mx-auto" />
           </button>
+          <button
+            title="Italic"
+            className={`flex-1 h-7 rounded-md text-xs transition-colors ${
+              !isMixed(fontStyle) && fontStyle === "italic"
+                ? "bg-primary/20 text-primary"
+                : "bg-input/30 text-muted-foreground hover:text-foreground"
+            }`}
+            onClick={() => {
+              const current = isMixed(fontStyle) ? "normal" : fontStyle;
+              onUpdate({
+                fontStyle: current === "italic" ? "normal" : "italic",
+              });
+            }}
+          >
+            <Italic className="size-3.5 mx-auto" />
+          </button>
+          <button
+            title="Underline"
+            className={`flex-1 h-7 rounded-md text-xs transition-colors ${
+              !isMixed(textDecoration) && textDecoration === "underline"
+                ? "bg-primary/20 text-primary"
+                : "bg-input/30 text-muted-foreground hover:text-foreground"
+            }`}
+            onClick={() => {
+              const current = isMixed(textDecoration) ? "none" : textDecoration;
+              onUpdate({
+                textDecoration: current === "underline" ? "none" : "underline",
+              });
+            }}
+          >
+            <Underline className="size-3.5 mx-auto" />
+          </button>
+          <button
+            title="Strikethrough"
+            className={`flex-1 h-7 rounded-md text-xs transition-colors ${
+              !isMixed(textDecoration) && textDecoration === "strikethrough"
+                ? "bg-primary/20 text-primary"
+                : "bg-input/30 text-muted-foreground hover:text-foreground"
+            }`}
+            onClick={() => {
+              const current = isMixed(textDecoration) ? "none" : textDecoration;
+              onUpdate({
+                textDecoration:
+                  current === "strikethrough" ? "none" : "strikethrough",
+              });
+            }}
+          >
+            <Strikethrough className="size-3.5 mx-auto" />
+          </button>
         </div>
 
-        {/* Text alignment */}
+        {/* Horizontal Text alignment */}
         <div className="flex gap-1">
-          {(["left", "center", "right"] as const).map((align) => (
+          {(["left", "center", "right", "justify"] as const).map((align) => (
             <button
               key={align}
+              title={align.charAt(0).toUpperCase() + align.slice(1)}
               className={`flex-1 h-7 rounded-md text-xs transition-colors ${
                 !isMixed(textAlign) && textAlign === align
                   ? "bg-primary/20 text-primary"
@@ -1323,8 +1414,73 @@ function TextProperties({
                 <AlignCenter className="size-3.5 mx-auto" />
               )}
               {align === "right" && <AlignRight className="size-3.5 mx-auto" />}
+              {align === "justify" && (
+                <AlignJustify className="size-3.5 mx-auto" />
+              )}
             </button>
           ))}
+        </div>
+
+        {/* Vertical alignment */}
+        <div className="flex gap-1">
+          {(["top", "center", "bottom"] as const).map((align) => (
+            <button
+              key={align}
+              title={`Align ${align}`}
+              className={`flex-1 h-7 rounded-md text-xs transition-colors ${
+                !isMixed(verticalAlign) && verticalAlign === align
+                  ? "bg-primary/20 text-primary"
+                  : "bg-input/30 text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => onUpdate({ verticalAlign: align })}
+            >
+              {align === "top" && (
+                <AlignVerticalJustifyStart className="size-3.5 mx-auto" />
+              )}
+              {align === "center" && (
+                <AlignVerticalJustifyCenter className="size-3.5 mx-auto" />
+              )}
+              {align === "bottom" && (
+                <AlignVerticalJustifyEnd className="size-3.5 mx-auto" />
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Text Transform */}
+        <div className="flex gap-1">
+          <button
+            title="Uppercase"
+            className={`flex-1 h-7 rounded-md text-xs transition-colors ${
+              !isMixed(textTransform) && textTransform === "uppercase"
+                ? "bg-primary/20 text-primary"
+                : "bg-input/30 text-muted-foreground hover:text-foreground"
+            }`}
+            onClick={() => {
+              const current = isMixed(textTransform) ? "none" : textTransform;
+              onUpdate({
+                textTransform: current === "uppercase" ? "none" : "uppercase",
+              });
+            }}
+          >
+            <CaseUpper className="size-3.5 mx-auto" />
+          </button>
+          <button
+            title="Capitalize"
+            className={`flex-1 h-7 rounded-md text-xs transition-colors ${
+              !isMixed(textTransform) && textTransform === "capitalize"
+                ? "bg-primary/20 text-primary"
+                : "bg-input/30 text-muted-foreground hover:text-foreground"
+            }`}
+            onClick={() => {
+              const current = isMixed(textTransform) ? "none" : textTransform;
+              onUpdate({
+                textTransform: current === "capitalize" ? "none" : "capitalize",
+              });
+            }}
+          >
+            <CaseSensitive className="size-3.5 mx-auto" />
+          </button>
         </div>
       </div>
     </>

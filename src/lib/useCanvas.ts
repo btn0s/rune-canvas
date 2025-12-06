@@ -991,7 +991,13 @@ export function useCanvas() {
         fontSize: 16,
         fontFamily: "system-ui",
         fontWeight: 400,
+        fontStyle: "normal",
+        lineHeight: 0, // 0 = auto
+        letterSpacing: 0,
         textAlign: "left",
+        verticalAlign: "top",
+        textDecoration: "none",
+        textTransform: "none",
         color: "#000000",
         sizeMode: "auto-width",
       };
