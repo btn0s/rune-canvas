@@ -995,6 +995,26 @@ function FrameProperties({
         });
 
         const isMixedFills = !fillsAreSame;
+        const hasFills = frames[0].fills.length > 0;
+
+        // Collapsed state - no fills
+        if (!hasFills && !isMixedFills) {
+          return (
+            <div className="flex items-center justify-between">
+              <SectionLabel>Fill</SectionLabel>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="size-5 p-0 text-muted-foreground hover:text-foreground"
+                onClick={() =>
+                  onUpdate({ fills: [createSolidFill("#DDDDDD")] })
+                }
+              >
+                <Plus className="size-3" />
+              </Button>
+            </div>
+          );
+        }
 
         return (
           <div className="flex flex-col gap-1.5">
@@ -1062,11 +1082,6 @@ function FrameProperties({
                     />
                   );
                 })}
-                {frames[0].fills.length === 0 && (
-                  <span className="text-xs text-muted-foreground">
-                    No fills
-                  </span>
-                )}
               </div>
             )}
           </div>
