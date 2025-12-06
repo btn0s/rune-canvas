@@ -39,6 +39,7 @@ interface LayersPanelProps {
   items: LayerItem[];
   selectedIds: string[];
   onSelect: (ids: string[] | null, addToSelection?: boolean) => void;
+  onHoverLayer?: (id: string | null) => void;
   sidebarMode: SidebarMode;
 }
 
@@ -58,6 +59,7 @@ function LayerTreeItem({
   selectedIds,
   animatedIds,
   onSelect,
+  onHoverLayer,
 }: {
   item: LayerItem;
   items: LayerItem[];
@@ -65,6 +67,7 @@ function LayerTreeItem({
   selectedIds: string[];
   animatedIds: Set<string>;
   onSelect: (ids: string[] | null, addToSelection?: boolean) => void;
+  onHoverLayer?: (id: string | null) => void;
 }) {
   const [isOpen, setIsOpen] = useState(true);
   const isSelected = selectedIds.includes(item.id);
@@ -86,6 +89,14 @@ function LayerTreeItem({
     setIsOpen(!isOpen);
   };
 
+  const handleMouseEnter = () => {
+    onHoverLayer?.(item.id);
+  };
+
+  const handleMouseLeave = () => {
+    onHoverLayer?.(null);
+  };
+
   const itemStyle: React.CSSProperties = {
     paddingLeft: 8 + depth * 16,
     opacity: isNew ? 0 : 1,
@@ -99,6 +110,8 @@ function LayerTreeItem({
         className="relative flex items-center h-6 cursor-pointer hover:bg-zinc-700/50 rounded pr-2"
         style={itemStyle}
         onClick={handleClick}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
       >
         <div className="flex items-center gap-1.5">
           <LayerTypeIcon
@@ -125,6 +138,8 @@ function LayerTreeItem({
         className="relative flex items-center h-6 cursor-pointer hover:bg-zinc-700/50 rounded pr-2"
         style={itemStyle}
         onClick={handleClick}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
       >
         <CollapsibleTrigger asChild onClick={handleChevronClick}>
           <button className="p-0.5 -ml-1 mr-0.5 hover:bg-zinc-600/50 rounded transition-colors">
@@ -160,6 +175,7 @@ function LayerTreeItem({
               selectedIds={selectedIds}
               animatedIds={animatedIds}
               onSelect={onSelect}
+              onHoverLayer={onHoverLayer}
             />
           ))}
         </div>
@@ -218,6 +234,7 @@ export function LayersPanel({
   items,
   selectedIds,
   onSelect,
+  onHoverLayer,
   sidebarMode,
 }: LayersPanelProps) {
   const [isHovered, setIsHovered] = useState(false);
@@ -267,6 +284,8 @@ export function LayersPanel({
         className="absolute left-0 top-0 bottom-0 w-56 bg-card border-r border-border select-none flex flex-col"
         onMouseDown={(e) => e.stopPropagation()}
         onMouseUp={(e) => e.stopPropagation()}
+        onMouseMove={(e) => e.stopPropagation()}
+        onMouseLeave={() => onHoverLayer?.(null)}
       >
         <div className="p-3 border-b border-border">
           <span className="text-xs font-medium text-muted-foreground">
@@ -287,6 +306,7 @@ export function LayersPanel({
                   selectedIds={selectedIds}
                   animatedIds={animatedIds}
                   onSelect={onSelect}
+                  onHoverLayer={onHoverLayer}
                 />
               ))}
             </div>
@@ -309,6 +329,7 @@ export function LayersPanel({
         onMouseLeave={() => setIsHovered(false)}
         onMouseDown={(e) => e.stopPropagation()}
         onMouseUp={(e) => e.stopPropagation()}
+        onMouseMove={(e) => e.stopPropagation()}
       >
         {/* Collapsed indicator - layer bars (will be replaced with icon) */}
         <div
@@ -341,9 +362,13 @@ export function LayersPanel({
           minWidth: 160,
         }}
         onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        onMouseLeave={() => {
+          setIsHovered(false);
+          onHoverLayer?.(null); // Clear hover when leaving panel
+        }}
         onMouseDown={(e) => e.stopPropagation()}
         onMouseUp={(e) => e.stopPropagation()}
+        onMouseMove={(e) => e.stopPropagation()}
       >
         {isEmpty ? (
           emptyContent
@@ -358,6 +383,7 @@ export function LayersPanel({
                 selectedIds={selectedIds}
                 animatedIds={animatedIds}
                 onSelect={onSelect}
+                onHoverLayer={onHoverLayer}
               />
             ))}
           </div>

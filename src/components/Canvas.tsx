@@ -1473,6 +1473,7 @@ export function Canvas() {
               }))}
               selectedIds={selectedIds}
               onSelect={select}
+              onHoverLayer={setHoveredObjectId}
               sidebarMode={sidebarMode}
             />
 
