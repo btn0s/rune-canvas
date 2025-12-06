@@ -1,0 +1,32 @@
+---
+description: How to diagnose and fix problems correctly
+alwaysApply: true
+---
+
+# Problem Solving
+
+## Think Upstream
+
+When something is wrong, trace it back to its source. Don't patch symptoms—fix causes.
+
+- **Follow the data.** Where does the value come from? Where is the layout defined? Where is the behavior controlled? Fix it there.
+
+- **The right fix is usually upstream.** If a component needs a prop to work around its context, the context is probably wrong. If layout is broken, fix the container, not the child.
+
+- **Resist adding parameters.** When tempted to add a prop, option, or config to handle a case, first ask: should this case exist at all? Can the caller handle it differently?
+
+## Find the Real Problem
+
+- **Name what's actually wrong.** "The column is too wide" is a symptom. "The row doesn't constrain its children's widths" is the problem. Fix the problem.
+
+- **Ask "why" until you hit bedrock.** Why is this broken? Because X. Why is X like that? Because Y. Keep going until you find the thing that, if fixed, makes the other fixes unnecessary.
+
+- **Look at the whole, not just the part.** Before changing a component, understand its role in the system. The fix that makes sense locally might be wrong globally.
+
+## The Simplest Fix
+
+- **Prefer constraints over options.** A well-designed container that enforces good layout beats flexible children that each need configuration.
+
+- **One change > many changes.** If you're touching five files to fix one issue, step back. There's probably a single upstream change that handles all of it.
+
+- **Delete before you add.** Sometimes the fix is removing the thing that's fighting against what you want, not adding more code to force it.

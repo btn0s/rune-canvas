@@ -95,6 +95,7 @@ export type BlendMode =
   | "lighten";
 export type BorderSide = "all" | "top" | "right" | "bottom" | "left";
 export type StrokeStyle = "solid" | "dashed";
+export type ImageFillMode = "fill" | "fit" | "crop";
 
 export interface ShadowProps {
   x: number;
@@ -105,12 +106,69 @@ export interface ShadowProps {
   opacity: number;
 }
 
+// ============================================================================
+// Fill System - Stackable fills for frames
+// ============================================================================
+
+export type GradientType = "linear" | "radial";
+
+export interface GradientStop {
+  position: number; // 0-1
+  color: string;
+  opacity: number; // 0-1
+}
+
+export interface BaseFill {
+  id: string;
+  visible: boolean;
+  opacity: number; // 0-1
+}
+
+export interface SolidFill extends BaseFill {
+  type: "solid";
+  color: string;
+}
+
+export interface GradientFill extends BaseFill {
+  type: "gradient";
+  gradientType: GradientType;
+  angle: number; // degrees, for linear
+  stops: GradientStop[];
+}
+
+export interface ImageFill extends BaseFill {
+  type: "image";
+  src: string;
+  naturalWidth: number;
+  naturalHeight: number;
+  fillMode: ImageFillMode;
+  // Crop (for fillMode: "crop")
+  cropX: number;
+  cropY: number;
+  cropWidth: number;
+  cropHeight: number;
+}
+
+export type Fill = SolidFill | GradientFill | ImageFill;
+
+// Helper to create a default solid fill
+export function createSolidFill(color: string, opacity = 1): SolidFill {
+  return {
+    id: `fill-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    type: "solid",
+    visible: true,
+    opacity,
+    color,
+  };
+}
+
+// ============================================================================
+
 export interface FrameObject extends BaseObject {
   type: "frame";
 
-  // === Fill ===
-  fill: string;
-  fillOpacity?: number;
+  // === Stackable Fills (rendered bottom to top) ===
+  fills: Fill[];
 
   // === Border Radius ===
   radius: number;
@@ -176,8 +234,6 @@ export interface TextObject extends BaseObject {
 // ============================================================================
 // Image Object
 // ============================================================================
-
-export type ImageFillMode = "fill" | "fit" | "crop";
 
 export interface ImageObject extends BaseObject {
   type: "image";

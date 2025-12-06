@@ -10,13 +10,14 @@ import {
 } from "./objectUtils";
 import { useDrag } from "./interactions/useDrag";
 import { useResize } from "./interactions/useResize";
-import type {
-  CanvasObject,
-  FrameObject,
-  ImageObject,
-  TextObject,
-  Guide,
-  Point,
+import {
+  createSolidFill,
+  type CanvasObject,
+  type FrameObject,
+  type ImageObject,
+  type TextObject,
+  type Guide,
+  type Point,
 } from "./types";
 
 const MIN_ZOOM = 0.1;
@@ -191,7 +192,7 @@ export function useCanvas() {
           width: 0,
           height: 0,
           opacity: 1,
-          fill: "#ffffff",
+          fills: [createSolidFill("#ffffff")],
           radius: 0,
           clipContent: false,
           widthMode: "fixed",
@@ -326,7 +327,7 @@ export function useCanvas() {
         width: defaultSize,
         height: defaultSize,
         opacity: 1,
-        fill: "#ffffff",
+        fills: [createSolidFill("#ffffff")],
         radius: 0,
         clipContent: false,
         widthMode: "fixed",
@@ -796,7 +797,7 @@ export function useCanvas() {
         width: bounds.width,
         height: bounds.height,
         opacity: 1,
-        fill: "#ffffff",
+        fills: [createSolidFill("#ffffff")],
         radius: 0,
         clipContent: false,
         // Set to hug (fit) when creating a flex frame

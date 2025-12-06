@@ -5,7 +5,12 @@ import type {
   ImageObject,
   BlendMode,
   SidebarMode,
+  Fill,
+  SolidFill,
+  GradientFill,
+  ImageFill,
 } from "../lib/types";
+import { createSolidFill } from "../lib/types";
 import { useState, useRef } from "react";
 import { SelectItem } from "./ui/select";
 import {
@@ -30,6 +35,13 @@ import {
   MoveVertical,
   Lock,
   Minus,
+  Plus,
+  Eye,
+  EyeOff,
+  Square,
+  Blend,
+  Image,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Slider } from "./ui/slider";
@@ -135,6 +147,452 @@ function OpacityInput({ objects, onUpdate }: CommonPropertiesProps) {
 }
 
 // ============================================================================
+// FILL HELPERS
+// ============================================================================
+
+// Convert between fill types while preserving what we can
+function convertFillType(
+  fill: Fill,
+  newType: "solid" | "gradient" | "image"
+): Fill {
+  const base = { id: fill.id, visible: fill.visible, opacity: fill.opacity };
+
+  if (newType === "solid") {
+    // Extract a color from the existing fill
+    let color = "#DDDDDD";
+    if (fill.type === "solid") {
+      color = fill.color;
+    } else if (fill.type === "gradient" && fill.stops.length > 0) {
+      color = fill.stops[0].color;
+    }
+    return { ...base, type: "solid", color } as SolidFill;
+  }
+
+  if (newType === "gradient") {
+    // Create gradient from existing color
+    let baseColor = "#DDDDDD";
+    if (fill.type === "solid") {
+      baseColor = fill.color;
+    } else if (fill.type === "gradient") {
+      return fill; // Already gradient
+    }
+    return {
+      ...base,
+      type: "gradient",
+      gradientType: "linear",
+      angle: 180,
+      stops: [
+        { position: 0, color: baseColor, opacity: 1 },
+        { position: 1, color: "#000000", opacity: 1 },
+      ],
+    } as GradientFill;
+  }
+
+  if (newType === "image") {
+    return {
+      ...base,
+      type: "image",
+      src: "",
+      naturalWidth: 0,
+      naturalHeight: 0,
+      fillMode: "fill",
+      cropX: 0,
+      cropY: 0,
+      cropWidth: 0,
+      cropHeight: 0,
+    } as ImageFill;
+  }
+
+  return fill;
+}
+
+// ============================================================================
+// FILL ROW COMPONENT
+// ============================================================================
+
+interface FillRowProps {
+  fill: Fill;
+  onUpdate: (updates: Partial<Fill>) => void;
+  onChangeFill: (newFill: Fill) => void;
+  onRemove: () => void;
+}
+
+function FillRow({ fill, onUpdate, onChangeFill, onRemove }: FillRowProps) {
+  const [showTypeMenu, setShowTypeMenu] = useState(false);
+
+  const typeIcon =
+    fill.type === "solid" ? (
+      <Square className="size-3" />
+    ) : fill.type === "gradient" ? (
+      <Blend className="size-3" />
+    ) : (
+      <Image className="size-3" />
+    );
+
+  const handleTypeChange = (newType: "solid" | "gradient" | "image") => {
+    if (newType !== fill.type) {
+      onChangeFill(convertFillType(fill, newType));
+    }
+    setShowTypeMenu(false);
+  };
+
+  return (
+    <div className="flex flex-col gap-1 p-1.5 rounded bg-muted/30 border border-border/50">
+      {/* Header row: type selector, visibility, remove */}
+      <div className="flex items-center gap-1">
+        {/* Type selector dropdown */}
+        <div className="relative">
+          <button
+            className="h-5 px-1.5 flex items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+            onClick={() => setShowTypeMenu(!showTypeMenu)}
+          >
+            {typeIcon}
+            <span className="capitalize">{fill.type}</span>
+            <ChevronDown className="size-2.5" />
+          </button>
+          {showTypeMenu && (
+            <>
+              <div
+                className="fixed inset-0 z-10"
+                onClick={() => setShowTypeMenu(false)}
+              />
+              <div className="absolute top-full left-0 mt-1 z-20 bg-popover border border-border rounded shadow-lg py-1 min-w-[100px]">
+                <button
+                  className={`w-full px-2 py-1 text-left text-xs flex items-center gap-2 hover:bg-muted/50 ${
+                    fill.type === "solid"
+                      ? "text-foreground"
+                      : "text-muted-foreground"
+                  }`}
+                  onClick={() => handleTypeChange("solid")}
+                >
+                  <Square className="size-3" />
+                  Solid
+                </button>
+                <button
+                  className={`w-full px-2 py-1 text-left text-xs flex items-center gap-2 hover:bg-muted/50 ${
+                    fill.type === "gradient"
+                      ? "text-foreground"
+                      : "text-muted-foreground"
+                  }`}
+                  onClick={() => handleTypeChange("gradient")}
+                >
+                  <Blend className="size-3" />
+                  Gradient
+                </button>
+                <button
+                  className={`w-full px-2 py-1 text-left text-xs flex items-center gap-2 hover:bg-muted/50 ${
+                    fill.type === "image"
+                      ? "text-foreground"
+                      : "text-muted-foreground"
+                  }`}
+                  onClick={() => handleTypeChange("image")}
+                >
+                  <Image className="size-3" />
+                  Image
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="flex-1" />
+
+        {/* Visibility toggle */}
+        <button
+          className="size-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+          onClick={() => onUpdate({ visible: !fill.visible })}
+        >
+          {fill.visible ? (
+            <Eye className="size-3" />
+          ) : (
+            <EyeOff className="size-3" />
+          )}
+        </button>
+
+        {/* Remove button */}
+        <button
+          className="size-5 flex items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-muted/50 transition-colors"
+          onClick={onRemove}
+        >
+          <Minus className="size-3" />
+        </button>
+      </div>
+
+      {/* Fill-type specific controls */}
+      {fill.type === "solid" && (
+        <SolidFillControls fill={fill as SolidFill} onUpdate={onUpdate} />
+      )}
+      {fill.type === "gradient" && (
+        <GradientFillControls
+          fill={fill as GradientFill}
+          onUpdate={onUpdate}
+          onChangeFill={onChangeFill}
+        />
+      )}
+      {fill.type === "image" && (
+        <ImageFillControls
+          fill={fill as ImageFill}
+          onUpdate={onUpdate}
+          onChangeFill={onChangeFill}
+        />
+      )}
+    </div>
+  );
+}
+
+// Solid fill controls
+function SolidFillControls({
+  fill,
+  onUpdate,
+}: {
+  fill: SolidFill;
+  onUpdate: (updates: Partial<SolidFill>) => void;
+}) {
+  return (
+    <ColorInput
+      color={fill.color}
+      opacity={fill.opacity}
+      onChange={(color) => onUpdate({ color })}
+      onOpacityChange={(opacity) => onUpdate({ opacity })}
+    />
+  );
+}
+
+// Gradient fill controls
+function GradientFillControls({
+  fill,
+  onUpdate,
+  onChangeFill,
+}: {
+  fill: GradientFill;
+  onUpdate: (updates: Partial<GradientFill>) => void;
+  onChangeFill: (fill: Fill) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      {/* Gradient type + angle */}
+      <div className="flex items-center gap-1.5">
+        <IconButtonGroup>
+          <IconButton
+            active={fill.gradientType === "linear"}
+            onClick={() => onUpdate({ gradientType: "linear" })}
+            tooltip="Linear"
+          >
+            <div
+              className="size-3 rounded-sm"
+              style={{
+                background: "linear-gradient(180deg, #666 0%, #333 100%)",
+              }}
+            />
+          </IconButton>
+          <IconButton
+            active={fill.gradientType === "radial"}
+            onClick={() => onUpdate({ gradientType: "radial" })}
+            tooltip="Radial"
+          >
+            <div
+              className="size-3 rounded-full"
+              style={{
+                background: "radial-gradient(circle, #666 0%, #333 100%)",
+              }}
+            />
+          </IconButton>
+        </IconButtonGroup>
+
+        {fill.gradientType === "linear" && (
+          <NumberInput
+            value={fill.angle}
+            onChange={(angle) => onUpdate({ angle })}
+            suffix="°"
+          />
+        )}
+      </div>
+
+      {/* Gradient stops */}
+      <div className="flex flex-col gap-1">
+        {fill.stops.map((stop, index) => (
+          <div
+            key={index}
+            className="grid items-center gap-1"
+            style={{
+              gridTemplateColumns: `1fr 52px ${
+                fill.stops.length > 2 ? "16px" : ""
+              }`,
+            }}
+          >
+            <ColorInput
+              color={stop.color}
+              opacity={stop.opacity}
+              onChange={(color) => {
+                const newStops = [...fill.stops];
+                newStops[index] = { ...newStops[index], color };
+                onChangeFill({ ...fill, stops: newStops });
+              }}
+              onOpacityChange={(opacity) => {
+                const newStops = [...fill.stops];
+                newStops[index] = { ...newStops[index], opacity };
+                onChangeFill({ ...fill, stops: newStops });
+              }}
+            />
+            <NumberInput
+              value={Math.round(stop.position * 100)}
+              onChange={(pos) => {
+                const newStops = [...fill.stops];
+                newStops[index] = {
+                  ...newStops[index],
+                  position: Math.max(0, Math.min(100, pos)) / 100,
+                };
+                onChangeFill({ ...fill, stops: newStops });
+              }}
+              suffix="%"
+              min={0}
+            />
+            {fill.stops.length > 2 && (
+              <button
+                className="size-4 flex items-center justify-center rounded text-muted-foreground hover:text-destructive transition-colors"
+                onClick={() => {
+                  const newStops = fill.stops.filter((_, i) => i !== index);
+                  onChangeFill({ ...fill, stops: newStops });
+                }}
+              >
+                <Minus className="size-2.5" />
+              </button>
+            )}
+          </div>
+        ))}
+        <button
+          className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+          onClick={() => {
+            // Add a new stop in the middle
+            const newPos =
+              fill.stops.length > 0
+                ? (fill.stops[0].position +
+                    fill.stops[fill.stops.length - 1].position) /
+                  2
+                : 0.5;
+            const newStops = [
+              ...fill.stops,
+              { position: newPos, color: "#888888", opacity: 1 },
+            ].sort((a, b) => a.position - b.position);
+            onChangeFill({ ...fill, stops: newStops });
+          }}
+        >
+          <Plus className="size-3" /> Add stop
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Image fill controls
+function ImageFillControls({
+  fill,
+  onUpdate,
+  onChangeFill,
+}: {
+  fill: ImageFill;
+  onUpdate: (updates: Partial<ImageFill>) => void;
+  onChangeFill: (fill: Fill) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const src = event.target?.result as string;
+      const img = document.createElement("img");
+      img.onload = () => {
+        onChangeFill({
+          ...fill,
+          src,
+          naturalWidth: img.naturalWidth,
+          naturalHeight: img.naturalHeight,
+          cropWidth: img.naturalWidth,
+          cropHeight: img.naturalHeight,
+        });
+      };
+      img.src = src;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
+      {fill.src ? (
+        <div className="flex items-center gap-2">
+          <div
+            className="size-8 rounded bg-cover bg-center border border-border"
+            style={{ backgroundImage: `url(${fill.src})` }}
+          />
+          <div className="flex-1 flex flex-col">
+            <span className="text-xs text-muted-foreground">
+              {fill.naturalWidth} × {fill.naturalHeight}
+            </span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Replace
+          </Button>
+        </div>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full h-7 text-xs"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <Image className="size-3 mr-1.5" />
+          Choose Image
+        </Button>
+      )}
+
+      {fill.src && (
+        <div className="flex items-center gap-1">
+          <IconButtonGroup>
+            <IconButton
+              active={fill.fillMode === "fill"}
+              onClick={() => onUpdate({ fillMode: "fill" })}
+              tooltip="Fill (cover)"
+            >
+              <span className="text-[9px] font-medium">Fill</span>
+            </IconButton>
+            <IconButton
+              active={fill.fillMode === "fit"}
+              onClick={() => onUpdate({ fillMode: "fit" })}
+              tooltip="Fit (contain)"
+            >
+              <span className="text-[9px] font-medium">Fit</span>
+            </IconButton>
+            <IconButton
+              active={fill.fillMode === "crop"}
+              onClick={() => onUpdate({ fillMode: "crop" })}
+              tooltip="Crop (manual)"
+            >
+              <span className="text-[9px] font-medium">Crop</span>
+            </IconButton>
+          </IconButtonGroup>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
 // FRAME PROPERTIES
 // ============================================================================
 
@@ -147,7 +605,6 @@ function FrameProperties({
   const firstFrame = frames[0];
 
   // Get mixed values for common properties
-  const fillColor = getMixedValue(frames, "fill");
   const layoutMode = getMixedValue(frames, "layoutMode");
   const clipContent = getMixedValue(frames, "clipContent");
 
@@ -521,39 +978,67 @@ function FrameProperties({
         </div>
       </div>
 
-      {/* Fill Section */}
-      {(() => {
-        const hasFill = frames.some(
-          (f) => f.fill !== "transparent" && f.fill !== undefined
-        );
-        const fillOpacity = getMixedValue(frames, "fillOpacity");
-        return (
-          <CollapsibleSection
-            label="Fill"
-            isOpen={
-              !isMixed(fillColor)
-                ? fillColor !== "transparent" && fillColor !== undefined
-                : hasFill
-            }
-            onAdd={() => onUpdate({ fill: "#DDDDDD" })}
-            onRemove={() => onUpdate({ fill: "transparent" })}
-            visible={isMixed(fillOpacity) ? true : (fillOpacity ?? 1) > 0}
-            onToggleVisible={() => {
-              const currentOpacity = isMixed(fillOpacity)
-                ? 1
-                : fillOpacity ?? 1;
-              onUpdate({ fillOpacity: currentOpacity > 0 ? 0 : 1 });
+      {/* Fill Section - Stackable Fills */}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between">
+          <SectionLabel>Fill</SectionLabel>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="size-5 p-0 text-muted-foreground hover:text-foreground"
+            onClick={() => {
+              // Add a new solid fill to each selected frame
+              onUpdateEach((frame) => ({
+                fills: [...frame.fills, createSolidFill("#DDDDDD")],
+              }));
             }}
           >
-            <ColorInput
-              color={isMixed(fillColor) ? MIXED : fillColor || "#DDDDDD"}
-              opacity={isMixed(fillOpacity) ? MIXED : fillOpacity ?? 1}
-              onChange={(color) => onUpdate({ fill: color })}
-              onOpacityChange={(opacity) => onUpdate({ fillOpacity: opacity })}
-            />
-          </CollapsibleSection>
-        );
-      })()}
+            <Plus className="size-3" />
+          </Button>
+        </div>
+
+        {/* Render fills for single selection, or "multiple" indicator */}
+        {frames.length === 1 ? (
+          <div className="flex flex-col gap-1">
+            {/* Render fills in reverse order (top to bottom visually = last to first in array) */}
+            {[...frames[0].fills].reverse().map((fill, reversedIndex) => {
+              const fillIndex = frames[0].fills.length - 1 - reversedIndex;
+              return (
+                <FillRow
+                  key={fill.id}
+                  fill={fill}
+                  onUpdate={(updates) => {
+                    const newFills = [...frames[0].fills];
+                    newFills[fillIndex] = {
+                      ...newFills[fillIndex],
+                      ...updates,
+                    } as Fill;
+                    onUpdate({ fills: newFills });
+                  }}
+                  onChangeFill={(newFill) => {
+                    const newFills = [...frames[0].fills];
+                    newFills[fillIndex] = newFill;
+                    onUpdate({ fills: newFills });
+                  }}
+                  onRemove={() => {
+                    const newFills = frames[0].fills.filter(
+                      (_, i) => i !== fillIndex
+                    );
+                    onUpdate({ fills: newFills });
+                  }}
+                />
+              );
+            })}
+            {frames[0].fills.length === 0 && (
+              <span className="text-xs text-muted-foreground">No fills</span>
+            )}
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">
+            {frames.length} frames selected
+          </span>
+        )}
+      </div>
 
       {/* Outline Section */}
       <StrokeSection

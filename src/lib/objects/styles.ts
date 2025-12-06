@@ -6,7 +6,15 @@
  */
 
 import type { CSSProperties } from "react";
-import type { CanvasObject, FrameObject, TextObject, ImageObject } from "./types";
+import type {
+  CanvasObject,
+  FrameObject,
+  TextObject,
+  ImageObject,
+  Fill,
+  SolidFill,
+  GradientFill,
+} from "./types";
 import { isInLayoutContainer, isRootObject } from "./context";
 
 // ============================================================================
@@ -28,18 +36,18 @@ export interface StyleContext {
 
 /**
  * Compute wrapper styles for any canvas object.
- * 
+ *
  * The wrapper is the outer div that positions the object in the canvas/parent.
- * 
+ *
  * Positioning rules:
  * 1. Root objects: Absolute at canvas coordinates
- * 2. Layout children (flex/grid): No position, layout handles it  
+ * 2. Layout children (flex/grid): No position, layout handles it
  * 3. Absolute children: Position relative to parent
  * 4. Being dragged: Break out of layout flow, use absolute
  */
 export function computeWrapperStyle(ctx: StyleContext): CSSProperties {
   const { object, allObjects, isBeingDragged } = ctx;
-  
+
   // Root object: canvas-space positioning
   if (isRootObject(object)) {
     return {
@@ -50,16 +58,16 @@ export function computeWrapperStyle(ctx: StyleContext): CSSProperties {
       opacity: object.opacity,
     };
   }
-  
+
   const inLayout = isInLayoutContainer(object, allObjects);
-  
+
   // Layout child (not being dragged): let layout handle positioning
   if (inLayout && !isBeingDragged) {
     const style: CSSProperties = {
       opacity: object.opacity,
       flexShrink: 0,
     };
-    
+
     // Add size hints based on object type
     // This helps flex/grid know how to size the child
     switch (object.type) {
@@ -68,7 +76,7 @@ export function computeWrapperStyle(ctx: StyleContext): CSSProperties {
         style.width = object.width;
         style.height = object.height;
         break;
-        
+
       case "text": {
         const textObj = object as TextObject;
         // Auto-width text should not have fixed size (grows with content)
@@ -82,7 +90,7 @@ export function computeWrapperStyle(ctx: StyleContext): CSSProperties {
         }
         break;
       }
-      
+
       case "frame": {
         const frameObj = object as FrameObject;
         // Frames handle their own sizing based on widthMode/heightMode
@@ -97,10 +105,10 @@ export function computeWrapperStyle(ctx: StyleContext): CSSProperties {
         break;
       }
     }
-    
+
     return style;
   }
-  
+
   // Absolute positioning within parent (or dragging out of layout)
   return {
     position: "absolute",
@@ -122,7 +130,7 @@ export function computeFrameStyle(frame: FrameObject): CSSProperties {
     boxSizing: "border-box",
     position: "relative", // Positioning context for children
   };
-  
+
   // Size (for frames that manage their own size)
   if (frame.widthMode !== "expand") {
     style.width = frame.width;
@@ -133,64 +141,67 @@ export function computeFrameStyle(frame: FrameObject): CSSProperties {
   if (frame.widthMode === "expand" || frame.heightMode === "expand") {
     style.flex = 1;
   }
-  
-  // Fill
-  if (frame.fill) {
-    style.backgroundColor = hexToRgba(frame.fill, frame.fillOpacity ?? 1);
+
+  // Fills (stacked, bottom to top)
+  const fillStyles = computeFillStyles(frame.fills);
+  if (fillStyles.background) {
+    style.background = fillStyles.background;
   }
-  
+
   // Blend mode
   if (frame.blendMode) {
     style.mixBlendMode = frame.blendMode;
   }
-  
+
   // Border radius
   style.borderRadius = computeBorderRadius(frame);
-  
+
   // Border
   if (frame.border) {
     const borderColor = hexToRgba(frame.border, frame.borderOpacity ?? 1);
     const borderStyle = frame.borderStyle || "solid";
     const borderWidth = frame.borderWidth || 1;
-    
+
     if (frame.borderSide && frame.borderSide !== "all") {
-      const side = frame.borderSide.charAt(0).toUpperCase() + frame.borderSide.slice(1);
-      (style as Record<string, string>)[`border${side}`] = 
-        `${borderWidth}px ${borderStyle} ${borderColor}`;
+      const side =
+        frame.borderSide.charAt(0).toUpperCase() + frame.borderSide.slice(1);
+      (style as Record<string, string>)[
+        `border${side}`
+      ] = `${borderWidth}px ${borderStyle} ${borderColor}`;
     } else {
       style.border = `${borderWidth}px ${borderStyle} ${borderColor}`;
     }
   }
-  
+
   // Outline
   if (frame.outline) {
-    style.outline = `${frame.outlineWidth || 1}px ${frame.outlineStyle || "solid"} ${
-      hexToRgba(frame.outline, frame.outlineOpacity ?? 1)
-    }`;
+    style.outline = `${frame.outlineWidth || 1}px ${
+      frame.outlineStyle || "solid"
+    } ${hexToRgba(frame.outline, frame.outlineOpacity ?? 1)}`;
     style.outlineOffset = frame.outlineOffset ?? 0;
   }
-  
+
   // Shadows
   style.boxShadow = computeBoxShadow(frame);
-  
+
   // Clip content
   style.overflow = frame.clipContent ? "hidden" : "visible";
-  
+
   // Layout (as container)
   if (frame.layoutMode !== "none") {
     style.display = frame.layoutMode === "flex" ? "flex" : "grid";
-    
+
     if (frame.layoutMode === "flex") {
       style.flexDirection = frame.flexDirection;
       style.justifyContent = frame.justifyContent;
       style.alignItems = frame.alignItems;
       style.flexWrap = frame.flexWrap;
     }
-    
+
     style.gap = frame.gap;
     style.padding = frame.padding;
   }
-  
+
   return style;
 }
 
@@ -216,7 +227,7 @@ export function computeTextStyle(
     cursor: isEditing ? "text" : "default",
     minHeight: 4, // Ensure clickable area
   };
-  
+
   switch (text.sizeMode) {
     case "auto-width":
       style.whiteSpace = "pre";
@@ -224,14 +235,14 @@ export function computeTextStyle(
       style.height = "auto";
       style.minWidth = 4;
       break;
-      
+
     case "auto-height":
       style.width = text.width;
       style.height = "auto";
       style.whiteSpace = "pre-wrap";
       style.wordWrap = "break-word";
       break;
-      
+
     case "fixed":
       style.width = text.width;
       style.height = text.height;
@@ -240,7 +251,7 @@ export function computeTextStyle(
       style.overflow = "hidden";
       break;
   }
-  
+
   return style;
 }
 
@@ -331,10 +342,71 @@ export function computeImageStyle(image: ImageObject): CSSProperties {
 // ============================================================================
 
 function hexToRgba(hex: string, opacity: number): string {
+  // Handle invalid hex values
+  if (!hex || !hex.startsWith("#") || hex.length < 7) {
+    return `rgba(0, 0, 0, ${opacity})`;
+  }
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+}
+
+/**
+ * Compute CSS background from fills array.
+ * Fills are rendered bottom-to-top (first in array = bottom layer).
+ * CSS backgrounds are rendered top-to-bottom, so we reverse.
+ */
+function computeFillStyles(fills: Fill[] | undefined): { background?: string } {
+  if (!fills || fills.length === 0) {
+    return {};
+  }
+
+  // Filter visible fills and reverse (CSS order is top-to-bottom)
+  const visibleFills = fills.filter((f) => f.visible).reverse();
+
+  if (visibleFills.length === 0) {
+    return {};
+  }
+
+  const backgrounds: string[] = [];
+
+  for (const fill of visibleFills) {
+    switch (fill.type) {
+      case "solid": {
+        const solidFill = fill as SolidFill;
+        const color = hexToRgba(solidFill.color, solidFill.opacity);
+        // Use linear-gradient as a hack to create solid color layer
+        backgrounds.push(`linear-gradient(${color}, ${color})`);
+        break;
+      }
+      case "gradient": {
+        const gradientFill = fill as GradientFill;
+        const stops = gradientFill.stops
+          .map((s) => `${hexToRgba(s.color, s.opacity)} ${s.position * 100}%`)
+          .join(", ");
+        if (gradientFill.gradientType === "linear") {
+          backgrounds.push(
+            `linear-gradient(${gradientFill.angle}deg, ${stops})`
+          );
+        } else {
+          backgrounds.push(`radial-gradient(circle, ${stops})`);
+        }
+        break;
+      }
+      case "image": {
+        // Image fills will be handled separately with actual img elements
+        // For now, skip - we'll implement this later
+        break;
+      }
+    }
+  }
+
+  if (backgrounds.length === 0) {
+    return {};
+  }
+
+  return { background: backgrounds.join(", ") };
 }
 
 function computeBorderRadius(frame: FrameObject): string | number {

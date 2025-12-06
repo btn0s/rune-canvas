@@ -70,10 +70,68 @@ export interface ShadowProps {
   opacity: number;
 }
 
+// =============================================================================
+// Fill System - Stackable fills for frames
+// =============================================================================
+
+export type GradientType = "linear" | "radial";
+
+export interface GradientStop {
+  position: number; // 0-1
+  color: string;
+  opacity: number; // 0-1
+}
+
+export interface BaseFill {
+  id: string;
+  visible: boolean;
+  opacity: number; // 0-1
+}
+
+export interface SolidFill extends BaseFill {
+  type: "solid";
+  color: string;
+}
+
+export interface GradientFill extends BaseFill {
+  type: "gradient";
+  gradientType: GradientType;
+  angle: number; // degrees, for linear
+  stops: GradientStop[];
+}
+
+export interface ImageFill extends BaseFill {
+  type: "image";
+  src: string;
+  naturalWidth: number;
+  naturalHeight: number;
+  fillMode: ImageFillMode;
+  // Crop (for fillMode: "crop")
+  cropX: number;
+  cropY: number;
+  cropWidth: number;
+  cropHeight: number;
+}
+
+export type Fill = SolidFill | GradientFill | ImageFill;
+
+// Helper to create a default solid fill
+export function createSolidFill(color: string, opacity = 1): SolidFill {
+  return {
+    id: `fill-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    type: "solid",
+    visible: true,
+    opacity,
+    color,
+  };
+}
+
+// =============================================================================
+
 export interface FrameObject extends BaseObject {
   type: "frame";
-  fill: string;
-  fillOpacity?: number; // 0-1, defaults to 1
+  // Stackable fills (rendered bottom to top)
+  fills: Fill[];
   // Radius (single or individual corners)
   radius: number;
   radiusTL?: number; // Top-left

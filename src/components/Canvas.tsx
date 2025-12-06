@@ -1011,6 +1011,25 @@ export function Canvas() {
     frameSelection({ layoutMode: "flex" });
   }, [selectedObjects, updateObject, pushHistory, frameSelection]);
 
+  // Toggle clip content on selected frames
+  const toggleClipContent = useCallback(() => {
+    const frames = selectedObjects.filter(
+      (obj): obj is FrameObject => obj.type === "frame"
+    );
+    if (frames.length === 0) return;
+
+    pushHistory();
+    // Toggle based on first frame's state
+    const newClipContent = !frames[0].clipContent;
+    for (const frame of frames) {
+      updateObject(
+        frame.id,
+        { clipContent: newClipContent },
+        { commit: false }
+      );
+    }
+  }, [selectedObjects, updateObject, pushHistory]);
+
   // Keyboard shortcuts (declarative)
   const shortcuts: Shortcut[] = useMemo(
     () => [
@@ -1056,6 +1075,7 @@ export function Canvas() {
 
       // === Layout ===
       { code: "KeyA", modifiers: { shift: true }, action: toggleFlex },
+      { code: "KeyC", modifiers: { alt: true }, action: toggleClipContent },
 
       // === Movement (Arrow keys) ===
       { key: "ArrowUp", action: () => moveSelected(0, -1) },
@@ -1117,6 +1137,7 @@ export function Canvas() {
       alignCenterH,
       alignCenterV,
       toggleFlex,
+      toggleClipContent,
       moveSelected,
       bringToFront,
       sendToBack,
@@ -1489,11 +1510,6 @@ export function Canvas() {
 
             {/* Bottom toolbar container */}
             <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex items-center gap-4">
-              {/* Zoom indicator */}
-              <div className="px-3 py-1.5 bg-card border border-border rounded-md text-xs font-mono text-muted-foreground">
-                {Math.round(transform.scale * 100)}%
-              </div>
-
               {/* Toolbar */}
               <div className="flex gap-1 p-1.5 bg-card border border-border border-b-0 rounded-t-md">
                 {TOOLS.map((t) => (
