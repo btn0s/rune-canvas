@@ -36,6 +36,7 @@ export interface BaseObject {
   width: number;
   height: number;
   opacity: number;
+  rotation: number; // degrees, 0-360
 }
 
 export type LayoutMode = "none" | "flex" | "grid";
@@ -168,7 +169,11 @@ export interface FrameObject extends BaseObject {
   alignItems: AlignItems;
   flexWrap: FlexWrap;
   gap: number;
-  padding: number;
+  // Per-side padding
+  paddingTop: number;
+  paddingRight: number;
+  paddingBottom: number;
+  paddingLeft: number;
 }
 
 export type ImageFillMode = "fill" | "fit" | "crop";

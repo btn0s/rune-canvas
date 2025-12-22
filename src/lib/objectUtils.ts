@@ -1,19 +1,53 @@
 import type { CanvasObject, FrameObject } from "./types";
-import { getCanvasPosition, type Rect } from "./geometry";
+import {
+  getCanvasPosition,
+  getRotatedBoundingBox,
+  type TransformedRect,
+} from "./geometry";
 
-// ============================================================================
-// Selection Helpers
-// ============================================================================
+export interface SelectionBounds extends TransformedRect {
+  x: number;
+  y: number;
+  center: { x: number; y: number };
+}
 
-/**
- * Compute the bounding box of selected objects in canvas space.
- */
+function createSelectionBounds(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  rotation: number
+): SelectionBounds {
+  return {
+    cx: x + width / 2,
+    cy: y + height / 2,
+    width,
+    height,
+    rotation,
+    x,
+    y,
+    center: { x: x + width / 2, y: y + height / 2 },
+  };
+}
+
 export function getSelectionBounds(
   objects: CanvasObject[],
   ids: string[]
-): Rect | null {
+): SelectionBounds | null {
   const selected = objects.filter((o) => ids.includes(o.id));
   if (selected.length === 0) return null;
+
+  if (selected.length === 1) {
+    const obj = selected[0];
+    const canvasPos = getCanvasPosition(obj, objects);
+    return createSelectionBounds(
+      canvasPos.x,
+      canvasPos.y,
+      obj.width,
+      obj.height,
+      obj.rotation
+    );
+  }
 
   let minX = Infinity,
     minY = Infinity,
@@ -22,13 +56,29 @@ export function getSelectionBounds(
 
   for (const obj of selected) {
     const canvasPos = getCanvasPosition(obj, objects);
-    minX = Math.min(minX, canvasPos.x);
-    minY = Math.min(minY, canvasPos.y);
-    maxX = Math.max(maxX, canvasPos.x + obj.width);
-    maxY = Math.max(maxY, canvasPos.y + obj.height);
+    const rect = { x: canvasPos.x, y: canvasPos.y, width: obj.width, height: obj.height };
+    const aabb = getRotatedBoundingBox(rect, obj.rotation);
+    minX = Math.min(minX, aabb.x);
+    minY = Math.min(minY, aabb.y);
+    maxX = Math.max(maxX, aabb.x + aabb.width);
+    maxY = Math.max(maxY, aabb.y + aabb.height);
   }
 
-  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  return createSelectionBounds(minX, minY, maxX - minX, maxY - minY, 0);
+}
+
+export function getObjectTransform(
+  obj: CanvasObject,
+  objects: CanvasObject[]
+): TransformedRect {
+  const canvasPos = getCanvasPosition(obj, objects);
+  return {
+    cx: canvasPos.x + obj.width / 2,
+    cy: canvasPos.y + obj.height / 2,
+    width: obj.width,
+    height: obj.height,
+    rotation: obj.rotation,
+  };
 }
 
 // ============================================================================
@@ -111,12 +161,13 @@ export function calculateHuggedSize(
   allObjects: CanvasObject[]
 ): { width: number; height: number } {
   const children = allObjects.filter((o) => o.parentId === frame.id);
-  const padding = frame.padding || 0;
+  const paddingH = (frame.paddingLeft || 0) + (frame.paddingRight || 0);
+  const paddingV = (frame.paddingTop || 0) + (frame.paddingBottom || 0);
 
   if (children.length === 0) {
     return {
-      width: padding * 2 || 100,
-      height: padding * 2 || 100,
+      width: paddingH || 100,
+      height: paddingV || 100,
     };
   }
 
@@ -133,8 +184,8 @@ export function calculateHuggedSize(
       );
       const maxHeight = Math.max(...children.map((c) => c.height));
       return {
-        width: totalWidth + padding * 2,
-        height: maxHeight + padding * 2,
+        width: totalWidth + paddingH,
+        height: maxHeight + paddingV,
       };
     } else {
       const maxWidth = Math.max(...children.map((c) => c.width));
@@ -143,8 +194,8 @@ export function calculateHuggedSize(
         0
       );
       return {
-        width: maxWidth + padding * 2,
-        height: totalHeight + padding * 2,
+        width: maxWidth + paddingH,
+        height: totalHeight + paddingV,
       };
     }
   }
@@ -158,8 +209,8 @@ export function calculateHuggedSize(
   }
 
   return {
-    width: maxX + padding,
-    height: maxY + padding,
+    width: maxX + (frame.paddingRight || 0),
+    height: maxY + (frame.paddingBottom || 0),
   };
 }
 

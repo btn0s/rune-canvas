@@ -12,7 +12,13 @@ import {
   type Shortcut,
 } from "../lib/useKeyboardShortcuts";
 import type { ResizeHandle, Tool, SidebarMode } from "../lib/types";
-import { getCanvasPosition } from "../lib/geometry";
+import {
+  getCanvasPosition,
+  worldToLocal,
+  drawTransformedRect,
+  type TransformedRect,
+} from "../lib/geometry";
+import { getObjectTransform } from "../lib/objectUtils";
 import {
   type CanvasObject,
   type FrameObject,
@@ -47,8 +53,51 @@ import { PropertyPanel } from "./PropertyPanel";
 import type { Point } from "../lib/types";
 
 const HANDLE_SIZE = 8;
-const EDGE_HIT_WIDTH = 6; // Pixels from edge to trigger edge resize
+const EDGE_HIT_WIDTH = 6;
 const CORNER_HANDLES: ResizeHandle[] = ["nw", "ne", "se", "sw"];
+
+function createRotatedCursor(angle: number, type: "resize" | "rotate"): string {
+  const resizeSvg = `
+    <svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'>
+      <defs>
+        <filter id='shadow' x='-20%' y='-20%' width='140%' height='140%'>
+          <feDropShadow dx='0' dy='1' stdDeviation='0.9' flood-opacity='0.65'/>
+        </filter>
+      </defs>
+      <g transform='rotate(${angle} 12 12)' filter='url(%23shadow)'>
+        <path d='M9.24 12.07L13.31 16.14L10.49 18.97L18.96 18.95L18.97 10.48L16.13 13.32L12.06 9.26L10.64 7.84L13.49 5H5V13.48L7.83 10.66L9.24 12.07Z' fill='white'/>
+        <path d='M10.3 11.72L14.73 16.14L12.9 17.97L17.96 17.95L17.97 12.9L16.13 14.74L11.7 10.32L9.23 7.84L11.07 6H6V11.07L7.83 9.24L10.3 11.72Z' fill='black'/>
+      </g>
+    </svg>
+  `;
+  
+  const rotateSvg = `
+    <svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'>
+      <defs>
+        <filter id='shadow' x='-20%' y='-20%' width='140%' height='140%'>
+          <feDropShadow dx='0' dy='1' stdDeviation='0.9' flood-opacity='0.65'/>
+        </filter>
+      </defs>
+      <g transform='rotate(${angle} 12 12)' filter='url(%23shadow)'>
+        <path d='M6 13C6 12.0807 6.18106 11.1705 6.53284 10.3212C6.88463 9.47194 7.40024 8.70026 8.05025 8.05025C8.70026 7.40024 9.47194 6.88463 10.3212 6.53284C11.1705 6.18106 12.0807 6 13 6L16 6L16 2L22 8L16 14L16 10L13 10C12.606 10 12.2159 10.0776 11.8519 10.2284C11.488 10.3791 11.1573 10.6001 10.8787 10.8787C10.6001 11.1573 10.3791 11.488 10.2284 11.8519C10.0776 12.2159 10 12.606 10 13L10 16L14 16L8 22L2 16L6 16L6 13Z' fill='white'/>
+        <path d='M9 13L9 17L11.5 17L8 20.5L4.5 17L7 17L7 13C7 12.2121 7.15519 11.4318 7.45672 10.7039C7.75825 9.97594 8.20021 9.31451 8.75736 8.75736C9.31451 8.2002 9.97594 7.75825 10.7039 7.45672C11.4319 7.15519 12.2121 6.99999 13 6.99999L17 6.99999L17 4.49999L20.5 7.99999L17 11.5L17 8.99999L13 8.99999C12.4747 8.99999 11.9546 9.10346 11.4693 9.30448C10.984 9.5055 10.543 9.80013 10.1716 10.1716C9.80014 10.543 9.5055 10.984 9.30448 11.4693C9.10346 11.9546 9 12.4747 9 13Z' fill='black'/>
+      </g>
+    </svg>
+  `;
+  
+  const svg = type === "resize" ? resizeSvg : rotateSvg;
+  const encoded = encodeURIComponent(svg.replace(/\s+/g, ' ').trim());
+  return `url("data:image/svg+xml,${encoded}") 12 12, crosshair`;
+}
+
+const cursorCache = new Map<string, string>();
+function getCursor(angle: number, type: "resize" | "rotate"): string {
+  const key = `${type}-${Math.round(angle)}`;
+  if (!cursorCache.has(key)) {
+    cursorCache.set(key, createRotatedCursor(angle, type));
+  }
+  return cursorCache.get(key)!;
+}
 
 const TOOLS: {
   id: Tool;
@@ -253,6 +302,7 @@ export function Canvas() {
     isDragging,
     hasDragMovement,
     isResizing,
+    isRotating,
     isPanning,
     isMarqueeSelecting,
     marqueeRect,
@@ -272,6 +322,9 @@ export function Canvas() {
     startResize,
     updateResize,
     endResize,
+    startRotation,
+    updateRotation,
+    endRotation,
     startPan,
     updatePan,
     endPan,
@@ -317,6 +370,8 @@ export function Canvas() {
 
   // Hovered resize handle for cursor
   const [hoveredHandle, setHoveredHandle] = useState<ResizeHandle | null>(null);
+
+  const [hoveredRotationCorner, setHoveredRotationCorner] = useState<number | null>(null);
 
   // Hovered object for visual feedback
   const [hoveredObjectId, setHoveredObjectId] = useState<string | null>(null);
@@ -585,82 +640,81 @@ export function Canvas() {
     if (hoveredObjectId && container) {
       const hoveredObj = objects.find((o) => o.id === hoveredObjectId);
       if (hoveredObj) {
-        // Use DOM position for accuracy with flex children
-        const el = container.querySelector(
-          `[data-object-id="${hoveredObjectId}"]`
-        ) as HTMLElement;
-
-        let hx: number, hy: number, hw: number, hh: number;
-
-        if (el) {
-          const containerRect = container.getBoundingClientRect();
-          const elRect = el.getBoundingClientRect();
-          hx = elRect.left - containerRect.left;
-          hy = elRect.top - containerRect.top;
-          hw = elRect.width;
-          hh = elRect.height;
-        } else {
-          const hoveredPos = getCanvasPosition(hoveredObj, objects);
-          hx = hoveredPos.x * transform.scale + transform.x;
-          hy = hoveredPos.y * transform.scale + transform.y;
-          hw = hoveredObj.width * transform.scale;
-          hh = hoveredObj.height * transform.scale;
-        }
+        const objTransform = getObjectTransform(hoveredObj, objects);
+        const screenTr: TransformedRect = {
+          cx: objTransform.cx * transform.scale + transform.x,
+          cy: objTransform.cy * transform.scale + transform.y,
+          width: objTransform.width * transform.scale,
+          height: objTransform.height * transform.scale,
+          rotation: objTransform.rotation,
+        };
 
         ctx.strokeStyle = "#3b82f6";
         ctx.lineWidth = 1;
         ctx.setLineDash([]);
-        ctx.strokeRect(hx, hy, hw, hh);
+        drawTransformedRect(ctx, screenTr, () => {
+          ctx.strokeRect(
+            -screenTr.width / 2,
+            -screenTr.height / 2,
+            screenTr.width,
+            screenTr.height
+          );
+        });
       }
     }
 
     // Draw selection: outline, handles, dimensions
     if (selectionBounds) {
-      const x = selectionBounds.x * transform.scale + transform.x;
-      const y = selectionBounds.y * transform.scale + transform.y;
-      const w = selectionBounds.width * transform.scale;
-      const h = selectionBounds.height * transform.scale;
-
-      // 1. Blue outline
-      ctx.strokeStyle = "#3b82f6";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x, y, w, h);
-
-      // 2. Resize handles (corners only)
-      ctx.fillStyle = "#fff";
-      ctx.strokeStyle = "#3b82f6";
+      const screenTr: TransformedRect = {
+        cx: selectionBounds.cx * transform.scale + transform.x,
+        cy: selectionBounds.cy * transform.scale + transform.y,
+        width: selectionBounds.width * transform.scale,
+        height: selectionBounds.height * transform.scale,
+        rotation: selectionBounds.rotation,
+      };
       const hs = HANDLE_SIZE;
 
-      const cornerPositions: [number, number][] = [
-        [x - hs / 2, y - hs / 2], // nw
-        [x + w - hs / 2, y - hs / 2], // ne
-        [x + w - hs / 2, y + h - hs / 2], // se
-        [x - hs / 2, y + h - hs / 2], // sw
-      ];
+      drawTransformedRect(ctx, screenTr, () => {
+        const w = screenTr.width;
+        const h = screenTr.height;
 
-      cornerPositions.forEach(([hx, hy]) => {
-        ctx.fillRect(hx, hy, hs, hs);
-        ctx.strokeRect(hx, hy, hs, hs);
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(-w / 2, -h / 2, w, h);
+
+        ctx.fillStyle = "#fff";
+        ctx.strokeStyle = "#3b82f6";
+
+        const cornerPositions: [number, number][] = [
+          [-w / 2 - hs / 2, -h / 2 - hs / 2],
+          [w / 2 - hs / 2, -h / 2 - hs / 2],
+          [w / 2 - hs / 2, h / 2 - hs / 2],
+          [-w / 2 - hs / 2, h / 2 - hs / 2],
+        ];
+
+        cornerPositions.forEach(([hx, hy]) => {
+          ctx.fillRect(hx, hy, hs, hs);
+          ctx.strokeRect(hx, hy, hs, hs);
+        });
+
+        const dimLabel = `${Math.round(selectionBounds.width)} × ${Math.round(
+          selectionBounds.height
+        )}`;
+        ctx.font = "11px system-ui";
+        const dimTextWidth = ctx.measureText(dimLabel).width;
+        const dimPillWidth = dimTextWidth + 12;
+        const dimPillHeight = 18;
+        const dimPillX = -dimPillWidth / 2;
+        const dimPillY = h / 2 + 8;
+
+        ctx.fillStyle = "#3b82f6";
+        ctx.beginPath();
+        ctx.roundRect(dimPillX, dimPillY, dimPillWidth, dimPillHeight, 4);
+        ctx.fill();
+
+        ctx.fillStyle = "#fff";
+        ctx.fillText(dimLabel, -dimTextWidth / 2, dimPillY + 13);
       });
-
-      // 3. Dimension badge
-      const dimLabel = `${Math.round(selectionBounds.width)} × ${Math.round(
-        selectionBounds.height
-      )}`;
-      ctx.font = "11px system-ui";
-      const dimTextWidth = ctx.measureText(dimLabel).width;
-      const dimPillWidth = dimTextWidth + 12;
-      const dimPillHeight = 18;
-      const dimPillX = x + w / 2 - dimPillWidth / 2;
-      const dimPillY = y + h + 8;
-
-      ctx.fillStyle = "#3b82f6";
-      ctx.beginPath();
-      ctx.roundRect(dimPillX, dimPillY, dimPillWidth, dimPillHeight, 4);
-      ctx.fill();
-
-      ctx.fillStyle = "#fff";
-      ctx.fillText(dimLabel, x + w / 2 - dimTextWidth / 2, dimPillY + 13);
     }
 
     // Draw marquee selection rectangle
@@ -709,73 +763,54 @@ export function Canvas() {
     return () => container.removeEventListener("wheel", onWheel);
   }, [handleWheel]);
 
-  // Hit test resize handles and edges on selection bounds
   const hitTestHandle = useCallback(
     (screenX: number, screenY: number): ResizeHandle | null => {
       if (!selectionBounds) return null;
-      const x = selectionBounds.x * transform.scale + transform.x;
-      const y = selectionBounds.y * transform.scale + transform.y;
+
       const w = selectionBounds.width * transform.scale;
       const h = selectionBounds.height * transform.scale;
+      const cx = selectionBounds.cx * transform.scale + transform.x;
+      const cy = selectionBounds.cy * transform.scale + transform.y;
       const hs = HANDLE_SIZE;
 
-      // Test corner handles first
+      // Transform screen point to selection-local space
+      const screenTr: TransformedRect = {
+        cx,
+        cy,
+        width: w,
+        height: h,
+        rotation: selectionBounds.rotation,
+      };
+      const local = worldToLocal({ x: screenX, y: screenY }, screenTr);
+      const lx = local.x;
+      const ly = local.y;
+
       const cornerPositions: Record<string, [number, number]> = {
-        nw: [x - hs / 2, y - hs / 2],
-        ne: [x + w - hs / 2, y - hs / 2],
-        se: [x + w - hs / 2, y + h - hs / 2],
-        sw: [x - hs / 2, y + h - hs / 2],
+        nw: [-w / 2 - hs / 2, -h / 2 - hs / 2],
+        ne: [w / 2 - hs / 2, -h / 2 - hs / 2],
+        se: [w / 2 - hs / 2, h / 2 - hs / 2],
+        sw: [-w / 2 - hs / 2, h / 2 - hs / 2],
       };
 
       for (const handle of CORNER_HANDLES) {
         const [hx, hy] = cornerPositions[handle];
-        if (
-          screenX >= hx &&
-          screenX <= hx + hs &&
-          screenY >= hy &&
-          screenY <= hy + hs
-        ) {
+        if (lx >= hx && lx <= hx + hs && ly >= hy && ly <= hy + hs) {
           return handle;
         }
       }
 
-      // Test edges (selection border)
       const edgeHit = EDGE_HIT_WIDTH;
 
-      // North edge
-      if (
-        screenX >= x + hs &&
-        screenX <= x + w - hs &&
-        screenY >= y - edgeHit &&
-        screenY <= y + edgeHit
-      ) {
+      if (lx >= -w / 2 + hs && lx <= w / 2 - hs && ly >= -h / 2 - edgeHit && ly <= -h / 2 + edgeHit) {
         return "n";
       }
-      // South edge
-      if (
-        screenX >= x + hs &&
-        screenX <= x + w - hs &&
-        screenY >= y + h - edgeHit &&
-        screenY <= y + h + edgeHit
-      ) {
+      if (lx >= -w / 2 + hs && lx <= w / 2 - hs && ly >= h / 2 - edgeHit && ly <= h / 2 + edgeHit) {
         return "s";
       }
-      // West edge
-      if (
-        screenX >= x - edgeHit &&
-        screenX <= x + edgeHit &&
-        screenY >= y + hs &&
-        screenY <= y + h - hs
-      ) {
+      if (lx >= -w / 2 - edgeHit && lx <= -w / 2 + edgeHit && ly >= -h / 2 + hs && ly <= h / 2 - hs) {
         return "w";
       }
-      // East edge
-      if (
-        screenX >= x + w - edgeHit &&
-        screenX <= x + w + edgeHit &&
-        screenY >= y + hs &&
-        screenY <= y + h - hs
-      ) {
+      if (lx >= w / 2 - edgeHit && lx <= w / 2 + edgeHit && ly >= -h / 2 + hs && ly <= h / 2 - hs) {
         return "e";
       }
 
@@ -784,9 +819,51 @@ export function Canvas() {
     [selectionBounds, transform]
   );
 
-  // Hit test objects (canvas space) - includes label area for root objects
-  // Returns the smallest (most nested) object containing the point
-  // Uses DOM positions for accuracy with flex-positioned children
+  const hitTestRotationHandle = useCallback(
+    (screenX: number, screenY: number): number | null => {
+      if (!selectionBounds) return null;
+
+      const w = selectionBounds.width * transform.scale;
+      const h = selectionBounds.height * transform.scale;
+      const cx = selectionBounds.cx * transform.scale + transform.x;
+      const cy = selectionBounds.cy * transform.scale + transform.y;
+
+      const screenTr: TransformedRect = {
+        cx,
+        cy,
+        width: w,
+        height: h,
+        rotation: selectionBounds.rotation,
+      };
+      const local = worldToLocal({ x: screenX, y: screenY }, screenTr);
+      const lx = local.x;
+      const ly = local.y;
+
+      const zoneSize = 12;
+      const zoneOffset = 4;
+
+      const corners = [
+        { x: -w / 2 - zoneOffset - zoneSize, y: -h / 2 - zoneOffset - zoneSize, angle: 0 },
+        { x: w / 2 + zoneOffset, y: -h / 2 - zoneOffset - zoneSize, angle: 90 },
+        { x: w / 2 + zoneOffset, y: h / 2 + zoneOffset, angle: 180 },
+        { x: -w / 2 - zoneOffset - zoneSize, y: h / 2 + zoneOffset, angle: 270 },
+      ];
+
+      for (const corner of corners) {
+        if (
+          lx >= corner.x &&
+          lx <= corner.x + zoneSize &&
+          ly >= corner.y &&
+          ly <= corner.y + zoneSize
+        ) {
+          return corner.angle;
+        }
+      }
+      return null;
+    },
+    [selectionBounds, transform]
+  );
+
   const hitTestObject = useCallback(
     (canvasX: number, canvasY: number): string | null => {
       if (!containerRef.current) return null;
@@ -879,7 +956,12 @@ export function Canvas() {
     }
 
     if (tool === "select") {
-      // Check resize handles first (only for single selection)
+      if (hitTestRotationHandle(screenX, screenY) !== null) {
+        startRotation(canvasPoint);
+        return;
+      }
+
+      // Check resize handles (only for single selection)
       const handle = hitTestHandle(screenX, screenY);
       if (handle) {
         setHoveredHandle(handle);
@@ -936,25 +1018,27 @@ export function Canvas() {
       setHoveredObjectId(null);
     } else if (isResizing) {
       updateResize(canvasPoint, e.shiftKey, e.altKey, e.metaKey);
-      // Track crop mode: meta key + resizing a single image (auto-switches to crop mode)
       const selectedObj =
         selectedIds.length === 1
           ? objects.find((o) => o.id === selectedIds[0])
           : null;
       setIsCropMode(e.metaKey && selectedObj?.type === "image");
       setHoveredObjectId(null);
+    } else if (isRotating) {
+      updateRotation(canvasPoint, e.shiftKey);
+      setHoveredObjectId(null);
     } else if (isMarqueeSelecting) {
       updateMarquee(canvasPoint);
       setHoveredObjectId(null);
     } else if (tool === "select") {
-      // Check for handle hover when idle
-      const handle = hitTestHandle(screenX, screenY);
+      const rotationCorner = hitTestRotationHandle(screenX, screenY);
+      setHoveredRotationCorner(rotationCorner);
+
+      const handle = rotationCorner !== null ? null : hitTestHandle(screenX, screenY);
       setHoveredHandle(handle);
 
-      // Track hovered object (only when not over a handle)
-      if (!handle) {
+      if (!handle && rotationCorner === null) {
         const objectId = hitTestObject(canvasPoint.x, canvasPoint.y);
-        // Don't show hover for already-selected objects
         setHoveredObjectId(
           objectId && !selectedIds.includes(objectId) ? objectId : null
         );
@@ -975,6 +1059,10 @@ export function Canvas() {
       endResize();
       setHoveredHandle(null);
       setIsCropMode(false);
+    }
+    if (isRotating) {
+      endRotation();
+      setHoveredRotationCorner(null);
     }
     if (isMarqueeSelecting) endMarquee();
   };
@@ -999,7 +1087,10 @@ export function Canvas() {
               alignItems: frame.alignItems || "flex-start",
               flexWrap: frame.flexWrap || "nowrap",
               gap: frame.gap ?? 0,
-              padding: frame.padding ?? 0,
+              paddingTop: frame.paddingTop ?? 0,
+              paddingRight: frame.paddingRight ?? 0,
+              paddingBottom: frame.paddingBottom ?? 0,
+              paddingLeft: frame.paddingLeft ?? 0,
             }
           : { layoutMode: "none" };
 
@@ -1213,29 +1304,43 @@ export function Canvas() {
     [screenToCanvas, addImage]
   );
 
-  // Get cursor for resize handle
-  const getHandleCursor = (handle: ResizeHandle | null): string => {
-    if (!handle) return "default";
-    switch (handle) {
-      case "nw":
-      case "se":
-        return "nwse-resize";
-      case "ne":
-      case "sw":
-        return "nesw-resize";
-      case "n":
-      case "s":
-        return "ns-resize";
-      case "e":
-      case "w":
-        return "ew-resize";
-      default:
-        return "default";
-    }
-  };
+  const getHandleCursor = useCallback(
+    (handle: ResizeHandle | null): string => {
+      if (!handle) return "default";
+
+      const rotation = selectionBounds?.rotation ?? 0;
+
+      const baseAngles: Record<ResizeHandle, number> = {
+        nw: 0,
+        n: 45,
+        ne: 90,
+        e: 135,
+        se: 180,
+        s: 225,
+        sw: 270,
+        w: 315,
+      };
+
+      const effectiveAngle = (baseAngles[handle] + rotation + 360) % 360;
+      return getCursor(effectiveAngle, "resize");
+    },
+    [selectionBounds?.rotation]
+  );
+
+  const getRotationCursor = useCallback(
+    (cornerAngle: number): string => {
+      const rotation = selectionBounds?.rotation ?? 0;
+      return getCursor(rotation + cornerAngle, "rotate");
+    },
+    [selectionBounds?.rotation]
+  );
 
   const cursor = isPanning
     ? "grabbing"
+    : isRotating && hoveredRotationCorner !== null
+    ? getRotationCursor(hoveredRotationCorner)
+    : hoveredRotationCorner !== null
+    ? getRotationCursor(hoveredRotationCorner)
     : isResizing
     ? getHandleCursor(hoveredHandle)
     : tool === "hand" || spaceHeld

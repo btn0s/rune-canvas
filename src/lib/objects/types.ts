@@ -69,6 +69,8 @@ export interface BaseObject {
   height: number;
   /** Opacity 0-1 */
   opacity: number;
+  /** Rotation in degrees (0-360) */
+  rotation: number;
 }
 
 // ============================================================================
@@ -212,7 +214,11 @@ export interface FrameObject extends BaseObject {
   alignItems: AlignItems;
   flexWrap: FlexWrap;
   gap: number;
-  padding: number;
+  // Per-side padding
+  paddingTop: number;
+  paddingRight: number;
+  paddingBottom: number;
+  paddingLeft: number;
 }
 
 // ============================================================================

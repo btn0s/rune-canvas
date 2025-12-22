@@ -34,15 +34,18 @@ export function useResize(config: ResizeConfig, actions: ResizeActions) {
   // ---- State ----
   const [isResizing, setIsResizing] = useState(false);
 
-  // ---- Refs ----
   const resizeHandle = useRef<ResizeHandle | null>(null);
   const resizeStart = useRef<{
     object: { x: number; y: number; width: number; height: number };
     point: Point;
+    rotation: number;
+    center: Point;
   } | null>(null);
   const resizeBoundsStart = useRef<{
     bounds: { x: number; y: number; width: number; height: number };
     frames: CanvasObject[];
+    rotation: number;
+    center: Point;
   } | null>(null);
 
   // ---- Handlers ----
@@ -63,12 +66,16 @@ export function useResize(config: ResizeConfig, actions: ResizeActions) {
           height: bounds.height,
         },
         point: canvasPoint,
+        rotation: bounds.rotation,
+        center: bounds.center,
       };
       resizeBoundsStart.current = {
         bounds: { ...bounds },
         frames: objects
           .filter((o) => selectedIds.includes(o.id))
           .map((o) => ({ ...o })),
+        rotation: bounds.rotation,
+        center: bounds.center,
       };
     },
     [objects, selectedIds, history]
@@ -79,12 +86,23 @@ export function useResize(config: ResizeConfig, actions: ResizeActions) {
       if (!isResizing || !resizeStart.current || !resizeBoundsStart.current)
         return;
 
-      const { point: start } = resizeStart.current;
+      const { point: start, rotation } = resizeStart.current;
       const { bounds: origBounds, frames: origObjects } =
         resizeBoundsStart.current;
       const handle = resizeHandle.current!;
+
       let dx = canvasPoint.x - start.x;
       let dy = canvasPoint.y - start.y;
+
+      if (rotation !== 0) {
+        const rad = (-rotation * Math.PI) / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+        const localDx = dx * cos - dy * sin;
+        const localDy = dx * sin + dy * cos;
+        dx = localDx;
+        dy = localDy;
+      }
 
       // Capture history on first movement
       if (dx !== 0 || dy !== 0) {
@@ -301,55 +319,69 @@ export function useResize(config: ResizeConfig, actions: ResizeActions) {
         }
       }
 
-      let { x, y, width, height } = origBounds;
-      const centerX = origBounds.x + origBounds.width / 2;
-      const centerY = origBounds.y + origBounds.height / 2;
+      let width = origBounds.width;
+      let height = origBounds.height;
+      const origCenterX = origBounds.x + origBounds.width / 2;
+      const origCenterY = origBounds.y + origBounds.height / 2;
 
       // Alt: resize from center
       if (altKey) {
         if (handle.includes("w")) {
           width = origBounds.width - dx * 2;
-          x = centerX - width / 2;
         }
         if (handle.includes("e")) {
           width = origBounds.width + dx * 2;
-          x = centerX - width / 2;
         }
         if (handle.includes("n")) {
           height = origBounds.height - dy * 2;
-          y = centerY - height / 2;
         }
         if (handle.includes("s")) {
           height = origBounds.height + dy * 2;
-          y = centerY - height / 2;
         }
-        // For edge handles with shift, also apply the other dimension symmetrically
         if (shiftKey) {
           if (handle === "e" || handle === "w") {
             height = origBounds.height + Math.abs(width - origBounds.width);
-            y = centerY - height / 2;
           } else if (handle === "n" || handle === "s") {
             width = origBounds.width + Math.abs(height - origBounds.height);
-            x = centerX - width / 2;
           }
         }
       } else {
-        // Normal resize: opposite corner stays fixed
-        if (handle.includes("w")) {
-          x = origBounds.x + dx;
-          width = origBounds.width - dx;
-        }
-        if (handle.includes("e")) {
-          width = origBounds.width + dx;
-        }
-        if (handle.includes("n")) {
-          y = origBounds.y + dy;
-          height = origBounds.height - dy;
-        }
-        if (handle.includes("s")) {
-          height = origBounds.height + dy;
+        if (handle.includes("w")) width = origBounds.width - dx;
+        if (handle.includes("e")) width = origBounds.width + dx;
+        if (handle.includes("n")) height = origBounds.height - dy;
+        if (handle.includes("s")) height = origBounds.height + dy;
+      }
+
+      // Calculate new center position
+      // The key insight: keep the opposite edge/corner fixed in world space
+      let newCenterX = origCenterX;
+      let newCenterY = origCenterY;
+
+      if (!altKey) {
+        // Local offset from original center to new center
+        let localDx = 0;
+        let localDy = 0;
+
+        if (handle.includes("w")) localDx = (origBounds.width - width) / 2;
+        if (handle.includes("e")) localDx = (width - origBounds.width) / 2;
+        if (handle.includes("n")) localDy = (origBounds.height - height) / 2;
+        if (handle.includes("s")) localDy = (height - origBounds.height) / 2;
+
+        if (rotation !== 0) {
+          const rad = (rotation * Math.PI) / 180;
+          const cos = Math.cos(rad);
+          const sin = Math.sin(rad);
+          newCenterX = origCenterX + localDx * cos - localDy * sin;
+          newCenterY = origCenterY + localDx * sin + localDy * cos;
+        } else {
+          newCenterX = origCenterX + localDx;
+          newCenterY = origCenterY + localDy;
         }
       }
+
+      // Convert center back to top-left
+      let x = newCenterX - width / 2;
+      let y = newCenterY - height / 2;
 
       // Enforce minimum size
       if (width < 1) {

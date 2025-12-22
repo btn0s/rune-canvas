@@ -50,11 +50,15 @@ export function computeWrapperStyle(ctx: StyleContext): CSSProperties {
 
   // Root object: canvas-space positioning
   if (isRootObject(object)) {
+    const rotation = object.rotation || 0;
     return {
       position: "absolute",
       left: 0,
       top: 0,
-      transform: `translate(${object.x}px, ${object.y}px)`,
+      transform: rotation !== 0
+        ? `translate(${object.x}px, ${object.y}px) rotate(${rotation}deg)`
+        : `translate(${object.x}px, ${object.y}px)`,
+      transformOrigin: "center center",
       opacity: object.opacity,
     };
   }
@@ -110,12 +114,20 @@ export function computeWrapperStyle(ctx: StyleContext): CSSProperties {
   }
 
   // Absolute positioning within parent (or dragging out of layout)
-  return {
+  const rotation = object.rotation || 0;
+  const style: CSSProperties = {
     position: "absolute",
     left: object.x,
     top: object.y,
     opacity: object.opacity,
   };
+
+  if (rotation !== 0) {
+    style.transform = `rotate(${rotation}deg)`;
+    style.transformOrigin = "center center";
+  }
+
+  return style;
 }
 
 // ============================================================================
@@ -199,7 +211,7 @@ export function computeFrameStyle(frame: FrameObject): CSSProperties {
     }
 
     style.gap = frame.gap;
-    style.padding = frame.padding;
+    style.padding = `${frame.paddingTop}px ${frame.paddingRight}px ${frame.paddingBottom}px ${frame.paddingLeft}px`;
   }
 
   return style;

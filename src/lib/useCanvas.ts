@@ -10,6 +10,7 @@ import {
 } from "./objectUtils";
 import { useDrag } from "./interactions/useDrag";
 import { useResize } from "./interactions/useResize";
+import { useRotation } from "./interactions/useRotation";
 import {
   createSolidFill,
   type CanvasObject,
@@ -192,6 +193,7 @@ export function useCanvas() {
           width: 0,
           height: 0,
           opacity: 1,
+          rotation: 0,
           fills: [createSolidFill("#ffffff")],
           radius: 0,
           clipContent: false,
@@ -203,7 +205,10 @@ export function useCanvas() {
           alignItems: "flex-start",
           flexWrap: "nowrap",
           gap: 0,
-          padding: 0,
+          paddingTop: 0,
+          paddingRight: 0,
+          paddingBottom: 0,
+          paddingLeft: 0,
         };
         setObjects((prev) => [...prev, newFrame]);
         setSelectedIds([id]);
@@ -327,6 +332,7 @@ export function useCanvas() {
         width: defaultSize,
         height: defaultSize,
         opacity: 1,
+        rotation: 0,
         fills: [createSolidFill("#ffffff")],
         radius: 0,
         clipContent: false,
@@ -338,7 +344,10 @@ export function useCanvas() {
         alignItems: "flex-start",
         flexWrap: "nowrap",
         gap: 0,
-        padding: 0,
+        paddingTop: 0,
+        paddingRight: 0,
+        paddingBottom: 0,
+        paddingLeft: 0,
       };
       setObjects((prev) => recalculateHugSizes([...prev, newFrame]));
       setSelectedIds([id]);
@@ -399,6 +408,14 @@ export function useCanvas() {
   );
 
   const { isResizing, startResize, updateResize, endResize } = resize;
+
+  // ---- Rotation Interaction (extracted hook) ----
+  const rotation = useRotation(
+    { objects, selectedIds },
+    { setObjects, pushHistory }
+  );
+
+  const { isRotating, startRotation, updateRotation, endRotation } = rotation;
 
   const startPan = useCallback((screenPoint: Point) => {
     setIsPanning(true);
@@ -797,10 +814,10 @@ export function useCanvas() {
         width: bounds.width,
         height: bounds.height,
         opacity: 1,
+        rotation: 0,
         fills: [createSolidFill("#ffffff")],
         radius: 0,
         clipContent: false,
-        // Set to hug (fit) when creating a flex frame
         widthMode: isFlexLayout ? "fit" : "fixed",
         heightMode: isFlexLayout ? "fit" : "fixed",
         layoutMode: options?.layoutMode ?? "none",
@@ -809,7 +826,10 @@ export function useCanvas() {
         alignItems: "flex-start",
         flexWrap: "nowrap",
         gap: 0,
-        padding: 0,
+        paddingTop: 0,
+        paddingRight: 0,
+        paddingBottom: 0,
+        paddingLeft: 0,
       };
 
       setObjects((prev) => {
@@ -880,18 +900,16 @@ export function useCanvas() {
         name,
         type: "image",
         parentId,
-        // Center the image at the drop position
         x: position.x - naturalWidth / 2,
         y: position.y - naturalHeight / 2,
         width: naturalWidth,
         height: naturalHeight,
         opacity: 1,
+        rotation: 0,
         src,
         naturalWidth,
         naturalHeight,
-        // Default to "fill" mode (like Figma)
         fillMode: "fill",
-        // Initialize crop to full image (used when fillMode is "crop")
         cropX: 0,
         cropY: 0,
         cropWidth: naturalWidth,
@@ -984,15 +1002,16 @@ export function useCanvas() {
         parentId,
         x: relativePoint.x,
         y: relativePoint.y,
-        width: 0, // Will be auto-sized
-        height: 0, // Will be auto-sized
+        width: 0,
+        height: 0,
         opacity: 1,
+        rotation: 0,
         content: "",
         fontSize: 16,
         fontFamily: "system-ui",
         fontWeight: 400,
         fontStyle: "normal",
-        lineHeight: 0, // 0 = auto
+        lineHeight: 0,
         letterSpacing: 0,
         textAlign: "left",
         verticalAlign: "top",
@@ -1067,6 +1086,7 @@ export function useCanvas() {
     isDragging,
     hasDragMovement,
     isResizing,
+    isRotating,
     isPanning,
     isMarqueeSelecting,
     marqueeRect,
@@ -1091,6 +1111,9 @@ export function useCanvas() {
     startResize,
     updateResize,
     endResize,
+    startRotation,
+    updateRotation,
+    endRotation,
     startPan,
     updatePan,
     endPan,
