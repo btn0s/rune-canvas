@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { ChevronRight, Frame, Type, Image } from "lucide-react";
+import { ChevronRight, Frame, Type, Image, Eye, EyeOff, Lock, Unlock } from "lucide-react";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import type { SidebarMode } from "@/lib/types";
 
@@ -8,6 +8,8 @@ interface LayerItem {
   name: string;
   parentId: string | null;
   type: "frame" | "text" | "image";
+  visible: boolean;
+  locked: boolean;
 }
 
 // Icon component for layer type
@@ -36,6 +38,9 @@ interface LayersPanelProps {
   selectedIds: string[];
   onSelect: (ids: string[] | null, addToSelection?: boolean) => void;
   onHoverLayer?: (id: string | null) => void;
+  onToggleVisibility?: (id: string) => void;
+  onToggleLock?: (id: string) => void;
+  onRename?: (id: string, newName: string) => void;
   sidebarMode: SidebarMode;
 }
 
@@ -54,20 +59,34 @@ function LayerTreeItem({
   depth,
   selectedIds,
   animatedIds,
+  editingId,
   onSelect,
   onHoverLayer,
+  onToggleVisibility,
+  onToggleLock,
+  onRename,
+  onStartEdit,
+  onEndEdit,
 }: {
   item: LayerItem;
   items: LayerItem[];
   depth: number;
   selectedIds: string[];
   animatedIds: Set<string>;
+  editingId: string | null;
   onSelect: (ids: string[] | null, addToSelection?: boolean) => void;
   onHoverLayer?: (id: string | null) => void;
+  onToggleVisibility?: (id: string) => void;
+  onToggleLock?: (id: string) => void;
+  onRename?: (id: string, newName: string) => void;
+  onStartEdit: (id: string) => void;
+  onEndEdit: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(true);
+  const [isRowHovered, setIsRowHovered] = useState(false);
   const isSelected = selectedIds.includes(item.id);
   const isNew = animatedIds.has(item.id);
+  const isEditing = editingId === item.id;
   const children = getChildren(items, item.id);
   const hasKids = children.length > 0;
 
@@ -86,12 +105,35 @@ function LayerTreeItem({
   };
 
   const handleMouseEnter = () => {
+    setIsRowHovered(true);
     onHoverLayer?.(item.id);
   };
 
   const handleMouseLeave = () => {
+    setIsRowHovered(false);
     onHoverLayer?.(null);
   };
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onStartEdit(item.id);
+  };
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      onRename?.(item.id, e.currentTarget.value);
+      onEndEdit();
+    } else if (e.key === "Escape") {
+      onEndEdit();
+    }
+  };
+
+  const handleRenameBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    onRename?.(item.id, e.target.value);
+    onEndEdit();
+  };
+
+  const showIcons = isRowHovered || !item.visible || item.locked;
 
   const rowContent = (
     <div
@@ -99,10 +141,10 @@ function LayerTreeItem({
         isSelected
           ? "bg-primary/15 text-primary"
           : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-      }`}
+      } ${!item.visible ? "opacity-50" : ""}`}
       style={{
         paddingLeft: depth * 12 + (hasKids ? 0 : 16),
-        opacity: isNew ? 0 : 1,
+        opacity: isNew ? 0 : item.visible ? 1 : 0.5,
         transform: isNew ? "translateX(-10px)" : "translateX(0)",
         animation: isNew ? "slideIn 300ms ease-out forwards" : undefined,
       }}
@@ -110,7 +152,6 @@ function LayerTreeItem({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      {/* Chevron for expandable items */}
       {hasKids && (
         <button
           className="w-4 h-7 flex items-center justify-center shrink-0 hover:text-foreground"
@@ -124,13 +165,54 @@ function LayerTreeItem({
         </button>
       )}
 
-      {/* Icon */}
       <span className="w-4 h-7 flex items-center justify-center shrink-0">
         <LayerTypeIcon type={item.type} className="w-3 h-3" />
       </span>
 
-      {/* Name */}
-      <span className="text-xs truncate ml-1.5 pr-2">{item.name}</span>
+      {isEditing ? (
+        <input
+          autoFocus
+          defaultValue={item.name}
+          className="text-xs bg-transparent border border-primary rounded px-1 ml-1.5 mr-1 flex-1 min-w-0 outline-none"
+          onKeyDown={handleRenameKeyDown}
+          onBlur={handleRenameBlur}
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <span
+          className="text-xs truncate ml-1.5 flex-1 min-w-0"
+          onDoubleClick={handleDoubleClick}
+        >
+          {item.name}
+        </span>
+      )}
+
+      {showIcons && !isEditing && (
+        <div className="flex items-center gap-0.5 pr-1 shrink-0">
+          <button
+            className={`w-5 h-5 flex items-center justify-center rounded hover:bg-muted ${
+              !item.visible ? "text-muted-foreground" : "text-muted-foreground/50 hover:text-foreground"
+            }`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleVisibility?.(item.id);
+            }}
+          >
+            {item.visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+          </button>
+          <button
+            className={`w-5 h-5 flex items-center justify-center rounded hover:bg-muted ${
+              item.locked ? "text-muted-foreground" : "text-muted-foreground/50 hover:text-foreground"
+            }`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleLock?.(item.id);
+            }}
+          >
+            {item.locked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+          </button>
+        </div>
+      )}
     </div>
   );
 
@@ -150,8 +232,14 @@ function LayerTreeItem({
             depth={depth + 1}
             selectedIds={selectedIds}
             animatedIds={animatedIds}
+            editingId={editingId}
             onSelect={onSelect}
             onHoverLayer={onHoverLayer}
+            onToggleVisibility={onToggleVisibility}
+            onToggleLock={onToggleLock}
+            onRename={onRename}
+            onStartEdit={onStartEdit}
+            onEndEdit={onEndEdit}
           />
         ))}
       </CollapsibleContent>
@@ -210,10 +298,14 @@ export function LayersPanel({
   selectedIds,
   onSelect,
   onHoverLayer,
+  onToggleVisibility,
+  onToggleLock,
+  onRename,
   sidebarMode,
 }: LayersPanelProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [animatedIds, setAnimatedIds] = useState<Set<string>>(new Set());
+  const [editingId, setEditingId] = useState<string | null>(null);
   const prevItemIds = useRef<Set<string>>(new Set());
 
   // Track new items for animation
@@ -280,8 +372,14 @@ export function LayersPanel({
                   depth={0}
                   selectedIds={selectedIds}
                   animatedIds={animatedIds}
+                  editingId={editingId}
                   onSelect={onSelect}
                   onHoverLayer={onHoverLayer}
+                  onToggleVisibility={onToggleVisibility}
+                  onToggleLock={onToggleLock}
+                  onRename={onRename}
+                  onStartEdit={setEditingId}
+                  onEndEdit={() => setEditingId(null)}
                 />
               ))}
             </div>
@@ -357,8 +455,14 @@ export function LayersPanel({
                 depth={0}
                 selectedIds={selectedIds}
                 animatedIds={animatedIds}
+                editingId={editingId}
                 onSelect={onSelect}
                 onHoverLayer={onHoverLayer}
+                onToggleVisibility={onToggleVisibility}
+                onToggleLock={onToggleLock}
+                onRename={onRename}
+                onStartEdit={setEditingId}
+                onEndEdit={() => setEditingId(null)}
               />
             ))}
           </div>

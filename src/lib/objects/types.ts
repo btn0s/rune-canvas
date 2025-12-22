@@ -71,6 +71,10 @@ export interface BaseObject {
   opacity: number;
   /** Rotation in degrees (0-360) */
   rotation: number;
+  /** Visibility - hidden objects don't render */
+  visible: boolean;
+  /** Locked objects can't be selected or moved */
+  locked: boolean;
 }
 
 // ============================================================================

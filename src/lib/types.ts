@@ -37,6 +37,8 @@ export interface BaseObject {
   height: number;
   opacity: number;
   rotation: number; // degrees, 0-360
+  visible: boolean;
+  locked: boolean;
 }
 
 export type LayoutMode = "none" | "flex" | "grid";

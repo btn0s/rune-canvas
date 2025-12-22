@@ -874,6 +874,8 @@ export function Canvas() {
       const containerRect = containerRef.current.getBoundingClientRect();
 
       for (const obj of objects) {
+        if (obj.locked) continue;
+        
         // Get actual DOM position for accurate hit testing
         const el = containerRef.current.querySelector(
           `[data-object-id="${obj.id}"]`
@@ -1414,13 +1416,15 @@ export function Canvas() {
               {(() => {
                 // Render an object (always recursive - children render inside parent)
                 const renderObject = (obj: CanvasObject): React.ReactNode => {
+                  if (!obj.visible) return null;
+                  
                   const isSelected = selectedIds.includes(obj.id);
                   const isEditing = editingTextId === obj.id;
                   const isPotentialParent = potentialParentId === obj.id;
                   const frame = isFrame(obj) ? obj : null;
 
-                  // Get children for this object
-                  const children = getChildren(obj, objects);
+                  // Get children for this object (filter out hidden)
+                  const children = getChildren(obj, objects).filter(c => c.visible);
 
                   // During drag (with actual movement), objects break out of flex flow
                   const isBeingDragged =
@@ -1612,10 +1616,15 @@ export function Canvas() {
                 name: o.name,
                 parentId: o.parentId,
                 type: o.type,
+                visible: o.visible,
+                locked: o.locked,
               }))}
               selectedIds={selectedIds}
               onSelect={select}
               onHoverLayer={setHoveredObjectId}
+              onToggleVisibility={(id) => updateObject(id, { visible: !objects.find(o => o.id === id)?.visible })}
+              onToggleLock={(id) => updateObject(id, { locked: !objects.find(o => o.id === id)?.locked })}
+              onRename={(id, name) => updateObject(id, { name })}
               sidebarMode={sidebarMode}
             />
 

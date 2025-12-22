@@ -194,6 +194,8 @@ export function useCanvas() {
           height: 0,
           opacity: 1,
           rotation: 0,
+          visible: true,
+          locked: false,
           fills: [createSolidFill("#ffffff")],
           radius: 0,
           clipContent: false,
@@ -333,6 +335,8 @@ export function useCanvas() {
         height: defaultSize,
         opacity: 1,
         rotation: 0,
+        visible: true,
+        locked: false,
         fills: [createSolidFill("#ffffff")],
         radius: 0,
         clipContent: false,
@@ -441,19 +445,29 @@ export function useCanvas() {
   const select = useCallback((ids: string[] | null, addToSelection = false) => {
     if (ids === null) {
       setSelectedIds([]);
-    } else if (addToSelection) {
+      return;
+    }
+    
+    const selectableIds = ids.filter((id) => {
+      const obj = objects.find((o) => o.id === id);
+      return obj && !obj.locked;
+    });
+    
+    if (selectableIds.length === 0) return;
+    
+    if (addToSelection) {
       setSelectedIds((prev) => {
-        const newIds = ids.filter((id) => !prev.includes(id));
-        const removedIds = ids.filter((id) => prev.includes(id));
+        const newIds = selectableIds.filter((id) => !prev.includes(id));
+        const removedIds = selectableIds.filter((id) => prev.includes(id));
         if (removedIds.length > 0) {
           return prev.filter((id) => !removedIds.includes(id));
         }
         return [...prev, ...newIds];
       });
     } else {
-      setSelectedIds(ids);
+      setSelectedIds(selectableIds);
     }
-  }, []);
+  }, [objects]);
 
   // Marquee selection
   const startMarquee = useCallback((canvasPoint: Point) => {
@@ -474,6 +488,7 @@ export function useCanvas() {
 
       // Live selection: find objects that intersect with marquee (canvas space)
       const intersecting = objects.filter((o) => {
+        if (o.locked) return false;
         const canvasPos = getCanvasPosition(o, objects);
         return !(
           canvasPos.x + o.width < x ||
@@ -929,6 +944,8 @@ export function useCanvas() {
         height: bounds.height,
         opacity: 1,
         rotation: 0,
+        visible: true,
+        locked: false,
         fills: [createSolidFill("#ffffff")],
         radius: 0,
         clipContent: false,
@@ -1020,6 +1037,8 @@ export function useCanvas() {
         height: naturalHeight,
         opacity: 1,
         rotation: 0,
+        visible: true,
+        locked: false,
         src,
         naturalWidth,
         naturalHeight,
@@ -1120,6 +1139,8 @@ export function useCanvas() {
         height: 0,
         opacity: 1,
         rotation: 0,
+        visible: true,
+        locked: false,
         content: "",
         fontSize: 16,
         fontFamily: "system-ui",
