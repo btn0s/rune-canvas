@@ -714,6 +714,120 @@ export function useCanvas() {
     [alignObjects]
   );
 
+  // Distribute objects evenly
+  const distributeHorizontal = useCallback(() => {
+    if (selectedIds.length < 3) return;
+
+    pushHistory();
+    const selected = objects.filter((o) => selectedIds.includes(o.id));
+
+    // Sort by x position
+    const sorted = [...selected].sort((a, b) => {
+      const aPos = getCanvasPosition(a, objects);
+      const bPos = getCanvasPosition(b, objects);
+      return aPos.x - bPos.x;
+    });
+
+    // Calculate positions and total dimensions
+    const positions = sorted.map((o) => ({
+      obj: o,
+      canvasPos: getCanvasPosition(o, objects),
+    }));
+
+    const leftmost = positions[0].canvasPos.x;
+    const rightmost =
+      positions[positions.length - 1].canvasPos.x +
+      positions[positions.length - 1].obj.width;
+    const totalObjectWidth = positions.reduce((sum, p) => sum + p.obj.width, 0);
+    const totalSpace = rightmost - leftmost - totalObjectWidth;
+    const gapCount = positions.length - 1;
+    const gap = totalSpace / gapCount;
+
+    // Position objects with even gaps
+    let currentX = leftmost;
+    const targetPositions = positions.map((p, idx) => {
+      const targetX = idx === 0 ? leftmost : currentX;
+      currentX = targetX + p.obj.width + gap;
+      return { id: p.obj.id, targetX };
+    });
+
+    setObjects((prev) =>
+      prev.map((o) => {
+        const target = targetPositions.find((t) => t.id === o.id);
+        if (!target) return o;
+
+        // Convert back to relative if has parent
+        if (o.parentId) {
+          const parent = prev.find((p) => p.id === o.parentId);
+          if (parent) {
+            const parentPos = getCanvasPosition(parent, prev);
+            return { ...o, x: target.targetX - parentPos.x };
+          }
+        }
+
+        return { ...o, x: target.targetX };
+      })
+    );
+  }, [selectedIds, objects, pushHistory]);
+
+  const distributeVertical = useCallback(() => {
+    if (selectedIds.length < 3) return;
+
+    pushHistory();
+    const selected = objects.filter((o) => selectedIds.includes(o.id));
+
+    // Sort by y position
+    const sorted = [...selected].sort((a, b) => {
+      const aPos = getCanvasPosition(a, objects);
+      const bPos = getCanvasPosition(b, objects);
+      return aPos.y - bPos.y;
+    });
+
+    // Calculate positions and total dimensions
+    const positions = sorted.map((o) => ({
+      obj: o,
+      canvasPos: getCanvasPosition(o, objects),
+    }));
+
+    const topmost = positions[0].canvasPos.y;
+    const bottommost =
+      positions[positions.length - 1].canvasPos.y +
+      positions[positions.length - 1].obj.height;
+    const totalObjectHeight = positions.reduce(
+      (sum, p) => sum + p.obj.height,
+      0
+    );
+    const totalSpace = bottommost - topmost - totalObjectHeight;
+    const gapCount = positions.length - 1;
+    const gap = totalSpace / gapCount;
+
+    // Position objects with even gaps
+    let currentY = topmost;
+    const targetPositions = positions.map((p, idx) => {
+      const targetY = idx === 0 ? topmost : currentY;
+      currentY = targetY + p.obj.height + gap;
+      return { id: p.obj.id, targetY };
+    });
+
+    setObjects((prev) =>
+      prev.map((o) => {
+        const target = targetPositions.find((t) => t.id === o.id);
+        if (!target) return o;
+
+        // Convert back to relative if has parent
+        if (o.parentId) {
+          const parent = prev.find((p) => p.id === o.parentId);
+          if (parent) {
+            const parentPos = getCanvasPosition(parent, prev);
+            return { ...o, y: target.targetY - parentPos.y };
+          }
+        }
+
+        return { ...o, y: target.targetY };
+      })
+    );
+  }, [selectedIds, objects, pushHistory]);
+
   // Move selected objects by delta
   const moveSelected = useCallback(
     (dx: number, dy: number) => {
@@ -1133,6 +1247,8 @@ export function useCanvas() {
     alignBottom,
     alignCenterH,
     alignCenterV,
+    distributeHorizontal,
+    distributeVertical,
     moveSelected,
     addImage,
     updateObject,

@@ -344,6 +344,8 @@ export function Canvas() {
     alignBottom,
     alignCenterH,
     alignCenterV,
+    distributeHorizontal,
+    distributeVertical,
     moveSelected,
     addImage,
     updateTextContent,
@@ -1164,6 +1166,18 @@ export function Canvas() {
       { code: "KeyH", modifiers: { alt: true }, action: alignCenterH },
       { code: "KeyV", modifiers: { alt: true }, action: alignCenterV },
 
+      // === Distribution (Alt+Shift+H/V) - requires 3+ selected ===
+      {
+        code: "KeyH",
+        modifiers: { alt: true, shift: true },
+        action: distributeHorizontal,
+      },
+      {
+        code: "KeyV",
+        modifiers: { alt: true, shift: true },
+        action: distributeVertical,
+      },
+
       // === Layout ===
       { code: "KeyA", modifiers: { shift: true }, action: toggleFlex },
       { code: "KeyC", modifiers: { alt: true }, action: toggleClipContent },
@@ -1227,6 +1241,8 @@ export function Canvas() {
       alignRight,
       alignCenterH,
       alignCenterV,
+      distributeHorizontal,
+      distributeVertical,
       toggleFlex,
       toggleClipContent,
       moveSelected,
@@ -1686,6 +1702,19 @@ export function Canvas() {
                 Send to back
                 <ContextMenuShortcut>[</ContextMenuShortcut>
               </ContextMenuItem>
+              {selectedIds.length >= 3 && (
+                <>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onClick={distributeHorizontal}>
+                    Distribute horizontally
+                    <ContextMenuShortcut>⌥⇧H</ContextMenuShortcut>
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={distributeVertical}>
+                    Distribute vertically
+                    <ContextMenuShortcut>⌥⇧V</ContextMenuShortcut>
+                  </ContextMenuItem>
+                </>
+              )}
             </>
           ) : (
             <>
