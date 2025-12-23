@@ -1,5 +1,8 @@
 import { create } from "zustand";
 import type { CanvasObject, Tool, Transform } from "./types";
+import type { Command, CommandState } from "./commands/types";
+import { initialCommandState } from "./commands/types";
+import { searchCommands } from "./commands/registry";
 
 type SceneState = {
   objects: CanvasObject[];
@@ -17,6 +20,7 @@ interface CanvasStoreState extends SceneState {
     past: SceneState[];
     future: SceneState[];
   };
+  commandState: CommandState;
   setScene: (
     updater:
       | Partial<SceneState>
@@ -49,6 +53,13 @@ interface CanvasStoreState extends SceneState {
   redo: () => void;
   canUndo: () => boolean;
   canRedo: () => boolean;
+  setCommandInput: (input: string) => void;
+  setCommandActive: (active: boolean) => void;
+  setCommandSelectedIndex: (index: number) => void;
+  setPendingCommand: (cmd: Command | null) => void;
+  setPendingIndexItems: (items: { index: number; label: string }[] | null) => void;
+  setPendingIndex: (index: number | null) => void;
+  clearCommand: () => void;
 }
 
 type SceneUpdateOptions = {
@@ -94,6 +105,7 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
   editingTextId: null,
   canvasBackground: "#0a0a0a",
   history: { past: [], future: [] },
+  commandState: initialCommandState,
   setScene: (updater, options = {}) =>
     set((state) => {
       const currentScene = getScene(state);
@@ -213,6 +225,67 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
     }),
   canUndo: () => get().history.past.length > 0,
   canRedo: () => get().history.future.length > 0,
+  setCommandInput: (input: string) =>
+    set((state) => {
+      const suggestions = input.trim() ? searchCommands(input.trim()) : [];
+      return {
+        commandState: {
+          ...state.commandState,
+          isActive: true,
+          input,
+          suggestions,
+          selectedIndex: 0,
+        },
+      };
+    }),
+  setCommandActive: (active: boolean) =>
+    set((state) => ({
+      commandState: {
+        ...state.commandState,
+        isActive: active,
+      },
+    })),
+  setCommandSelectedIndex: (index: number) =>
+    set((state) => ({
+      commandState: {
+        ...state.commandState,
+        selectedIndex: Math.max(
+          0,
+          Math.min(index, state.commandState.suggestions.length - 1)
+        ),
+      },
+    })),
+  setPendingCommand: (cmd: Command | null) =>
+    set((state) => ({
+      commandState: {
+        ...state.commandState,
+        pendingCommand: cmd,
+        input: cmd ? "" : state.commandState.input,
+        pendingIndexItems: null,
+        pendingIndex: null,
+      },
+    })),
+  setPendingIndexItems: (items) =>
+    set((state) => ({
+      commandState: {
+        ...state.commandState,
+        pendingIndexItems: items,
+        selectedIndex: 0,
+      },
+    })),
+  setPendingIndex: (index) =>
+    set((state) => ({
+      commandState: {
+        ...state.commandState,
+        pendingIndex: index,
+        pendingIndexItems: null,
+        input: "",
+      },
+    })),
+  clearCommand: () =>
+    set(() => ({
+      commandState: initialCommandState,
+    })),
 }));
 
 export type { CanvasStoreState, SceneState as CanvasSceneState };

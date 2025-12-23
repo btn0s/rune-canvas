@@ -65,12 +65,56 @@ export type BlendMode =
 export type BorderSide = "all" | "top" | "right" | "bottom" | "left";
 
 export interface ShadowProps {
+  id: string;
   x: number;
   y: number;
   blur: number;
   spread: number;
   color: string;
   opacity: number;
+  visible: boolean;
+}
+
+// Helper to create a default shadow
+export function createShadow(
+  x = 0,
+  y = 4,
+  blur = 8,
+  spread = 0,
+  color = "#000000",
+  opacity = 0.25
+): ShadowProps {
+  return {
+    id: `shadow-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    x,
+    y,
+    blur,
+    spread,
+    color,
+    opacity,
+    visible: true,
+  };
+}
+
+// Helper to create a default inner shadow
+export function createInnerShadow(
+  x = 0,
+  y = 2,
+  blur = 4,
+  spread = 0,
+  color = "#000000",
+  opacity = 0.25
+): ShadowProps {
+  return {
+    id: `ishadow-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    x,
+    y,
+    blur,
+    spread,
+    color,
+    opacity,
+    visible: true,
+  };
 }
 
 // =============================================================================
@@ -157,10 +201,10 @@ export interface FrameObject extends BaseObject {
   outlineOpacity?: number; // 0-1
   outlineStyle?: StrokeStyle;
   outlineOffset?: number; // Offset from edge
-  // Shadow (drop shadow)
-  shadow?: ShadowProps;
-  // Inner shadow
-  innerShadow?: ShadowProps;
+  // Stackable shadows (rendered as CSS box-shadow, comma-separated)
+  shadows: ShadowProps[];
+  // Stackable inner shadows (rendered as inset box-shadow)
+  innerShadows: ShadowProps[];
   // Size modes
   widthMode: SizeMode;
   heightMode: SizeMode;

@@ -452,21 +452,27 @@ function computeBorderRadius(frame: FrameObject): string | number {
 }
 
 function computeBoxShadow(frame: FrameObject): string | undefined {
-  const shadows: string[] = [];
-  
-  if (frame.shadow) {
-    const s = frame.shadow;
-    shadows.push(
-      `${s.x}px ${s.y}px ${s.blur}px ${s.spread}px ${hexToRgba(s.color, s.opacity)}`
-    );
+  const shadowStrings: string[] = [];
+
+  if (frame.shadows) {
+    for (const s of frame.shadows) {
+      if (s.visible) {
+        shadowStrings.push(
+          `${s.x}px ${s.y}px ${s.blur}px ${s.spread}px ${hexToRgba(s.color, s.opacity)}`
+        );
+      }
+    }
   }
-  
-  if (frame.innerShadow) {
-    const s = frame.innerShadow;
-    shadows.push(
-      `inset ${s.x}px ${s.y}px ${s.blur}px ${s.spread}px ${hexToRgba(s.color, s.opacity)}`
-    );
+
+  if (frame.innerShadows) {
+    for (const s of frame.innerShadows) {
+      if (s.visible) {
+        shadowStrings.push(
+          `inset ${s.x}px ${s.y}px ${s.blur}px ${s.spread}px ${hexToRgba(s.color, s.opacity)}`
+        );
+      }
+    }
   }
-  
-  return shadows.length > 0 ? shadows.join(", ") : undefined;
+
+  return shadowStrings.length > 0 ? shadowStrings.join(", ") : undefined;
 }

@@ -104,12 +104,54 @@ export type StrokeStyle = "solid" | "dashed";
 export type ImageFillMode = "fill" | "fit" | "crop";
 
 export interface ShadowProps {
+  id: string;
   x: number;
   y: number;
   blur: number;
   spread: number;
   color: string;
   opacity: number;
+  visible: boolean;
+}
+
+export function createShadow(
+  x = 0,
+  y = 4,
+  blur = 8,
+  spread = 0,
+  color = "#000000",
+  opacity = 0.25
+): ShadowProps {
+  return {
+    id: `shadow-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    x,
+    y,
+    blur,
+    spread,
+    color,
+    opacity,
+    visible: true,
+  };
+}
+
+export function createInnerShadow(
+  x = 0,
+  y = 2,
+  blur = 4,
+  spread = 0,
+  color = "#000000",
+  opacity = 0.25
+): ShadowProps {
+  return {
+    id: `ishadow-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    x,
+    y,
+    blur,
+    spread,
+    color,
+    opacity,
+    visible: true,
+  };
 }
 
 // ============================================================================
@@ -203,9 +245,9 @@ export interface FrameObject extends BaseObject {
   outlineStyle?: StrokeStyle;
   outlineOffset?: number;
 
-  // === Shadows ===
-  shadow?: ShadowProps;
-  innerShadow?: ShadowProps;
+  // === Stackable Shadows ===
+  shadows: ShadowProps[];
+  innerShadows: ShadowProps[];
 
   // === Size Behavior ===
   widthMode: SizeMode;

@@ -10,7 +10,7 @@ import type {
   GradientFill,
   ImageFill,
 } from "../lib/types";
-import { createSolidFill } from "../lib/types";
+import { createSolidFill, createShadow, createInnerShadow } from "../lib/types";
 import { useState, useRef } from "react";
 import { SelectItem } from "./ui/select";
 import {
@@ -1308,15 +1308,19 @@ function FrameProperties({
       {/* Shadow Section */}
       <ShadowSection
         label="Shadow"
-        shadows={frames.map((f) => f.shadow)}
-        onChange={(shadow) => onUpdate({ shadow })}
-        onPartialChange={(updates) => {
-          // Merge partial updates with each object's existing shadow
+        shadowArrays={frames.map((f) => f.shadows)}
+        onAdd={() =>
+          onUpdateEach((frame) => ({
+            shadows: [...frame.shadows, createShadow()],
+          }))
+        }
+        onRemove={() => onUpdate({ shadows: [] })}
+        onUpdate={(updates) => {
           onUpdateEach((frame) => {
-            if (frame.shadow) {
-              return { shadow: { ...frame.shadow, ...updates } };
-            }
-            return {};
+            if (frame.shadows.length === 0) return {};
+            const newShadows = [...frame.shadows];
+            newShadows[0] = { ...newShadows[0], ...updates };
+            return { shadows: newShadows };
           });
         }}
       />
@@ -1324,15 +1328,20 @@ function FrameProperties({
       {/* Inner Shadow Section */}
       <ShadowSection
         label="Inner shadow"
-        shadows={frames.map((f) => f.innerShadow)}
-        onChange={(innerShadow) => onUpdate({ innerShadow })}
-        onPartialChange={(updates) => {
-          // Merge partial updates with each object's existing innerShadow
+        shadowArrays={frames.map((f) => f.innerShadows)}
+        isInner
+        onAdd={() =>
+          onUpdateEach((frame) => ({
+            innerShadows: [...frame.innerShadows, createInnerShadow()],
+          }))
+        }
+        onRemove={() => onUpdate({ innerShadows: [] })}
+        onUpdate={(updates) => {
           onUpdateEach((frame) => {
-            if (frame.innerShadow) {
-              return { innerShadow: { ...frame.innerShadow, ...updates } };
-            }
-            return {};
+            if (frame.innerShadows.length === 0) return {};
+            const newShadows = [...frame.innerShadows];
+            newShadows[0] = { ...newShadows[0], ...updates };
+            return { innerShadows: newShadows };
           });
         }}
       />

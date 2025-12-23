@@ -516,121 +516,84 @@ export function PropertyButton({
 import type { ShadowProps, BorderSide } from "@/lib/types";
 import { SelectItem } from "./ui/select";
 
-// Default values for new shadows
-const DEFAULT_SHADOW: ShadowProps = {
-  x: 0,
-  y: 2,
-  blur: 4,
-  spread: 0,
-  color: "#000000",
-  opacity: 0.2,
-};
-
 /**
- * Helper to get a mixed value from an array of shadow objects for a specific key
+ * Helper to get a mixed value from an array of shadow arrays
+ * Looks at the first shadow in each array for simplicity
  */
 function getShadowMixedValue<K extends keyof ShadowProps>(
-  shadows: (ShadowProps | undefined)[],
+  shadowArrays: ShadowProps[][],
   key: K,
   defaultValue: ShadowProps[K]
 ): ShadowProps[K] | MixedValue {
-  const defined = shadows.filter((s): s is ShadowProps => s !== undefined);
-  if (defined.length === 0) return defaultValue;
-  const firstValue = defined[0][key];
-  const allSame = defined.every((s) => s[key] === firstValue);
+  const firstShadows = shadowArrays
+    .map((arr) => arr[0])
+    .filter((s): s is ShadowProps => s !== undefined);
+  if (firstShadows.length === 0) return defaultValue;
+  const firstValue = firstShadows[0][key];
+  const allSame = firstShadows.every((s) => s[key] === firstValue);
   return allSame ? firstValue : MIXED;
 }
 
 /**
- * Shadow section - handles both drop shadow and inner shadow
- * Supports multi-selection by accepting an array of shadows
+ * Shadow section - handles stackable shadows (drop shadow or inner shadow)
+ * For simplicity, currently edits the first shadow; full multi-shadow UI coming later
  */
 export function ShadowSection({
   label,
-  shadows,
-  onChange,
-  onPartialChange,
+  shadowArrays,
+  isInner,
+  onAdd,
+  onRemove,
+  onUpdate,
 }: {
   label: string;
-  /** Array of shadow values - one per selected object. undefined = no shadow */
-  shadows: (ShadowProps | undefined)[];
-  /** Called with complete shadow for add/remove/toggle operations */
-  onChange: (shadow: ShadowProps | undefined) => void;
-  /** Called with partial updates for individual property changes (preserves other props per object) */
-  onPartialChange?: (updates: Partial<ShadowProps>) => void;
+  shadowArrays: ShadowProps[][];
+  isInner?: boolean;
+  onAdd: () => void;
+  onRemove: () => void;
+  onUpdate: (updates: Partial<ShadowProps>) => void;
 }) {
-  // Compute mixed state
-  const hasAny = shadows.some((s) => s !== undefined);
-  const defined = shadows.filter((s): s is ShadowProps => s !== undefined);
+  const hasAny = shadowArrays.some((arr) => arr.length > 0);
+  const firstShadows = shadowArrays.map((arr) => arr[0]).filter(Boolean);
 
-  // Get mixed values for each property
-  const x = getShadowMixedValue(shadows, "x", 0);
-  const y = getShadowMixedValue(shadows, "y", 2);
-  const blur = getShadowMixedValue(shadows, "blur", 4);
-  const spread = getShadowMixedValue(shadows, "spread", 0);
-  const color = getShadowMixedValue(shadows, "color", "#000000");
-  const opacity = getShadowMixedValue(shadows, "opacity", 0.2);
+  const x = getShadowMixedValue(shadowArrays, "x", 0);
+  const y = getShadowMixedValue(shadowArrays, "y", isInner ? 2 : 4);
+  const blur = getShadowMixedValue(shadowArrays, "blur", isInner ? 4 : 8);
+  const spread = getShadowMixedValue(shadowArrays, "spread", 0);
+  const color = getShadowMixedValue(shadowArrays, "color", "#000000");
+  const opacity = getShadowMixedValue(shadowArrays, "opacity", 0.25);
 
-  // For visibility toggle, check if any shadow has opacity > 0
-  const anyVisible = defined.some((s) => s.opacity > 0);
-
-  // Create base shadow for updates (use first defined or defaults)
-  const baseShadow: ShadowProps = defined[0] ?? DEFAULT_SHADOW;
-
-  // Use partial change if available (for multi-edit), otherwise use full onChange
-  const updateProp = <K extends keyof ShadowProps>(key: K, value: ShadowProps[K]) => {
-    if (onPartialChange) {
-      onPartialChange({ [key]: value });
-    } else {
-      onChange({ ...baseShadow, [key]: value });
-    }
-  };
+  const anyVisible = firstShadows.some((s) => s.visible);
 
   return (
     <CollapsibleSection
       label={label}
       isOpen={hasAny}
-      onAdd={() => onChange({ ...DEFAULT_SHADOW })}
-      onRemove={() => onChange(undefined)}
+      onAdd={onAdd}
+      onRemove={onRemove}
       visible={anyVisible}
-      onToggleVisible={() => {
-        if (onPartialChange) {
-          onPartialChange({ opacity: anyVisible ? 0 : 0.2 });
-        } else {
-          onChange(
-            hasAny ? { ...baseShadow, opacity: anyVisible ? 0 : 0.2 } : undefined
-          );
-        }
-      }}
+      onToggleVisible={() => onUpdate({ visible: !anyVisible })}
     >
       <div className="grid grid-cols-2 gap-1.5">
-        <NumberInput
-          label="X"
-          value={x}
-          onChange={(v) => updateProp("x", v)}
-        />
-        <NumberInput
-          label="Y"
-          value={y}
-          onChange={(v) => updateProp("y", v)}
-        />
+        <NumberInput label="X" value={x} onChange={(v) => onUpdate({ x: v })} />
+        <NumberInput label="Y" value={y} onChange={(v) => onUpdate({ y: v })} />
         <NumberInput
           label="Blur"
           value={blur}
-          onChange={(v) => updateProp("blur", Math.max(0, v))}
+          onChange={(v) => onUpdate({ blur: Math.max(0, v) })}
           min={0}
         />
         <NumberInput
           label="Spread"
           value={spread}
-          onChange={(v) => updateProp("spread", v)}
+          onChange={(v) => onUpdate({ spread: v })}
         />
       </div>
       <ColorInput
-        color={color}
-        opacity={opacity}
-        onChange={(c) => updateProp("color", c)}
-        onOpacityChange={(o) => updateProp("opacity", o)}
+        color={isMixed(color) ? "#000000" : color}
+        opacity={isMixed(opacity) ? 0.25 : opacity}
+        onChange={(c) => onUpdate({ color: c })}
+        onOpacityChange={(o) => onUpdate({ opacity: o })}
       />
     </CollapsibleSection>
   );
