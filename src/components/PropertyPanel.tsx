@@ -41,6 +41,8 @@ import {
   MoveHorizontal,
   MoveVertical,
   Lock,
+  Link,
+  Unlink,
   Minus,
   Plus,
   Eye,
@@ -107,7 +109,7 @@ interface CommonPropertiesProps {
   ) => void;
 }
 
-/** Layout section - X, Y, Width, Height (shared by all object types) */
+/** Layout section - X, Y, Width, Height, Rotation (shared by all object types) */
 function LayoutSection({ objects, onUpdate }: CommonPropertiesProps) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -132,6 +134,12 @@ function LayoutSection({ objects, onUpdate }: CommonPropertiesProps) {
           label="H"
           value={getMixedValue(objects, "height")}
           onChange={(v) => onUpdate({ height: v })}
+        />
+        <NumberInput
+          label="↻"
+          value={getMixedValue(objects, "rotation")}
+          onChange={(v) => onUpdate({ rotation: v })}
+          suffix="°"
         />
       </div>
     </div>
@@ -602,6 +610,123 @@ function ImageFillControls({
 }
 
 // ============================================================================
+// PADDING INPUT (X/Y or T/R/B/L)
+// ============================================================================
+
+function PaddingInput({
+  frames,
+  onUpdate,
+}: {
+  frames: FrameObject[];
+  onUpdate: (updates: Partial<FrameObject>) => void;
+}) {
+  const pTop = getMixedValue(frames, "paddingTop");
+  const pRight = getMixedValue(frames, "paddingRight");
+  const pBottom = getMixedValue(frames, "paddingBottom");
+  const pLeft = getMixedValue(frames, "paddingLeft");
+
+  // Check if X (left/right) are same and Y (top/bottom) are same
+  const xSame = !isMixed(pLeft) && !isMixed(pRight) && pLeft === pRight;
+  const ySame = !isMixed(pTop) && !isMixed(pBottom) && pTop === pBottom;
+  const canShowXY = xSame && ySame;
+
+  const [expanded, setExpanded] = useState(!canShowXY);
+
+  // If values diverge from external changes, switch to expanded
+  if (!expanded && !canShowXY) {
+    setExpanded(true);
+  }
+
+  if (expanded) {
+    // Expanded: 2x2 grid with T, R, B, L
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between">
+          <span className="text-[9px] text-muted-foreground">Padding</span>
+          <button
+            className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+            onClick={() => {
+              // Collapse: set X (left=right) and Y (top=bottom)
+              const xVal = isMixed(pLeft) ? 0 : (pLeft as number);
+              const yVal = isMixed(pTop) ? 0 : (pTop as number);
+              onUpdate({
+                paddingTop: yVal,
+                paddingBottom: yVal,
+                paddingLeft: xVal,
+                paddingRight: xVal,
+              });
+              setExpanded(false);
+            }}
+            title="Use X/Y padding"
+          >
+            <Unlink className="size-3" />
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-1">
+          <NumberInput
+            label="T"
+            value={pTop ?? 0}
+            onChange={(v) => onUpdate({ paddingTop: v })}
+            min={0}
+          />
+          <NumberInput
+            label="R"
+            value={pRight ?? 0}
+            onChange={(v) => onUpdate({ paddingRight: v })}
+            min={0}
+          />
+          <NumberInput
+            label="B"
+            value={pBottom ?? 0}
+            onChange={(v) => onUpdate({ paddingBottom: v })}
+            min={0}
+          />
+          <NumberInput
+            label="L"
+            value={pLeft ?? 0}
+            onChange={(v) => onUpdate({ paddingLeft: v })}
+            min={0}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Default: X and Y inputs
+  const xValue = pLeft ?? 0;
+  const yValue = pTop ?? 0;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between">
+        <span className="text-[9px] text-muted-foreground">Padding</span>
+        <button
+          className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+          onClick={() => setExpanded(true)}
+          title="Edit individual sides"
+        >
+          <Link className="size-3" />
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-1">
+        <NumberInput
+          label="X"
+          value={xValue}
+          onChange={(v) => onUpdate({ paddingLeft: v, paddingRight: v })}
+          min={0}
+        />
+        <NumberInput
+          label="Y"
+          value={yValue}
+          onChange={(v) => onUpdate({ paddingTop: v, paddingBottom: v })}
+          min={0}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
 // FRAME PROPERTIES
 // ============================================================================
 
@@ -661,7 +786,10 @@ function FrameProperties({
                 alignItems: "flex-start",
                 flexWrap: "nowrap",
                 gap: 0,
-                padding: 0,
+                paddingTop: 0,
+                paddingRight: 0,
+                paddingBottom: 0,
+                paddingLeft: 0,
               })
             }
           >
@@ -896,21 +1024,16 @@ function FrameProperties({
             </span>
           </div>
 
-          {/* Gap and Padding */}
-          <div className="grid grid-cols-2 gap-1.5">
-            <NumberInput
-              label="Gap"
-              value={getMixedValue(frames, "gap") ?? 0}
-              onChange={(v) => onUpdate({ gap: v })}
-              min={0}
-            />
-            <NumberInput
-              label="Pad"
-              value={getMixedValue(frames, "padding") ?? 0}
-              onChange={(v) => onUpdate({ padding: v })}
-              min={0}
-            />
-          </div>
+          {/* Gap */}
+          <NumberInput
+            label="Gap"
+            value={getMixedValue(frames, "gap") ?? 0}
+            onChange={(v) => onUpdate({ gap: v })}
+            min={0}
+          />
+
+          {/* Padding */}
+          <PaddingInput frames={frames} onUpdate={onUpdate} />
         </div>
       )}
 
@@ -1707,7 +1830,7 @@ export function PropertyPanel({
 
         {/* Panel */}
         <div
-          className="absolute right-4 top-1/2 -translate-y-1/2 bg-card border border-border rounded-md p-3 select-none transition-all duration-200 ease-out"
+          className="absolute right-4 top-4 bottom-4 bg-card border border-border rounded-md select-none transition-all duration-200 ease-out overflow-y-auto"
           style={{
             width: 220,
             opacity: isHovered ? 1 : 0,
@@ -1719,7 +1842,7 @@ export function PropertyPanel({
           onMouseDown={(e) => e.stopPropagation()}
           onMouseUp={(e) => e.stopPropagation()}
         >
-          {emptyContent}
+          <div className="p-3">{emptyContent}</div>
         </div>
       </>
     );
@@ -1861,7 +1984,7 @@ export function PropertyPanel({
 
       {/* Panel - completely separate, slides in from right */}
       <div
-        className="absolute right-4 top-1/2 -translate-y-1/2 bg-card border border-border rounded-md p-3 select-none transition-all duration-200 ease-out"
+        className="absolute right-4 top-4 bottom-4 bg-card border border-border rounded-md select-none transition-all duration-200 ease-out overflow-y-auto"
         style={{
           width: 220,
           opacity: isHovered ? 1 : 0,
@@ -1873,7 +1996,7 @@ export function PropertyPanel({
         onMouseDown={(e) => e.stopPropagation()}
         onMouseUp={(e) => e.stopPropagation()}
       >
-        <div className="flex flex-col gap-3">{renderContent()}</div>
+        <div className="flex flex-col gap-3 p-3">{renderContent()}</div>
       </div>
     </>
   );

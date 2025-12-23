@@ -33,3 +33,4 @@ export function useHistoryCapture(pushHistory: () => void) {
   return { captureOnce, reset, hasCaptured };
 }
 
+

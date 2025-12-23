@@ -30,3 +30,4 @@ When something is wrong, trace it back to its source. Don't patch symptoms—fix
 - **One change > many changes.** If you're touching five files to fix one issue, step back. There's probably a single upstream change that handles all of it.
 
 - **Delete before you add.** Sometimes the fix is removing the thing that's fighting against what you want, not adding more code to force it.
+

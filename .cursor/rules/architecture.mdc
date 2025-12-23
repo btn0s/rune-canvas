@@ -31,3 +31,4 @@ alwaysApply: true
 
 10. **Don't abstract speculatively.** Create abstractions when you see real duplication or clear reuse—not because something "might" be reused later.
 
+

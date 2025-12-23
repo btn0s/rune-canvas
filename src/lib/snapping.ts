@@ -148,18 +148,30 @@ function addParentSnapLines(
   // If parent has padding (flex container), also snap to padded edges
   if (parent.type === "frame") {
     const frame = parent as FrameObject;
-    const padding = frame.padding || 0;
-    if (padding > 0 && frame.layoutMode !== "none") {
+    const hasPadding =
+      frame.paddingTop ||
+      frame.paddingRight ||
+      frame.paddingBottom ||
+      frame.paddingLeft;
+    if (hasPadding && frame.layoutMode !== "none") {
       // Padded inner edges
-      xLines.push({ position: pos.x + padding, rect, type: "edge" });
       xLines.push({
-        position: pos.x + parent.width - padding,
+        position: pos.x + (frame.paddingLeft || 0),
         rect,
         type: "edge",
       });
-      yLines.push({ position: pos.y + padding, rect, type: "edge" });
+      xLines.push({
+        position: pos.x + parent.width - (frame.paddingRight || 0),
+        rect,
+        type: "edge",
+      });
       yLines.push({
-        position: pos.y + parent.height - padding,
+        position: pos.y + (frame.paddingTop || 0),
+        rect,
+        type: "edge",
+      });
+      yLines.push({
+        position: pos.y + parent.height - (frame.paddingBottom || 0),
         rect,
         type: "edge",
       });
