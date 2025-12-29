@@ -4,7 +4,7 @@
  * Dialog that displays available shaders in categorized sections with live previews
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -104,6 +104,29 @@ function ShaderPreview({
   onHover,
   onSelect,
 }: ShaderPreviewProps) {
+  // Render one frame then pause for all shaders
+  const [paused, setPaused] = useState(false);
+  const timeoutRef = useRef<number | null>(null);
+  
+  // After first frame renders, pause the animation
+  useEffect(() => {
+    // Use requestAnimationFrame to wait for at least one frame
+    const frameId = requestAnimationFrame(() => {
+      // Then use a small timeout to ensure rendering completes
+      timeoutRef.current = window.setTimeout(() => {
+        setPaused(true);
+        timeoutRef.current = null;
+      }, 50);
+    });
+    
+    return () => {
+      cancelAnimationFrame(frameId);
+      if (timeoutRef.current !== null) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+  
   return (
     <div
       className={`
@@ -123,7 +146,7 @@ function ShaderPreview({
               height={200}
               speed={1}
               targetFps={isHovered ? 60 : 10}
-              paused={false}
+              paused={paused}
             />
           </div>
         </div>
