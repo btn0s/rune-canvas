@@ -137,6 +137,7 @@ export const meshGradientShader: ShaderDefinition = {
   id: "meshGradient",
   name: "Mesh Gradient",
   description: "A flowing composition of color spots moving along distinct trajectories",
+  category: "Effects",
   fragmentShader,
   defaultParams: {
     colors: ["#e0eaff", "#241d9a", "#f75092", "#9f50d3"],

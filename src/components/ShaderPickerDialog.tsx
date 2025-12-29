@@ -1,20 +1,17 @@
 /**
  * Shader Picker Dialog
  *
- * Dialog that displays available shaders in a grid with live previews
+ * Dialog that displays available shaders in categorized sections with live previews
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
 import { ShaderRendererComponent } from "@/lib/shaders/ShaderRenderer";
 import { getAllShaders } from "@/lib/shaders/registry";
-import type { ShaderDefinition } from "@/lib/shaders/types";
+import type { ShaderDefinition, ShaderCategory } from "@/lib/shaders/types";
 
 export interface ShaderPickerDialogProps {
   open: boolean;
@@ -30,6 +27,21 @@ export function ShaderPickerDialog({
   const shaders = getAllShaders();
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
+  // Group shaders by category
+  const shadersByCategory = useMemo(() => {
+    const grouped: Record<ShaderCategory, ShaderDefinition[]> = {
+      "Image filters": [],
+      "Logo animations": [],
+      "Effects": [],
+    };
+    
+    shaders.forEach((shader) => {
+      grouped[shader.category].push(shader);
+    });
+    
+    return grouped;
+  }, [shaders]);
+
   const handleSelect = (shaderId: string) => {
     onSelect(shaderId);
     onOpenChange(false);
@@ -37,23 +49,36 @@ export function ShaderPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Select a Shader</DialogTitle>
-          <DialogDescription>
-            Choose a WebGL 2.0 shader to add to your canvas
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid grid-cols-2 gap-4 mt-4">
-          {shaders.map((shader) => (
-            <ShaderPreview
-              key={shader.id}
-              shader={shader}
-              isHovered={hoveredId === shader.id}
-              onHover={() => setHoveredId(shader.id)}
-              onSelect={() => handleSelect(shader.id)}
-            />
-          ))}
+      <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto p-0">
+        <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Shaders</h2>
+        </div>
+        
+        <div className="px-6 py-6 space-y-8">
+          {(["Image filters", "Logo animations", "Effects"] as ShaderCategory[]).map((category) => {
+            const categoryShaders = shadersByCategory[category];
+            if (categoryShaders.length === 0) return null;
+            
+            return (
+              <div key={category} className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <h3 className="text-sm font-medium text-foreground">{category}</h3>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+                <div className="grid grid-cols-4 gap-4">
+                  {categoryShaders.map((shader) => (
+                    <ShaderPreview
+                      key={shader.id}
+                      shader={shader}
+                      isHovered={hoveredId === shader.id}
+                      onHover={() => setHoveredId(shader.id)}
+                      onSelect={() => handleSelect(shader.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </DialogContent>
     </Dialog>
@@ -76,29 +101,23 @@ function ShaderPreview({
   return (
     <div
       className={`
-        relative border rounded-lg overflow-hidden cursor-pointer
+        relative cursor-pointer group
         transition-all duration-200
-        ${isHovered ? "border-primary shadow-lg scale-[1.02]" : "border-border"}
       `}
       onMouseEnter={onHover}
       onClick={onSelect}
     >
-      <div className="aspect-video bg-black/50 relative">
+      <div className="aspect-square bg-black/50 relative rounded-md overflow-hidden border border-border group-hover:border-primary transition-colors">
         <ShaderRendererComponent
           shader={shader}
           params={shader.defaultParams}
-          width={400}
-          height={225}
+          width={200}
+          height={200}
           speed={1}
         />
       </div>
-      <div className="p-3 bg-background/95 backdrop-blur-sm">
-        <h3 className="font-semibold text-sm">{shader.name}</h3>
-        {shader.description && (
-          <p className="text-xs text-muted-foreground mt-1">
-            {shader.description}
-          </p>
-        )}
+      <div className="mt-2 text-center">
+        <h3 className="text-xs font-medium">{shader.name}</h3>
       </div>
     </div>
   );

@@ -29,6 +29,11 @@ export function ShaderRendererComponent({
     if (!canvasRef.current) return;
 
     const uniforms = shader.paramsToUniforms(params) as ShaderRendererUniforms;
+    
+    // Force background color to transparent - fills handle the background
+    if (uniforms.u_colorBack) {
+      uniforms.u_colorBack = [0, 0, 0, 0]; // Transparent RGBA
+    }
 
     try {
       const renderer = new ShaderRenderer(
@@ -58,6 +63,12 @@ export function ShaderRendererComponent({
   useEffect(() => {
     if (rendererRef.current) {
       const uniforms = shader.paramsToUniforms(params) as ShaderRendererUniforms;
+      
+      // Force background color to transparent - fills handle the background
+      if (uniforms.u_colorBack) {
+        uniforms.u_colorBack = [0, 0, 0, 0]; // Transparent RGBA
+      }
+      
       rendererRef.current.setUniforms(uniforms);
     }
   }, [shader, params]);

@@ -76,6 +76,7 @@ export const simplexNoiseShader: ShaderDefinition = {
   id: "simplexNoise",
   name: "Simplex Noise",
   description: "A multi-color gradient mapped into smooth, animated curves",
+  category: "Effects",
   fragmentShader,
   defaultParams: {
     colors: ["#ff0000", "#00ff00", "#0000ff"],

@@ -275,6 +275,26 @@ export interface ShaderObject extends BaseObject {
   shaderType: string;
   /** Shader-specific parameters stored as a JSON object */
   shaderParams: Record<string, unknown>;
+  fills: Fill[];
+  radius: number;
+  radiusTL?: number;
+  radiusTR?: number;
+  radiusBR?: number;
+  radiusBL?: number;
+  blendMode?: BlendMode;
+  clipContent: boolean;
+  border?: string;
+  borderWidth?: number;
+  borderOpacity?: number;
+  borderStyle?: StrokeStyle;
+  borderSide?: BorderSide;
+  outline?: string;
+  outlineWidth?: number;
+  outlineOpacity?: number;
+  outlineStyle?: StrokeStyle;
+  outlineOffset?: number;
+  shadows: ShadowProps[];
+  innerShadows: ShadowProps[];
 }
 
 export type CanvasObject = FrameObject | ImageObject | TextObject | ShaderObject;

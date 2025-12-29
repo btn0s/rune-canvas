@@ -1145,6 +1145,10 @@ export function useCanvas() {
         shaderType,
         shaderParams,
         fills: [],
+        radius: 0,
+        clipContent: false,
+        shadows: [],
+        innerShadows: [],
       };
 
       setObjects((prev) => [...prev, newShader]);

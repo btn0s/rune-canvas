@@ -17,6 +17,8 @@ export interface ShaderPreset {
   params: ShaderParams;
 }
 
+export type ShaderCategory = "Image filters" | "Logo animations" | "Effects";
+
 export interface ShaderDefinition {
   /** Unique identifier for this shader */
   id: string;
@@ -24,6 +26,8 @@ export interface ShaderDefinition {
   name: string;
   /** Description */
   description?: string;
+  /** Category for grouping in the picker */
+  category: ShaderCategory;
   /** Fragment shader source code (GLSL) */
   fragmentShader: string;
   /** Default parameters */

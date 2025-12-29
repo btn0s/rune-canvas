@@ -1835,11 +1835,13 @@ function ShaderProperties({
 
   Object.entries(shaderDef.defaultParams).forEach(([key, defaultValue]) => {
     // Background colors: colorBack, colorBack, etc.
+    // Skip these - shader background is always transparent, fills handle background
     if (
       key.toLowerCase().includes("back") ||
       key.toLowerCase() === "background"
     ) {
-      backgroundColorParams.push([key, defaultValue]);
+      // Don't add to backgroundColorParams - we hide these inputs
+      return;
     }
     // Foreground colors: colors array
     else if (
@@ -1862,23 +1864,143 @@ function ShaderProperties({
   // Check if fills are the same across all shaders
   const fillsAreSame = useMemo(() => {
     if (shaders.length <= 1) return true;
-    const firstFills = shaders[0].shaderParams.fills;
+    const firstFills = shaders[0].fills;
     return shaders.every(
       (s) =>
-        s.shaderParams.fills?.length === firstFills?.length &&
-        s.shaderParams.fills?.every(
-          (fill: Fill, idx: number) =>
-            fill.id === firstFills?.[idx]?.id &&
-            fill.type === firstFills?.[idx]?.type
+        s.fills.length === firstFills.length &&
+        s.fills.every(
+          (fill, idx) =>
+            fill.id === firstFills[idx]?.id &&
+            fill.type === firstFills[idx]?.type
         )
     );
   }, [shaders]);
 
   return (
     <>
-      <LayoutSection objects={shaders} onUpdate={commonUpdate} />
-      <OpacityInput objects={shaders} onUpdate={commonUpdate} />
+      {/* Layout Section with Clip content */}
+      <div className="flex flex-col gap-1.5">
+        <SectionLabel>Layout</SectionLabel>
+        <div className="grid grid-cols-2 gap-1.5">
+          <NumberInput
+            label="X"
+            value={getMixedValue(shaders, "x")}
+            onChange={(v) => onUpdate({ x: v })}
+          />
+          <NumberInput
+            label="Y"
+            value={getMixedValue(shaders, "y")}
+            onChange={(v) => onUpdate({ y: v })}
+          />
+          <NumberInput
+            label="W"
+            value={getMixedValue(shaders, "width")}
+            onChange={(v) => onUpdate({ width: v })}
+          />
+          <NumberInput
+            label="H"
+            value={getMixedValue(shaders, "height")}
+            onChange={(v) => onUpdate({ height: v })}
+          />
+          <NumberInput
+            label="↻"
+            value={getMixedValue(shaders, "rotation")}
+            onChange={(v) => onUpdate({ rotation: v })}
+            suffix="°"
+          />
+        </div>
+        {/* Clip content toggle */}
+        <label className="flex items-center gap-2 cursor-pointer">
+          <Checkbox
+            checked={
+              isMixed(getMixedValue(shaders, "clipContent"))
+                ? ("indeterminate" as const)
+                : (getMixedValue(shaders, "clipContent") as boolean)
+            }
+            onCheckedChange={(checked) =>
+              onUpdate({ clipContent: checked === true })
+            }
+            className="w-3.5 h-3.5 rounded border-border bg-input/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground"
+          />
+          <span className="text-xs text-muted-foreground">Clip content</span>
+          <span className="text-xs text-muted-foreground ml-auto">⌥ C</span>
+        </label>
+      </div>
 
+      {/* Radius Section */}
+      <div className="flex flex-col gap-1.5">
+        <SectionLabel>Radius</SectionLabel>
+        <div className="grid grid-cols-[3fr_1fr] gap-1.5 items-center">
+          <div className="w-full [&_[data-slot=slider]]:w-full [&_[data-slot=slider-track]]:bg-input [&_[data-slot=slider-track]]:h-1.5 [&_[data-slot=slider-thumb]]:bg-foreground [&_[data-slot=slider-thumb]]:border-foreground [&_[data-slot=slider-thumb]]:size-3 [&_[data-slot=slider-thumb]]:border-0 [&_[data-slot=slider-thumb]]:shadow-none">
+            <Slider
+              min={0}
+              max={100}
+              value={[
+                isMixed(getMixedValue(shaders, "radius"))
+                  ? 0
+                  : (getMixedValue(shaders, "radius") as number),
+              ]}
+              onValueChange={(values) => onUpdate({ radius: values[0] })}
+              className="h-1.5 w-full"
+            />
+          </div>
+          <NumberInput
+            value={getMixedValue(shaders, "radius")}
+            onChange={(v) => onUpdate({ radius: Math.max(0, v) })}
+            min={0}
+          />
+        </div>
+      </div>
+
+      {/* Blending Section */}
+      <div className="flex flex-col gap-1.5">
+        <SectionLabel>Blending</SectionLabel>
+        <div className="grid grid-cols-2 gap-1.5">
+          {(() => {
+            const opacity = getMixedValue(shaders, "opacity");
+            return (
+              <NumberInput
+                value={isMixed(opacity) ? MIXED : Math.round(opacity * 100)}
+                onChange={(v) =>
+                  onUpdate({ opacity: Math.min(100, Math.max(0, v)) / 100 })
+                }
+                suffix="%"
+                min={0}
+              />
+            );
+          })()}
+          <PropertySelect
+            value={(() => {
+              const blendMode = getMixedValue(shaders, "blendMode");
+              return isMixed(blendMode) ? "normal" : blendMode || "normal";
+            })()}
+            onValueChange={(value) =>
+              onUpdate({ blendMode: value as BlendMode })
+            }
+          >
+            {(
+              [
+                "normal",
+                "multiply",
+                "screen",
+                "overlay",
+                "darken",
+                "lighten",
+              ] as BlendMode[]
+            ).map((mode) => (
+              <SelectItem
+                key={mode}
+                value={mode}
+                className="capitalize text-xs"
+              >
+                {mode}
+              </SelectItem>
+            ))}
+          </PropertySelect>
+        </div>
+      </div>
+
+      {/* Shader-specific properties grouped together */}
       <div className="flex flex-col gap-1.5">
         <SectionLabel>Shader</SectionLabel>
         <div className="text-sm font-medium">{shaderDef.name}</div>
@@ -1930,6 +2052,72 @@ function ShaderProperties({
               </SelectItem>
             ))}
           </PropertySelect>
+        </div>
+      )}
+
+      {/* Foreground Colors */}
+      {foregroundColorParams.length > 0 && (
+        <div className="flex flex-col gap-3 pt-1">
+          <div className="flex flex-col gap-3">
+            {/* Special case: neuro-noise shader - show all colors as a stack */}
+            {shader.shaderType === "neuroNoise" ? (
+              <>
+                <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+                  Foreground
+                </span>
+                <div className="flex flex-col gap-1.5">
+                  {foregroundColorParams.map((param: [string, unknown], idx) => {
+                    const [paramKey, defaultValue] = param;
+                    const key = paramKey;
+                    const value = getParamValue(key);
+                    const displayValue = value ?? defaultValue;
+                    const colorValue =
+                      (typeof displayValue === "string" &&
+                      displayValue.startsWith("#")
+                        ? displayValue
+                        : defaultValue) || "#ffffff";
+                    return (
+                      <ColorInput
+                        key={`fg-${String(key)}-${idx}`}
+                        color={colorValue}
+                        onChange={(newColor) =>
+                          updateShaderParam(key, newColor)
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              foregroundColorParams.map(([key, defaultValue]) =>
+                renderParamControl(key, defaultValue)
+              )
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Background Colors - skip for neuro-noise since it's included in foreground */}
+      {backgroundColorParams.length > 0 &&
+        shader.shaderType !== "neuroNoise" && (
+          <div className="flex flex-col gap-3 pt-1">
+            <div className="flex flex-col gap-3">
+              {backgroundColorParams.map(([key, defaultValue]) =>
+                renderParamControl(key, defaultValue)
+              )}
+            </div>
+          </div>
+        )}
+
+      {/* Other Parameters */}
+      {otherParams.length > 0 && (
+        <div className="flex flex-col gap-3 pt-1">
+          <SectionLabel>Parameters</SectionLabel>
+          <div className="flex flex-col gap-3">
+            {otherParams.map(([key, defaultValue]) =>
+              renderParamControl(key, defaultValue)
+            )}
+          </div>
         </div>
       )}
 
@@ -2033,92 +2221,130 @@ function ShaderProperties({
         );
       })()}
 
-      {/* Foreground Colors */}
-      {foregroundColorParams.length > 0 && (
-        <div className="flex flex-col gap-3 pt-1">
-          <div className="flex flex-col gap-3">
-            {/* Special case: neuro-noise shader - show all colors as a stack */}
-            {shader.shaderType === "neuroNoise" ? (
-              <>
-                <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                  Foreground
-                </span>
-                <div className="flex flex-col gap-1.5">
-                  {foregroundColorParams.map((param, idx) => {
-                    const [paramKey, defaultValue] = param;
-                    const key: string = paramKey;
-                    const value = getParamValue(key);
-                    const displayValue = value ?? defaultValue;
-                    const colorValue =
-                      (typeof displayValue === "string" &&
-                      displayValue.startsWith("#")
-                        ? displayValue
-                        : defaultValue) || "#ffffff";
-                    return (
-                      <ColorInput
-                        key={`fg-${key}-${idx}`}
-                        color={colorValue}
-                        onChange={(newColor) =>
-                          updateShaderParam(key, newColor)
-                        }
-                      />
-                    );
-                  })}
-                  {/* Also include background color for neuro-noise */}
-                  {backgroundColorParams.map((param, idx) => {
-                    const [paramKey, defaultValue] = param;
-                    const key: string = paramKey;
-                    const value = getParamValue(key);
-                    const displayValue = value ?? defaultValue;
-                    const colorValue =
-                      (typeof displayValue === "string" &&
-                      displayValue.startsWith("#")
-                        ? displayValue
-                        : defaultValue) || "#ffffff";
-                    return (
-                      <ColorInput
-                        key={`bg-${key}-${idx}`}
-                        color={colorValue}
-                        onChange={(newColor) =>
-                          updateShaderParam(key, newColor)
-                        }
-                      />
-                    );
-                  })}
-                </div>
-              </>
-            ) : (
-              foregroundColorParams.map(([key, defaultValue]) =>
-                renderParamControl(key, defaultValue)
-              )
-            )}
-          </div>
-        </div>
-      )}
+      {/* Layer properties below shader-specific properties */}
+      {/* Outline Section */}
+      <StrokeSection
+        label="Outline"
+        strokes={shaders.map((s) => ({
+          color: s.outline,
+          width: s.outlineWidth,
+          opacity: s.outlineOpacity,
+        }))}
+        onChange={(updates) => {
+          const mapped: Partial<ShaderObject> = {};
+          if (updates.color !== undefined) mapped.outline = updates.color;
+          if (updates.width !== undefined) mapped.outlineWidth = updates.width;
+          if (updates.opacity !== undefined)
+            mapped.outlineOpacity = updates.opacity;
+          onUpdate(mapped);
+        }}
+        onAdd={() =>
+          onUpdate({
+            outline: "#000000",
+            outlineWidth: 1,
+            outlineOpacity: 1,
+            outlineStyle: "solid",
+            outlineOffset: 0,
+          } as Partial<ShaderObject>)
+        }
+        onRemove={() =>
+          onUpdate({
+            outline: undefined,
+            outlineWidth: undefined,
+            outlineOpacity: undefined,
+            outlineStyle: undefined,
+            outlineOffset: undefined,
+          } as Partial<ShaderObject>)
+        }
+      >
+        <NumberInput
+          label="Off"
+          value={getMixedValue(shaders, "outlineOffset") ?? 0}
+          onChange={(v) => onUpdate({ outlineOffset: v })}
+        />
+      </StrokeSection>
 
-      {/* Background Colors - skip for neuro-noise since it's included in foreground */}
-      {backgroundColorParams.length > 0 &&
-        shader.shaderType !== "neuroNoise" && (
-          <div className="flex flex-col gap-3 pt-1">
-            <div className="flex flex-col gap-3">
-              {backgroundColorParams.map(([key, defaultValue]) =>
-                renderParamControl(key, defaultValue)
-              )}
-            </div>
-          </div>
-        )}
+      {/* Border Section */}
+      <StrokeSection
+        label="Border"
+        strokes={shaders.map((s) => ({
+          color: s.border,
+          width: s.borderWidth,
+          opacity: s.borderOpacity,
+        }))}
+        onChange={(updates) => {
+          const mapped: Partial<ShaderObject> = {};
+          if (updates.color !== undefined) mapped.border = updates.color;
+          if (updates.width !== undefined) mapped.borderWidth = updates.width;
+          if (updates.opacity !== undefined)
+            mapped.borderOpacity = updates.opacity;
+          onUpdate(mapped);
+        }}
+        onAdd={() =>
+          onUpdate({
+            border: "#000000",
+            borderWidth: 1,
+            borderOpacity: 1,
+            borderStyle: "solid",
+            borderSide: "all",
+          } as Partial<ShaderObject>)
+        }
+        onRemove={() =>
+          onUpdate({
+            border: undefined,
+            borderWidth: undefined,
+            borderOpacity: undefined,
+            borderStyle: undefined,
+            borderSide: undefined,
+          } as Partial<ShaderObject>)
+        }
+      >
+        <BorderSideSelect
+          value={getMixedValue(shaders, "borderSide") ?? "all"}
+          onChange={(side) => onUpdate({ borderSide: side })}
+        />
+      </StrokeSection>
 
-      {/* Other Parameters */}
-      {otherParams.length > 0 && (
-        <div className="flex flex-col gap-3 pt-1">
-          <SectionLabel>Parameters</SectionLabel>
-          <div className="flex flex-col gap-3">
-            {otherParams.map(([key, defaultValue]) =>
-              renderParamControl(key, defaultValue)
-            )}
-          </div>
-        </div>
-      )}
+      {/* Shadow Section */}
+      <ShadowSection
+        label="Shadow"
+        shadowArrays={shaders.map((s) => s.shadows)}
+        onAdd={() =>
+          onUpdateEach((shader) => ({
+            shadows: [...shader.shadows, createShadow()],
+          }))
+        }
+        onRemove={() => onUpdate({ shadows: [] })}
+        onUpdate={(updates) => {
+          onUpdateEach((shader) => {
+            if (shader.shadows.length === 0) return {};
+            const newShadows = [...shader.shadows];
+            newShadows[0] = { ...newShadows[0], ...updates };
+            return { shadows: newShadows };
+          });
+        }}
+      />
+
+      {/* Inner Shadow Section */}
+      <ShadowSection
+        label="Inner shadow"
+        shadowArrays={shaders.map((s) => s.innerShadows)}
+        isInner
+        onAdd={() =>
+          onUpdateEach((shader) => ({
+            innerShadows: [...shader.innerShadows, createInnerShadow()],
+          }))
+        }
+        onRemove={() => onUpdate({ innerShadows: [] })}
+        onUpdate={(updates) => {
+          onUpdateEach((shader) => {
+            if (shader.innerShadows.length === 0) return {};
+            const newShadows = [...shader.innerShadows];
+            newShadows[0] = { ...newShadows[0], ...updates };
+            return { innerShadows: newShadows };
+          });
+        }}
+      />
     </>
   );
 }

@@ -337,6 +337,37 @@ export interface ShaderObject extends BaseObject {
 
   // === Stackable Fills (rendered bottom to top) ===
   fills: Fill[];
+
+  // === Border Radius ===
+  radius: number;
+  radiusTL?: number;
+  radiusTR?: number;
+  radiusBR?: number;
+  radiusBL?: number;
+
+  // === Blending ===
+  blendMode?: BlendMode;
+
+  // === Clipping ===
+  clipContent: boolean;
+
+  // === Border (inside) ===
+  border?: string;
+  borderWidth?: number;
+  borderOpacity?: number;
+  borderStyle?: StrokeStyle;
+  borderSide?: BorderSide;
+
+  // === Outline (outside) ===
+  outline?: string;
+  outlineWidth?: number;
+  outlineOpacity?: number;
+  outlineStyle?: StrokeStyle;
+  outlineOffset?: number;
+
+  // === Stackable Shadows ===
+  shadows: ShadowProps[];
+  innerShadows: ShadowProps[];
 }
 
 // ============================================================================

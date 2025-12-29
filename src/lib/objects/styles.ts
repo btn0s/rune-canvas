@@ -11,6 +11,7 @@ import type {
   FrameObject,
   TextObject,
   ImageObject,
+  ShaderObject,
   Fill,
   SolidFill,
   GradientFill,
@@ -445,24 +446,28 @@ export function computeFillStyles(fills: Fill[] | undefined): { background?: str
   return { background: backgrounds.join(", ") };
 }
 
-function computeBorderRadius(frame: FrameObject): string | number {
+function computeBorderRadius(
+  obj: FrameObject | ShaderObject
+): string | number {
   if (
-    frame.radiusTL !== undefined ||
-    frame.radiusTR !== undefined ||
-    frame.radiusBR !== undefined ||
-    frame.radiusBL !== undefined
+    obj.radiusTL !== undefined ||
+    obj.radiusTR !== undefined ||
+    obj.radiusBR !== undefined ||
+    obj.radiusBL !== undefined
   ) {
-    return `${frame.radiusTL ?? frame.radius}px ${frame.radiusTR ?? frame.radius}px ${
-      frame.radiusBR ?? frame.radius}px ${frame.radiusBL ?? frame.radius}px`;
+    return `${obj.radiusTL ?? obj.radius}px ${obj.radiusTR ?? obj.radius}px ${
+      obj.radiusBR ?? obj.radius}px ${obj.radiusBL ?? obj.radius}px`;
   }
-  return frame.radius;
+  return obj.radius;
 }
 
-function computeBoxShadow(frame: FrameObject): string | undefined {
+function computeBoxShadow(
+  obj: FrameObject | ShaderObject
+): string | undefined {
   const shadowStrings: string[] = [];
 
-  if (frame.shadows) {
-    for (const s of frame.shadows) {
+  if (obj.shadows) {
+    for (const s of obj.shadows) {
       if (s.visible) {
         shadowStrings.push(
           `${s.x}px ${s.y}px ${s.blur}px ${s.spread}px ${hexToRgba(s.color, s.opacity)}`
@@ -471,8 +476,8 @@ function computeBoxShadow(frame: FrameObject): string | undefined {
     }
   }
 
-  if (frame.innerShadows) {
-    for (const s of frame.innerShadows) {
+  if (obj.innerShadows) {
+    for (const s of obj.innerShadows) {
       if (s.visible) {
         shadowStrings.push(
           `inset ${s.x}px ${s.y}px ${s.blur}px ${s.spread}px ${hexToRgba(s.color, s.opacity)}`
@@ -482,4 +487,67 @@ function computeBoxShadow(frame: FrameObject): string | undefined {
   }
 
   return shadowStrings.length > 0 ? shadowStrings.join(", ") : undefined;
+}
+
+// ============================================================================
+// Shader Content Styles
+// ============================================================================
+
+/**
+ * Compute styles for shader content (the inner div of a shader object).
+ */
+export function computeShaderStyle(shader: ShaderObject): CSSProperties {
+  const style: CSSProperties = {
+    boxSizing: "border-box",
+    position: "relative",
+    width: shader.width,
+    height: shader.height,
+  };
+
+  // Fills (stacked, bottom to top)
+  const fillStyles = computeFillStyles(shader.fills);
+  if (fillStyles.background) {
+    style.background = fillStyles.background;
+  }
+
+  // Blend mode
+  if (shader.blendMode) {
+    style.mixBlendMode = shader.blendMode;
+  }
+
+  // Border radius
+  style.borderRadius = computeBorderRadius(shader);
+
+  // Border
+  if (shader.border) {
+    const borderColor = hexToRgba(shader.border, shader.borderOpacity ?? 1);
+    const borderStyle = shader.borderStyle || "solid";
+    const borderWidth = shader.borderWidth || 1;
+
+    if (shader.borderSide && shader.borderSide !== "all") {
+      const side =
+        shader.borderSide.charAt(0).toUpperCase() + shader.borderSide.slice(1);
+      (style as Record<string, string>)[
+        `border${side}`
+      ] = `${borderWidth}px ${borderStyle} ${borderColor}`;
+    } else {
+      style.border = `${borderWidth}px ${borderStyle} ${borderColor}`;
+    }
+  }
+
+  // Outline
+  if (shader.outline) {
+    style.outline = `${shader.outlineWidth || 1}px ${
+      shader.outlineStyle || "solid"
+    } ${hexToRgba(shader.outline, shader.outlineOpacity ?? 1)}`;
+    style.outlineOffset = shader.outlineOffset ?? 0;
+  }
+
+  // Shadows
+  style.boxShadow = computeBoxShadow(shader);
+
+  // Clip content
+  style.overflow = shader.clipContent ? "hidden" : "visible";
+
+  return style;
 }

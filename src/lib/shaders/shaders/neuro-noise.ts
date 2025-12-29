@@ -80,6 +80,7 @@ export const neuroNoiseShader: ShaderDefinition = {
   id: "neuroNoise",
   name: "Neuro Noise",
   description: "A glowing, web-like structure of fluid lines and soft intersections",
+  category: "Effects",
   fragmentShader,
   defaultParams: {
     colorFront: "#ffffff",

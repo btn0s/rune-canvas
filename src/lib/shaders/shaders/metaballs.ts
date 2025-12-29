@@ -111,6 +111,7 @@ export const metaballsShader: ShaderDefinition = {
   id: "metaballs",
   name: "Metaballs",
   description: "Gooey colored balls moving around and merging into smooth organic shapes",
+  category: "Effects",
   fragmentShader,
   defaultParams: {
     colors: ["#ff6b6b", "#4ecdc4", "#45b7d1"],

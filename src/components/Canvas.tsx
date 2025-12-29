@@ -28,12 +28,12 @@ import {
   type ShaderObject,
   computeWrapperStyle,
   computeFrameStyle,
+  computeShaderStyle,
   computeTextStyle,
   computeImageStyle,
   computeImageWrapperStyle,
   getChildren,
   isFrame,
-  computeFillStyles,
 } from "../lib/objects";
 import {
   Tooltip,
@@ -494,6 +494,13 @@ export function Canvas() {
 
   // Shader picker dialog state
   const [shaderPickerOpen, setShaderPickerOpen] = useState(false);
+
+  // Open shader picker immediately when shader tool is activated
+  useEffect(() => {
+    if (tool === "shader") {
+      setShaderPickerOpen(true);
+    }
+  }, [tool]);
 
   // Initialize and track mouse position via CSS variables
   useEffect(() => {
@@ -1171,9 +1178,8 @@ export function Canvas() {
       startCreate(canvasPoint);
     } else if (tool === "text") {
       createText(canvasPoint);
-    } else if (tool === "shader") {
-      setShaderPickerOpen(true);
     }
+    // Shader tool opens dialog automatically via useEffect
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -1831,19 +1837,11 @@ export function Canvas() {
                             );
                           }
 
-                          // Compute fill styles for background
-                          const fillStyles = computeFillStyles(shaderObj.fills);
+                          // Compute all shader styles (fills, border, shadow, etc.)
+                          const shaderStyles = computeShaderStyle(shaderObj);
                           
                           return (
-                            <div
-                              style={{
-                                width: obj.width,
-                                height: obj.height,
-                                position: "relative",
-                                overflow: "hidden",
-                                ...fillStyles,
-                              }}
-                            >
+                            <div style={shaderStyles}>
                               <ShaderRendererComponent
                                 shader={shaderDef}
                                 params={shaderObj.shaderParams}
@@ -1903,8 +1901,11 @@ export function Canvas() {
               open={shaderPickerOpen}
               onOpenChange={(open) => {
                 setShaderPickerOpen(open);
-                if (!open && tool === "shader") {
-                  setTool("select");
+                if (!open) {
+                  // When dialog closes, switch back to select tool
+                  if (tool === "shader") {
+                    setTool("select");
+                  }
                 }
               }}
               onSelect={(shaderId) => {
@@ -1916,6 +1917,7 @@ export function Canvas() {
                   const canvasPoint = screenToCanvas(centerX, centerY);
                   createShader(shaderId, shaderDef.defaultParams, canvasPoint, null, shaderDef.name);
                   setTool("select");
+                  setShaderPickerOpen(false);
                 }
               }}
             />
