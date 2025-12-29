@@ -16,6 +16,12 @@ import { waterShader } from "./shaders/water";
 import { flutedGlassShader } from "./shaders/fluted-glass";
 import { imageDitheringShader } from "./shaders/image-dithering";
 import { bumpedSineWarpShader } from "./shaders/bumped-sine-warp";
+import { kaleidoscopeShader } from "./shaders/kaleidoscope";
+import { chromaticAberrationShader } from "./shaders/chromatic-aberration";
+import { rippleShader } from "./shaders/ripple";
+import { pixelateShader } from "./shaders/pixelate";
+import { radialBlurShader } from "./shaders/radial-blur";
+import { vhsShader } from "./shaders/vhs";
 
 export const SHADER_REGISTRY: Map<string, ShaderDefinition> = new Map([
   [meshGradientShader.id, meshGradientShader],
@@ -29,6 +35,12 @@ export const SHADER_REGISTRY: Map<string, ShaderDefinition> = new Map([
   [flutedGlassShader.id, flutedGlassShader],
   [imageDitheringShader.id, imageDitheringShader],
   [bumpedSineWarpShader.id, bumpedSineWarpShader],
+  [kaleidoscopeShader.id, kaleidoscopeShader],
+  [chromaticAberrationShader.id, chromaticAberrationShader],
+  [rippleShader.id, rippleShader],
+  [pixelateShader.id, pixelateShader],
+  [radialBlurShader.id, radialBlurShader],
+  [vhsShader.id, vhsShader],
 ]);
 
 export function getShader(id: string): ShaderDefinition | undefined {

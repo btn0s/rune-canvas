@@ -388,7 +388,7 @@ export const flutedGlassShader: ShaderDefinition = {
   category: "Image filters",
   fragmentShader,
   defaultParams: {
-    image: "",
+    image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
     colorBack: "#00000000",
     colorShadow: "#000000",
     colorHighlight: "#ffffff",
@@ -411,7 +411,7 @@ export const flutedGlassShader: ShaderDefinition = {
     {
       name: "Default",
       params: {
-        image: "",
+        image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
         colorBack: "#00000000",
         colorShadow: "#000000",
         colorHighlight: "#ffffff",
@@ -434,7 +434,7 @@ export const flutedGlassShader: ShaderDefinition = {
     {
       name: "Waves",
       params: {
-        image: "",
+        image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
         colorBack: "#00000000",
         colorShadow: "#000000",
         colorHighlight: "#ffffff",
@@ -457,7 +457,7 @@ export const flutedGlassShader: ShaderDefinition = {
     {
       name: "Abstract",
       params: {
-        image: "",
+        image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
         colorBack: "#00000000",
         colorShadow: "#000000",
         colorHighlight: "#ffffff",
@@ -480,7 +480,7 @@ export const flutedGlassShader: ShaderDefinition = {
     {
       name: "Folds",
       params: {
-        image: "",
+        image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
         colorBack: "#00000000",
         colorShadow: "#000000",
         colorHighlight: "#ffffff",

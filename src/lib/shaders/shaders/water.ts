@@ -141,7 +141,7 @@ export const waterShader: ShaderDefinition = {
   category: "Image filters",
   fragmentShader,
   defaultParams: {
-    image: "",
+    image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
     colorBack: "#909090",
     colorHighlight: "#ffffff",
     highlights: 0.07,
@@ -155,7 +155,7 @@ export const waterShader: ShaderDefinition = {
     {
       name: "Default",
       params: {
-        image: "",
+        image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
         colorBack: "#909090",
         colorHighlight: "#ffffff",
         highlights: 0.07,
@@ -169,7 +169,7 @@ export const waterShader: ShaderDefinition = {
     {
       name: "Abstract",
       params: {
-        image: "",
+        image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
         colorBack: "#909090",
         colorHighlight: "#ffffff",
         highlights: 0,
@@ -183,7 +183,7 @@ export const waterShader: ShaderDefinition = {
     {
       name: "Streaming",
       params: {
-        image: "",
+        image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
         colorBack: "#909090",
         colorHighlight: "#ffffff",
         highlights: 0,
@@ -197,7 +197,7 @@ export const waterShader: ShaderDefinition = {
     {
       name: "Slow-mo",
       params: {
-        image: "",
+        image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
         colorBack: "#909090",
         colorHighlight: "#ffffff",
         highlights: 0.4,

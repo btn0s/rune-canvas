@@ -2145,7 +2145,13 @@ function ShaderProperties({
             onValueChange={(presetName) => {
               const preset = shaderDef.presets.find((p) => p.name === presetName);
               if (preset) {
-                onUpdate({ shaderParams: { ...preset.params } } as Partial<ShaderObject>);
+                // Preserve the current image value when applying preset
+                const currentImage = shader.shaderParams?.image;
+                const newParams = { ...preset.params };
+                if (currentImage !== undefined && currentImage !== "") {
+                  newParams.image = currentImage;
+                }
+                onUpdate({ shaderParams: newParams } as Partial<ShaderObject>);
               }
             }}
           >

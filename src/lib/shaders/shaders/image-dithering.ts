@@ -174,7 +174,7 @@ export const imageDitheringShader: ShaderDefinition = {
   category: "Image filters",
   fragmentShader,
   defaultParams: {
-    image: "",
+    image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
     colorFront: "#94ffaf",
     colorBack: "#000c38",
     colorHighlight: "#eaff94",
@@ -187,7 +187,7 @@ export const imageDitheringShader: ShaderDefinition = {
     {
       name: "Default",
       params: {
-        image: "",
+        image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
         colorFront: "#94ffaf",
         colorBack: "#000c38",
         colorHighlight: "#eaff94",
@@ -200,7 +200,7 @@ export const imageDitheringShader: ShaderDefinition = {
     {
       name: "Retro",
       params: {
-        image: "",
+        image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
         colorFront: "#eeeeee",
         colorBack: "#5452ff",
         colorHighlight: "#eeeeee",
@@ -213,7 +213,7 @@ export const imageDitheringShader: ShaderDefinition = {
     {
       name: "Noise",
       params: {
-        image: "",
+        image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
         colorFront: "#a2997c",
         colorBack: "#000000",
         colorHighlight: "#ededed",
@@ -226,7 +226,7 @@ export const imageDitheringShader: ShaderDefinition = {
     {
       name: "Natural",
       params: {
-        image: "",
+        image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
         colorFront: "#ffffff",
         colorBack: "#000000",
         colorHighlight: "#ffffff",

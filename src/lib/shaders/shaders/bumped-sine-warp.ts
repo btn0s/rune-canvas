@@ -153,7 +153,7 @@ export const bumpedSineWarpShader: ShaderDefinition = {
   category: "Image filters",
   fragmentShader,
   defaultParams: {
-    image: "",
+    image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
     bumpFactor: 0.05,
     lightSpeed: 1.0,
     warpSpeed: 0.5,
@@ -165,7 +165,7 @@ export const bumpedSineWarpShader: ShaderDefinition = {
     {
       name: "Default",
       params: {
-        image: "",
+        image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
         bumpFactor: 0.05,
         lightSpeed: 1.0,
         warpSpeed: 0.5,
@@ -177,7 +177,7 @@ export const bumpedSineWarpShader: ShaderDefinition = {
     {
       name: "Subtle",
       params: {
-        image: "",
+        image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
         bumpFactor: 0.02,
         lightSpeed: 0.5,
         warpSpeed: 0.3,
@@ -189,7 +189,7 @@ export const bumpedSineWarpShader: ShaderDefinition = {
     {
       name: "Intense",
       params: {
-        image: "",
+        image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
         bumpFactor: 0.1,
         lightSpeed: 2.0,
         warpSpeed: 1.0,
@@ -201,7 +201,7 @@ export const bumpedSineWarpShader: ShaderDefinition = {
     {
       name: "Slow Motion",
       params: {
-        image: "",
+        image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
         bumpFactor: 0.05,
         lightSpeed: 0.2,
         warpSpeed: 0.1,
