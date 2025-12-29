@@ -221,13 +221,21 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
     }),
   undo: () =>
     set((state) => {
+      // #region agent log
+      console.log('[DEBUG] undo called', {pastLength:state.history.past.length,futureLength:state.history.future.length,objectsCount:state.objects.length});
+      fetch('http://127.0.0.1:7250/ingest/489067f9-1dbe-4235-9816-21c1c421f1e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'canvasStore.ts:222',message:'undo called',data:{pastLength:state.history.past.length,futureLength:state.history.future.length,objectsCount:state.objects.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
       if (state.history.past.length === 0) {
+        // #region agent log
+        console.log('[DEBUG] undo aborted - no history');
+        fetch('http://127.0.0.1:7250/ingest/489067f9-1dbe-4235-9816-21c1c421f1e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'canvasStore.ts:224',message:'undo aborted - no history',data:{pastLength:0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
         return state;
       }
       const previous = state.history.past[state.history.past.length - 1];
       const newPast = state.history.past.slice(0, -1);
       const currentSnapshot = cloneScene(getScene(state));
-      return {
+      const result = {
         ...state,
         ...cloneScene(previous),
         history: {
@@ -238,6 +246,11 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
           ),
         },
       };
+      // #region agent log
+      console.log('[DEBUG] undo completed', {newPastLength:result.history.past.length,newFutureLength:result.history.future.length,newObjectsCount:result.objects.length});
+      fetch('http://127.0.0.1:7250/ingest/489067f9-1dbe-4235-9816-21c1c421f1e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'canvasStore.ts:240',message:'undo completed',data:{newPastLength:result.history.past.length,newFutureLength:result.history.future.length,newObjectsCount:result.objects.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      return result;
     }),
   redo: () =>
     set((state) => {

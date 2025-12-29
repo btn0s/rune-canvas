@@ -22,6 +22,8 @@ import { rippleShader } from "./shaders/ripple";
 import { pixelateShader } from "./shaders/pixelate";
 import { radialBlurShader } from "./shaders/radial-blur";
 import { vhsShader } from "./shaders/vhs";
+import { fractalTunnelShader } from "./shaders/fractal-tunnel";
+import { fractalKaleidoscopeShader } from "./shaders/fractal-kaleidoscope";
 
 export const SHADER_REGISTRY: Map<string, ShaderDefinition> = new Map([
   [meshGradientShader.id, meshGradientShader],
@@ -41,6 +43,8 @@ export const SHADER_REGISTRY: Map<string, ShaderDefinition> = new Map([
   [pixelateShader.id, pixelateShader],
   [radialBlurShader.id, radialBlurShader],
   [vhsShader.id, vhsShader],
+  [fractalTunnelShader.id, fractalTunnelShader],
+  [fractalKaleidoscopeShader.id, fractalKaleidoscopeShader],
 ]);
 
 export function getShader(id: string): ShaderDefinition | undefined {
