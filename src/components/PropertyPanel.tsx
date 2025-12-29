@@ -1657,7 +1657,6 @@ function ShaderProperties({
     return shader.shaderParams[key] ?? shaderDef?.defaultParams[key];
   };
 
-  // Helper to format parameter labels
   const formatLabel = (paramKey: string, customLabel?: string): string => {
     if (customLabel) return customLabel;
     const lower = paramKey.toLowerCase();
@@ -1669,7 +1668,6 @@ function ShaderProperties({
       .trim();
   };
 
-  // Render control based on declarative definition
   const renderControlFromDefinition = (
     key: string,
     paramDef: { control: ParamControl; defaultValue: unknown },
@@ -1682,8 +1680,8 @@ function ShaderProperties({
         const colorValue =
           (typeof value === "string" && value.startsWith("#")
             ? value
-            : typeof control === "object" && "defaultValue" in control
-            ? String(control.defaultValue)
+            : typeof defaultValue === "string" && defaultValue.startsWith("#")
+            ? defaultValue
             : "#ffffff") || "#ffffff";
         return (
           <div key={key} className="flex flex-col gap-1.5">
@@ -1899,7 +1897,6 @@ function ShaderProperties({
     }
   };
 
-  // Fallback heuristic-based rendering (for backward compatibility)
   const renderParamControlHeuristic = (key: string, defaultValue: unknown) => {
     const value = getParamValue(key);
     const displayValue = value ?? defaultValue;
@@ -2143,17 +2140,14 @@ function ShaderProperties({
     );
   };
 
-  // Main render function - uses declarative definitions if available, falls back to heuristics
   const renderParamControl = (key: string, defaultValue: unknown) => {
     const value = getParamValue(key);
     
-    // Check if shader has declarative parameter definitions
     if (shaderDef?.paramDefinitions?.[key]) {
       const paramDef = shaderDef.paramDefinitions[key];
       return renderControlFromDefinition(key, paramDef, value);
     }
     
-    // Fall back to heuristic-based rendering
     return renderParamControlHeuristic(key, defaultValue);
   };
 

@@ -133,9 +133,6 @@ export class ShaderRenderer {
       this.canvas.height = (this.canvas.offsetHeight || 1) * pixelRatio;
     }
 
-    // Get or create 2D context for copying pixels to display canvas
-    // Note: The 2D context resolution is determined by canvas.width/height
-    // We'll set these correctly in resize(), but ensure we have a context
     this.displayCtx = this.canvas.getContext("2d", {
       alpha: true,
       desynchronized: false,
@@ -145,18 +142,15 @@ export class ShaderRenderer {
       throw new Error("Failed to get 2D context for display canvas");
     }
 
-    // Set image smoothing for better quality when scaling
     this.displayCtx.imageSmoothingEnabled = true;
     this.displayCtx.imageSmoothingQuality = "high";
 
-    // Create render frame callback bound to this instance
     this.renderFrameCallback = () => this.renderFrame();
 
     this.init();
   }
 
   private init() {
-    // Create program
     this.program = createProgram(
       this.gl,
       vertexShaderSource,
@@ -166,7 +160,6 @@ export class ShaderRenderer {
       throw new Error("Failed to create shader program");
     }
 
-    // Setup position attribute
     const positionLocation = this.gl.getAttribLocation(
       this.program,
       "a_position"
@@ -187,10 +180,7 @@ export class ShaderRenderer {
       0
     );
 
-    // Create render target (framebuffer) for this shader
     this.createRenderTarget();
-
-    // Get uniform locations
     this.updateUniformLocations();
     this.setUniforms(this.uniforms);
 
@@ -208,17 +198,14 @@ export class ShaderRenderer {
     const renderWidth = Math.max(1, Math.round(displayWidth * pixelRatio));
     const renderHeight = Math.max(1, Math.round(displayHeight * pixelRatio));
 
-    // Update canvas internal resolution to match
     this.canvas.width = renderWidth;
     this.canvas.height = renderHeight;
 
-    // Create framebuffer
     this.framebuffer = this.gl.createFramebuffer();
     if (!this.framebuffer) {
       throw new Error("Failed to create framebuffer");
     }
 
-    // Create texture to render into
     this.renderTexture = this.gl.createTexture();
     if (!this.renderTexture) {
       this.gl.deleteFramebuffer(this.framebuffer);
@@ -302,11 +289,9 @@ export class ShaderRenderer {
           uniformInfo.name
         );
 
-        // Store with the exact name from WebGL
         this.uniformLocations.set(uniformInfo.name, location);
         this.uniformTypes.set(uniformInfo.name, uniformInfo.type);
 
-        // Also store with base name if it's an array (for convenience)
         if (baseName !== uniformInfo.name) {
           this.uniformLocations.set(baseName, location);
           this.uniformTypes.set(baseName, uniformInfo.type);
@@ -354,43 +339,32 @@ export class ShaderRenderer {
       return;
     }
     this.uniforms = uniforms;
-    // Update uniform locations (doesn't require program to be bound)
     this.updateUniformLocations();
-    // Don't apply uniforms here - they'll be applied during renderFrame()
-    // when the program is bound. This avoids state conflicts with shared context.
   }
 
   private applyUniforms() {
     if (!this.program) return;
 
-    // Check if context was lost
     if (this.gl.isContextLost()) {
       return;
     }
 
-    // NOTE: Program should already be bound via gl.useProgram() before calling this
-    // We don't call useProgram here to avoid state conflicts with shared context
-
-    // Set time
     const timeLoc = this.uniformLocations.get("u_time");
     if (timeLoc !== null && timeLoc !== undefined) {
       const elapsed = (Date.now() - this.startTime) / 1000;
       this.gl.uniform1f(timeLoc, elapsed * this.speed);
     }
 
-    // Set resolution
     const resolutionLoc = this.uniformLocations.get("u_resolution");
     if (resolutionLoc !== null && resolutionLoc !== undefined) {
       this.gl.uniform2f(resolutionLoc, this.canvas.width, this.canvas.height);
     }
 
-    // Set pixel ratio
     const pixelRatioLoc = this.uniformLocations.get("u_pixelRatio");
     if (pixelRatioLoc !== null && pixelRatioLoc !== undefined) {
       this.gl.uniform1f(pixelRatioLoc, window.devicePixelRatio || 1);
     }
 
-    // Set custom uniforms
     Object.entries(this.uniforms).forEach(([key, value]) => {
       const loc = this.uniformLocations.get(key);
       if (loc === null || loc === undefined) return;
@@ -476,8 +450,6 @@ export class ShaderRenderer {
       return;
     }
 
-    // Use the actual container size (from CSS) or fall back to passed dimensions
-    // The canvas fills its container via CSS (width/height: 100%)
     const displayWidth = this.canvas.offsetWidth || width;
     const displayHeight = this.canvas.offsetHeight || height;
 
@@ -485,8 +457,6 @@ export class ShaderRenderer {
     const renderWidth = Math.max(1, Math.round(displayWidth * pixelRatio));
     const renderHeight = Math.max(1, Math.round(displayHeight * pixelRatio));
 
-    // Set internal resolution (for rendering) - this determines the actual pixel resolution
-    // Don't set inline styles - let CSS handle display size (width/height: 100%)
     const needsResize =
       this.canvas.width !== renderWidth || this.canvas.height !== renderHeight;
 
@@ -494,14 +464,11 @@ export class ShaderRenderer {
       this.canvas.width = renderWidth;
       this.canvas.height = renderHeight;
 
-      // Update framebuffer size to match (or create if it doesn't exist)
       if (this.framebuffer && this.renderTexture) {
-        // Recreate texture with new size
         this.gl.deleteTexture(this.renderTexture);
         this.gl.deleteFramebuffer(this.framebuffer);
       }
 
-      // Create or recreate framebuffer with correct size
       this.renderTexture = this.gl.createTexture();
       if (!this.renderTexture) {
         throw new Error("Failed to create render texture");
@@ -555,7 +522,6 @@ export class ShaderRenderer {
         0
       );
 
-      // Verify framebuffer is complete
       const status = this.gl.checkFramebufferStatus(this.gl.FRAMEBUFFER);
       if (status !== this.gl.FRAMEBUFFER_COMPLETE) {
         this.gl.deleteTexture(this.renderTexture);
@@ -591,7 +557,6 @@ export class ShaderRenderer {
    * This method is called once per frame by the shared context's render loop
    */
   renderFrame(): void {
-    // Early return if renderer is invalid (but don't auto-stop - let component handle that)
     if (
       !this.program ||
       !this.framebuffer ||
@@ -601,25 +566,16 @@ export class ShaderRenderer {
       return;
     }
 
-    // Check if context was lost - unregister from coordinator if so
     if (this.gl.isContextLost()) {
       this.stop();
       return;
     }
 
-    // Ensure canvas has valid dimensions
     if (this.canvas.width <= 0 || this.canvas.height <= 0) {
       return;
     }
 
-    // IMPORTANT: With shared context, we must set up ALL state before rendering
-    // to avoid interfering with other shaders' rendering. Order matters:
-    // 1. Bind framebuffer first (isolates rendering target)
-    // 2. Set viewport (scoped to our framebuffer)
-    // 3. Use program (sets shader state)
-    // 4. Bind position buffer and set up vertex attributes (other renderers may have changed this)
-    // 5. Apply uniforms (sets shader parameters)
-    // 6. Draw
+    // With shared context, set up all state before rendering to avoid conflicts
 
     this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.framebuffer);
     this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
@@ -628,10 +584,8 @@ export class ShaderRenderer {
     this.gl.clearColor(0, 0, 0, 0); // Clear to transparent black
     this.gl.clear(this.gl.COLOR_BUFFER_BIT);
 
-    // Use program BEFORE setting up attributes (ensures we're setting attributes on correct program)
     this.gl.useProgram(this.program);
 
-    // Rebind position buffer and set up vertex attributes (shared context state may have changed)
     if (this.positionBuffer) {
       const positionLocation = this.gl.getAttribLocation(
         this.program,
@@ -649,38 +603,29 @@ export class ShaderRenderer {
       );
     }
 
-    // Apply uniforms (now that program is bound)
     this.applyUniforms();
 
-    // Draw
     this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
 
-    // Check for errors after draw
     const drawError = this.gl.getError();
     if (drawError !== this.gl.NO_ERROR) {
       console.warn(`WebGL error after drawArrays: ${drawError}`);
     }
 
-    // Copy rendered result to display canvas (framebuffer is still bound)
     this.copyToDisplay();
-
-    // Unbind framebuffer after copying to avoid interfering with other shaders
     this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
   }
 
   private copyToDisplay(): void {
     if (!this.framebuffer || !this.displayCtx) return;
 
-    // Ensure framebuffer is bound before reading
     this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.framebuffer);
 
-    // Check for WebGL errors before reading
     const error = this.gl.getError();
     if (error !== this.gl.NO_ERROR) {
       console.warn(`WebGL error before readPixels: ${error}`);
     }
 
-    // Read pixels from framebuffer
     const pixels = new Uint8Array(this.canvas.width * this.canvas.height * 4);
     this.gl.readPixels(
       0,
@@ -692,23 +637,18 @@ export class ShaderRenderer {
       pixels
     );
 
-    // Check for errors after reading
     const readError = this.gl.getError();
     if (readError !== this.gl.NO_ERROR) {
       console.warn(`WebGL error after readPixels: ${readError}`);
       return;
     }
 
-    // Copy to display canvas using cached 2D context
     const displayCtx = this.displayCtx;
-
-    // Create ImageData
     const imageData = displayCtx.createImageData(
       this.canvas.width,
       this.canvas.height
     );
 
-    // Flip vertically (WebGL origin is bottom-left, canvas 2D is top-left)
     const flipped = new Uint8ClampedArray(imageData.data.length);
     for (let y = 0; y < this.canvas.height; y++) {
       const srcRow = this.canvas.height - 1 - y;
@@ -722,11 +662,6 @@ export class ShaderRenderer {
     }
     imageData.data.set(flipped);
 
-    // Clear and draw to display canvas
-    // Important: canvas.width/height determines the 2D context resolution
-    // We've already set canvas.width/height to match the render resolution
-    // So ImageData matches canvas internal resolution perfectly
-    // CSS will scale the display automatically
     displayCtx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     displayCtx.putImageData(imageData, 0, 0);
   }
@@ -762,12 +697,9 @@ export class ShaderRenderer {
       return;
     }
 
-    // IMPORTANT: With shared context, ensure program is bound before setting texture uniforms
-    // This ensures uniforms are set on the correct program
     if (!this.program) return;
     this.gl.useProgram(this.program);
 
-    // Check for WebGL errors before starting
     const preError = this.gl.getError();
     if (
       preError !== this.gl.NO_ERROR &&
@@ -779,16 +711,13 @@ export class ShaderRenderer {
       );
     }
 
-    // Clean up existing texture if present
     const existingTexture = this.textures.get(uniformName);
     if (existingTexture) {
       this.gl.deleteTexture(existingTexture);
       this.textures.delete(uniformName);
     }
 
-    // Get or assign texture unit
     if (!this.textureUnitMap.has(uniformName)) {
-      // Check if we've exceeded max texture units (typically 16)
       if (this.nextTextureUnit >= 16) {
         console.error(
           `ShaderRenderer: exceeded maximum texture units (16) for ${uniformName}`
@@ -800,13 +729,8 @@ export class ShaderRenderer {
     }
     const textureUnit = this.textureUnitMap.get(uniformName)!;
 
-    // Activate correct texture unit before creating the texture
-    // NOTE: Texture units are global state in shared context, but each shader uses
-    // its own texture unit assignments, so conflicts are avoided as long as we
-    // don't exceed 16 total texture units across all shaders
     this.gl.activeTexture(this.gl.TEXTURE0 + textureUnit);
 
-    // Create and set up the new texture
     const texture = this.gl.createTexture();
     if (!texture) {
       console.error(
@@ -816,8 +740,6 @@ export class ShaderRenderer {
     }
 
     this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
-
-    // Set texture parameters
     this.gl.texParameteri(
       this.gl.TEXTURE_2D,
       this.gl.TEXTURE_WRAP_S,
@@ -839,7 +761,6 @@ export class ShaderRenderer {
       this.gl.LINEAR
     );
 
-    // Upload image to texture - ensure we're using the correct format
     try {
       this.gl.texImage2D(
         this.gl.TEXTURE_2D,
@@ -858,16 +779,13 @@ export class ShaderRenderer {
       return;
     }
 
-    // Store texture for cleanup
     this.textures.set(uniformName, texture);
 
-    // Set the sampler uniform to the texture unit
     const loc = this.uniformLocations.get(uniformName);
     if (loc !== null && loc !== undefined) {
       this.gl.uniform1i(loc, textureUnit);
     }
 
-    // Set aspect ratio uniform if it exists
     const aspectRatioKey = `${uniformName}AspectRatio`;
     const aspectRatioLoc = this.uniformLocations.get(aspectRatioKey);
     if (aspectRatioLoc !== null && aspectRatioLoc !== undefined) {
@@ -875,7 +793,6 @@ export class ShaderRenderer {
       this.gl.uniform1f(aspectRatioLoc, aspectRatio);
     }
 
-    // Check for errors after texture operations
     const error = this.gl.getError();
     if (error !== this.gl.NO_ERROR && error !== this.gl.CONTEXT_LOST_WEBGL) {
       console.error(
@@ -892,7 +809,6 @@ export class ShaderRenderer {
    * Don't touch global state (useProgram, bindBuffer, etc.) as it affects other renderers.
    */
   private cleanupResources(): void {
-    // Check if context was lost - if so, just clear references
     if (this.gl.isContextLost()) {
       this.program = null;
       this.textures.clear();
@@ -934,29 +850,20 @@ export class ShaderRenderer {
       }
       this.gl.deleteProgram(this.program);
       this.program = null;
-      // Don't call useProgram(null) - affects other renderers using shared context
     }
 
-    // Clean up position buffer - just delete, don't unbind
     if (this.positionBuffer) {
       this.gl.deleteBuffer(this.positionBuffer);
       this.positionBuffer = null;
     }
 
-    // Clear references (these don't affect WebGL state)
     this.uniformLocations.clear();
     this.uniformTypes.clear();
     this.displayCtx = null;
   }
 
-  /**
-   * Fully dispose the renderer - stops rendering and cleans up all resources
-   * Only call this when the component is unmounting
-   */
   dispose() {
-    // Stop rendering (unregister from coordinator)
     this.stop();
-    // Clean up WebGL resources
     this.cleanupResources();
   }
 }
