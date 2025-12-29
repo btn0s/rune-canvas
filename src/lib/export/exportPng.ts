@@ -19,23 +19,48 @@ function sanitizeFileName(name: string): string {
 
 /**
  * Export a shader object by finding its canvas and using toDataURL directly
+ * Optionally scales up the canvas for higher resolution exports
  */
 async function exportShaderCanvas(
   shaderElement: HTMLElement,
-  fileName: string
+  fileName: string,
+  pixelRatio: number = 3
 ): Promise<void> {
   // Find the canvas element within the shader
-  const canvas = shaderElement.querySelector("canvas") as HTMLCanvasElement;
-  if (!canvas) {
+  const sourceCanvas = shaderElement.querySelector("canvas") as HTMLCanvasElement;
+  if (!sourceCanvas) {
     throw new Error("Shader canvas not found");
   }
 
-  if (canvas.width === 0 || canvas.height === 0) {
+  if (sourceCanvas.width === 0 || sourceCanvas.height === 0) {
     throw new Error("Shader canvas has zero dimensions");
   }
 
-  // Export canvas directly
-  const dataUrl = canvas.toDataURL("image/png");
+  let dataUrl: string;
+  
+  if (pixelRatio === 1) {
+    // Export at native resolution
+    dataUrl = sourceCanvas.toDataURL("image/png");
+  } else {
+    // Scale up for higher resolution export
+    const exportCanvas = document.createElement("canvas");
+    exportCanvas.width = sourceCanvas.width * pixelRatio;
+    exportCanvas.height = sourceCanvas.height * pixelRatio;
+    
+    const ctx = exportCanvas.getContext("2d");
+    if (!ctx) {
+      throw new Error("Failed to get 2D context");
+    }
+    
+    // Use imageSmoothingEnabled for better quality when scaling up
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    
+    // Draw the source canvas scaled up
+    ctx.drawImage(sourceCanvas, 0, 0, exportCanvas.width, exportCanvas.height);
+    
+    dataUrl = exportCanvas.toDataURL("image/png");
+  }
   
   // Create download link
   const link = document.createElement("a");
@@ -50,7 +75,7 @@ async function exportShaderCanvas(
 async function exportFrameElement(
   frameElement: HTMLElement,
   fileName: string,
-  pixelRatio: number = 2
+  pixelRatio: number = 3
 ): Promise<void> {
   const html2canvas = (await import("html2canvas-pro")).default;
   
@@ -98,13 +123,13 @@ export async function exportNodeToPng(
   if (!node) {
     throw new Error("Node element is required");
   }
-  const { fileName = "export", pixelRatio = 2 } = options;
+  const { fileName = "export", pixelRatio = 3 } = options;
 
   // Check if this is a shader (has a canvas element)
   const canvas = node.querySelector("canvas");
   if (canvas && canvas.width > 0 && canvas.height > 0) {
-    // Shader: export canvas directly
-    await exportShaderCanvas(node, fileName);
+    // Shader: export canvas with optional scaling
+    await exportShaderCanvas(node, fileName, pixelRatio);
   } else {
     // Frame: use html2canvas-pro for modern CSS support (oklch, etc.)
     await exportFrameElement(node, fileName, pixelRatio);

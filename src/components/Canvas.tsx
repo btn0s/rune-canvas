@@ -424,7 +424,7 @@ export function Canvas() {
     try {
       await exportNodeToPng(objectElement, {
         fileName: exportableObject.name,
-        pixelRatio: 2,
+        pixelRatio: 3, // 3x scale for high-quality exports
       });
     } catch (error) {
       console.error("Failed to export PNG:", error);
