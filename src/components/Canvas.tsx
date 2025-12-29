@@ -400,8 +400,8 @@ export function Canvas() {
   const commandContext: CommandContext = useMemo(
     () => ({
       selectedIds,
-      selectedObjects: selectedObjects as import("../lib/types").CanvasObject[],
-      objects: objects as import("../lib/types").CanvasObject[],
+      selectedObjects,
+      objects,
       setTool,
       copySelected,
       pasteClipboard,
@@ -425,9 +425,7 @@ export function Canvas() {
       redo,
       canUndo,
       canRedo,
-      updateObject: (id: string, updates: Partial<import("../lib/types").CanvasObject>) => {
-        updateObject(id, updates as Partial<CanvasObject>);
-      },
+      updateObject,
       setSelectedIds: select,
     }),
     [
@@ -475,11 +473,8 @@ export function Canvas() {
     number | null
   >(null);
 
-  // Helper to check if a point is within a sidebar using data attributes
   const isOverSidebar = useCallback((clientX: number, clientY: number): boolean => {
-    // Use elementsFromPoint to check what element is at the mouse position
     const elements = document.elementsFromPoint(clientX, clientY);
-    // Check if any element has the data-sidebar attribute
     return elements.some((el) => el instanceof HTMLElement && el.dataset.sidebar !== undefined);
   }, []);
 
@@ -901,7 +896,6 @@ export function Canvas() {
     const container = containerRef.current;
     if (!container) return;
     const onWheel = (e: WheelEvent) => {
-      // Don't pan/zoom if mouse is over a sidebar
       if (!isOverSidebar(e.clientX, e.clientY)) {
         handleWheel(e, container.getBoundingClientRect());
       }
@@ -1111,7 +1105,6 @@ export function Canvas() {
 
     // Middle click, hand tool, or space held to pan
     if (e.button === 1 || (e.button === 0 && (tool === "hand" || spaceHeld))) {
-      // Don't pan if mouse is over a sidebar
       if (!isOverSidebar(e.clientX, e.clientY)) {
         startPan({ x: e.clientX, y: e.clientY });
       }
@@ -1179,7 +1172,6 @@ export function Canvas() {
     } else if (tool === "text") {
       createText(canvasPoint);
     }
-    // Shader tool opens dialog automatically via useEffect
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -1189,7 +1181,6 @@ export function Canvas() {
     const canvasPoint = screenToCanvas(screenX, screenY);
 
     if (isPanning) {
-      // Don't pan if mouse is over a sidebar
       if (!isOverSidebar(e.clientX, e.clientY)) {
         updatePan({ x: e.clientX, y: e.clientY });
       }
@@ -1488,8 +1479,6 @@ export function Canvas() {
   useKeyboardShortcuts(shortcuts, {
     enabled: !editingTextId,
     onKeyDown: (e) => {
-      // Don't capture space if editing text
-      if (editingTextId) return;
       const target = e.target as HTMLElement;
       if (target?.isContentEditable) return;
       
@@ -1810,7 +1799,7 @@ export function Canvas() {
                                 // Fixed mode: don't sync anything
 
                                 if (Object.keys(updates).length > 0) {
-                                  updateObject(obj.id, updates as Partial<import("../lib/types").CanvasObject>, {
+                                  updateObject(obj.id, updates, {
                                     commit: false,
                                   });
                                 }
@@ -1841,7 +1830,6 @@ export function Canvas() {
                             );
                           }
 
-                          // Compute all shader styles (fills, border, shadow, etc.)
                           const shaderStyles = computeShaderStyle(shaderObj);
                           
                           return (
@@ -1905,11 +1893,8 @@ export function Canvas() {
               open={shaderPickerOpen}
               onOpenChange={(open) => {
                 setShaderPickerOpen(open);
-                if (!open) {
-                  // When dialog closes, switch back to select tool
-                  if (tool === "shader") {
-                    setTool("select");
-                  }
+                if (!open && tool === "shader") {
+                  setTool("select");
                 }
               }}
               onSelect={(shaderId) => {

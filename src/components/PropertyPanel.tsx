@@ -1636,7 +1636,6 @@ function ShaderProperties({
   const isSingle = shaders.length === 1;
 
   if (!isSingle) {
-    // Multiple shaders selected - show only common properties
     return (
       <>
         <LayoutSection objects={shaders} onUpdate={commonUpdate} />
@@ -1661,7 +1660,6 @@ function ShaderProperties({
     const value = getParamValue(key);
     const displayValue = value ?? defaultValue;
 
-    // Color array (e.g., colors: ["#ff0000", "#00ff00"])
     if (
       Array.isArray(defaultValue) &&
       typeof defaultValue[0] === "string" &&
@@ -1730,21 +1728,18 @@ function ShaderProperties({
       );
     }
 
-    // Single color string
     if (typeof defaultValue === "string" && defaultValue.startsWith("#")) {
       const colorValue =
         (typeof displayValue === "string" && displayValue.startsWith("#")
           ? displayValue
           : defaultValue) || "#ffffff";
 
-      // Format label: "colorBack" -> "Background", "colorFront" -> "Foreground", etc.
       const formatLabel = (paramKey: string): string => {
         const lower = paramKey.toLowerCase();
         if (lower.includes("back") || lower === "background")
           return "Background";
         if (lower.includes("front") || lower === "foreground")
           return "Foreground";
-        // For other color params, convert camelCase to Title Case
         return paramKey
           .replace(/([A-Z])/g, " $1")
           .replace(/^./, (str) => str.toUpperCase())
@@ -1764,7 +1759,6 @@ function ShaderProperties({
       );
     }
 
-    // Image parameter (string URL, typically empty or starts with http/https)
     if (
       typeof defaultValue === "string" &&
       !defaultValue.startsWith("#") &&
@@ -1786,9 +1780,7 @@ function ShaderProperties({
       );
     }
 
-    // String enum - check if all preset values for this param are strings and form a consistent set
     if (typeof defaultValue === "string" && !defaultValue.startsWith("#") && shaderDef) {
-      // Collect all unique string values for this param from presets and default
       const enumValues = new Set<string>();
       enumValues.add(defaultValue);
       shaderDef.presets?.forEach((preset) => {
@@ -1800,7 +1792,6 @@ function ShaderProperties({
       
       const enumArray = Array.from(enumValues);
       
-      // If we have a small set of enum values (2-4), use segmented control
       if (enumArray.length >= 2 && enumArray.length <= 4) {
         const currentValue = typeof displayValue === "string" ? displayValue : defaultValue;
         
@@ -1834,7 +1825,6 @@ function ShaderProperties({
         );
       }
       
-      // For more enum values, use dropdown
       if (enumArray.length > 4) {
         const currentValue = typeof displayValue === "string" ? displayValue : defaultValue;
         
@@ -1858,9 +1848,7 @@ function ShaderProperties({
       }
     }
 
-    // Number (0-1 range typically, but could be other ranges)
     if (typeof defaultValue === "number") {
-      // Determine range based on parameter name and value
       let min = 0;
       let max = 1;
       let step = 0.01;
@@ -1876,7 +1864,6 @@ function ShaderProperties({
         max = 10;
         step = 1;
       } else if (key === "speed" || key === "scale") {
-        // Speed and scale typically range 0-2 or 0-1, show as percentage
         max = 2;
         showAsPercentage = true;
       }
@@ -1908,7 +1895,6 @@ function ShaderProperties({
       );
     }
 
-    // Unknown type - show as JSON
     return (
       <div key={key} className="flex flex-col gap-1.5">
         <SectionLabel>{key}</SectionLabel>
@@ -1931,22 +1917,17 @@ function ShaderProperties({
     );
   }
 
-  // Separate params into foreground colors, background colors, and other params
   const foregroundColorParams: [string, unknown][] = [];
   const backgroundColorParams: [string, unknown][] = [];
   const otherParams: [string, unknown][] = [];
 
   Object.entries(shaderDef.defaultParams).forEach(([key, defaultValue]) => {
-    // Background colors: colorBack, colorBack, etc.
-    // Skip these - shader background is always transparent, fills handle background
     if (
       key.toLowerCase().includes("back") ||
       key.toLowerCase() === "background"
     ) {
-      // Don't add to backgroundColorParams - we hide these inputs
       return;
     }
-    // Foreground colors: colors array
     else if (
       Array.isArray(defaultValue) &&
       typeof defaultValue[0] === "string" &&
@@ -1954,11 +1935,9 @@ function ShaderProperties({
     ) {
       foregroundColorParams.push([key, defaultValue]);
     }
-    // Single color strings that aren't background
     else if (typeof defaultValue === "string" && defaultValue.startsWith("#")) {
       foregroundColorParams.push([key, defaultValue]);
     }
-    // Everything else
     else {
       otherParams.push([key, defaultValue]);
     }
