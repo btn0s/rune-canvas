@@ -28,6 +28,7 @@ import { bloomShader } from "./shaders/bloom";
 import { edgeDetectionShader } from "./shaders/edge-detection";
 import { tiltShiftShader } from "./shaders/tilt-shift";
 import { fisheyeShader } from "./shaders/fisheye";
+import { cellularLoopShader } from "./shaders/cellular-loop";
 
 export const SHADER_REGISTRY: Map<string, ShaderDefinition> = new Map([
   [meshGradientShader.id, meshGradientShader],
@@ -53,6 +54,7 @@ export const SHADER_REGISTRY: Map<string, ShaderDefinition> = new Map([
   [edgeDetectionShader.id, edgeDetectionShader],
   [tiltShiftShader.id, tiltShiftShader],
   [fisheyeShader.id, fisheyeShader],
+  [cellularLoopShader.id, cellularLoopShader],
 ]);
 
 export function getShader(id: string): ShaderDefinition | undefined {

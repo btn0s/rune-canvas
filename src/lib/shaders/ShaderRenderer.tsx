@@ -6,7 +6,7 @@
  * Delegates actual WebGL rendering to ShaderRenderer class.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, memo } from "react";
 import { ShaderRenderer } from "./renderer";
 import type { ShaderRendererUniforms } from "./renderer";
 import type { ShaderDefinition } from "./types";
@@ -103,7 +103,7 @@ async function processParams(
   return processed;
 }
 
-export function ShaderRendererComponent({
+function ShaderRendererComponentImpl({
   shader,
   params,
   width,
@@ -241,3 +241,19 @@ export function ShaderRendererComponent({
     />
   );
 }
+
+// Memoize component to prevent re-renders when props haven't changed
+export const ShaderRendererComponent = memo(ShaderRendererComponentImpl, (prevProps, nextProps) => {
+  // Custom comparison function
+  return (
+    prevProps.shader.id === nextProps.shader.id &&
+    prevProps.shader.fragmentShader === nextProps.shader.fragmentShader &&
+    prevProps.width === nextProps.width &&
+    prevProps.height === nextProps.height &&
+    prevProps.speed === nextProps.speed &&
+    prevProps.targetFps === nextProps.targetFps &&
+    prevProps.paused === nextProps.paused &&
+    // Deep compare params object
+    JSON.stringify(prevProps.params) === JSON.stringify(nextProps.params)
+  );
+});
