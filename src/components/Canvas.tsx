@@ -1488,6 +1488,11 @@ export function Canvas() {
   useKeyboardShortcuts(shortcuts, {
     enabled: !editingTextId,
     onKeyDown: (e) => {
+      // Don't capture space if editing text
+      if (editingTextId) return;
+      const target = e.target as HTMLElement;
+      if (target?.isContentEditable) return;
+      
       // Special case: space for temporary pan (needs repeat check)
       if (e.key === " " && !e.repeat) {
         e.preventDefault();

@@ -5,7 +5,7 @@
  */
 
 // Vertex shader source - simple full-screen quad
-// Outputs both v_objectUV and v_patternUV for compatibility
+// Outputs v_objectUV, v_patternUV, and v_imageUV for compatibility
 // v_objectUV is centered at origin (can go negative) to match Paper shader behavior
 const vertexShaderSource = `#version 300 es
 precision mediump float;
@@ -14,6 +14,7 @@ layout(location = 0) in vec4 a_position;
 
 out vec2 v_objectUV;
 out vec2 v_patternUV;
+out vec2 v_imageUV;
 
 void main() {
   gl_Position = a_position;
@@ -28,6 +29,9 @@ void main() {
   vec2 objectUV = a_position.xy * 0.5;
   objectUV.y = -objectUV.y; // Flip Y (top becomes 0.5, bottom becomes -0.5)
   v_objectUV = objectUV;
+  
+  // Image UV is [0, 1] range for sampling textures
+  v_imageUV = patternUV;
 }
 `;
 
@@ -76,7 +80,7 @@ function createProgram(
 }
 
 export interface ShaderRendererUniforms {
-  [key: string]: number | number[] | HTMLImageElement | undefined;
+  [key: string]: number | number[] | HTMLImageElement | string | undefined;
 }
 
 export class ShaderRenderer {
@@ -89,6 +93,9 @@ export class ShaderRenderer {
   private speed = 1;
   private uniforms: ShaderRendererUniforms = {};
   private fragmentShaderSource: string;
+  private textures: Map<string, WebGLTexture> = new Map();
+  private textureUnitMap: Map<string, number> = new Map();
+  private nextTextureUnit = 0;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -143,6 +150,11 @@ export class ShaderRenderer {
     // Get locations for all provided uniforms
     Object.keys(this.uniforms).forEach((key) => {
       this.uniformLocations.set(key, this.gl.getUniformLocation(this.program!, key));
+      // Also check for aspect ratio uniforms (e.g., u_imageAspectRatio for u_image)
+      if (this.uniforms[key] instanceof HTMLImageElement) {
+        const aspectRatioKey = `${key}AspectRatio`;
+        this.uniformLocations.set(aspectRatioKey, this.gl.getUniformLocation(this.program!, aspectRatioKey));
+      }
     });
   }
 
@@ -195,8 +207,7 @@ export class ShaderRenderer {
           this.gl.uniform4fv(loc, new Float32Array(value as number[]));
         }
       } else if (value instanceof HTMLImageElement) {
-        // Handle textures if needed
-        // For now, skip texture uniforms
+        this.setTextureUniform(key, value);
       }
     });
   }
@@ -238,8 +249,80 @@ export class ShaderRenderer {
     }
   }
 
+  private setTextureUniform(uniformName: string, image: HTMLImageElement): void {
+    if (!image.complete || image.naturalWidth === 0) {
+      console.warn(`ShaderRenderer: image for uniform ${uniformName} is not fully loaded`);
+      return;
+    }
+
+    // Clean up existing texture if present
+    const existingTexture = this.textures.get(uniformName);
+    if (existingTexture) {
+      this.gl.deleteTexture(existingTexture);
+    }
+
+    // Get or assign texture unit
+    if (!this.textureUnitMap.has(uniformName)) {
+      this.textureUnitMap.set(uniformName, this.nextTextureUnit);
+      this.nextTextureUnit++;
+    }
+    const textureUnit = this.textureUnitMap.get(uniformName)!;
+
+    // Activate correct texture unit before creating the texture
+    this.gl.activeTexture(this.gl.TEXTURE0 + textureUnit);
+
+    // Create and set up the new texture
+    const texture = this.gl.createTexture();
+    if (!texture) {
+      console.error(`ShaderRenderer: failed to create texture for ${uniformName}`);
+      return;
+    }
+
+    this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+
+    // Set texture parameters
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
+
+    // Upload image to texture
+    this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, image);
+
+    // Store texture for cleanup
+    this.textures.set(uniformName, texture);
+
+    // Set the sampler uniform to the texture unit
+    const loc = this.uniformLocations.get(uniformName);
+    if (loc !== null && loc !== undefined) {
+      this.gl.uniform1i(loc, textureUnit);
+    }
+
+    // Set aspect ratio uniform if it exists
+    const aspectRatioKey = `${uniformName}AspectRatio`;
+    const aspectRatioLoc = this.uniformLocations.get(aspectRatioKey);
+    if (aspectRatioLoc !== null && aspectRatioLoc !== undefined) {
+      const aspectRatio = image.naturalWidth / image.naturalHeight;
+      this.gl.uniform1f(aspectRatioLoc, aspectRatio);
+    }
+
+    const error = this.gl.getError();
+    if (error !== this.gl.NO_ERROR) {
+      console.error(`ShaderRenderer: WebGL error when uploading texture ${uniformName}:`, error);
+    }
+  }
+
   dispose() {
     this.stop();
+    
+    // Clean up textures
+    this.textures.forEach((texture) => {
+      this.gl.deleteTexture(texture);
+    });
+    this.textures.clear();
+    this.textureUnitMap.clear();
+    this.nextTextureUnit = 0;
+    
     if (this.program) {
       this.gl.deleteProgram(this.program);
       this.program = null;

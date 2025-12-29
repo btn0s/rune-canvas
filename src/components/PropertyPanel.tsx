@@ -75,6 +75,7 @@ import {
   isMixed,
   MIXED,
 } from "./property-panel-components";
+import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 
 // ============================================================================
 // TYPES
@@ -1762,12 +1763,85 @@ function ShaderProperties({
       );
     }
 
+    // String enum - check if all preset values for this param are strings and form a consistent set
+    if (typeof defaultValue === "string" && !defaultValue.startsWith("#") && shaderDef) {
+      // Collect all unique string values for this param from presets and default
+      const enumValues = new Set<string>();
+      enumValues.add(defaultValue);
+      shaderDef.presets?.forEach((preset) => {
+        const presetValue = preset.params[key];
+        if (typeof presetValue === "string") {
+          enumValues.add(presetValue);
+        }
+      });
+      
+      const enumArray = Array.from(enumValues);
+      
+      // If we have a small set of enum values (2-4), use segmented control
+      if (enumArray.length >= 2 && enumArray.length <= 4) {
+        const currentValue = typeof displayValue === "string" ? displayValue : defaultValue;
+        
+        return (
+          <div key={key} className="flex flex-col gap-1.5">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+              {key}
+            </span>
+            <ToggleGroup
+              type="single"
+              value={currentValue}
+              onValueChange={(val) => {
+                if (val) updateShaderParam(key, val);
+              }}
+              className="w-full"
+              variant="outline"
+              size="sm"
+              spacing={0}
+            >
+              {enumArray.map((enumVal) => (
+                <ToggleGroupItem
+                  key={enumVal}
+                  value={enumVal}
+                  className="flex-1 text-xs capitalize"
+                >
+                  {enumVal}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          </div>
+        );
+      }
+      
+      // For more enum values, use dropdown
+      if (enumArray.length > 4) {
+        const currentValue = typeof displayValue === "string" ? displayValue : defaultValue;
+        
+        return (
+          <div key={key} className="flex flex-col gap-1.5">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+              {key}
+            </span>
+            <PropertySelect
+              value={currentValue}
+              onValueChange={(val) => updateShaderParam(key, val)}
+            >
+              {enumArray.map((enumVal) => (
+                <SelectItem key={String(enumVal)} value={String(enumVal)} className="capitalize text-xs">
+                  {enumVal}
+                </SelectItem>
+              ))}
+            </PropertySelect>
+          </div>
+        );
+      }
+    }
+
     // Number (0-1 range typically, but could be other ranges)
     if (typeof defaultValue === "number") {
       // Determine range based on parameter name and value
       let min = 0;
       let max = 1;
       let step = 0.01;
+      let showAsPercentage = false;
 
       if (key.includes("count") || key.includes("Count")) {
         max = 20;
@@ -1778,6 +1852,10 @@ function ShaderProperties({
       } else if (key.includes("steps") || key.includes("Steps")) {
         max = 10;
         step = 1;
+      } else if (key === "speed" || key === "scale") {
+        // Speed and scale typically range 0-2 or 0-1, show as percentage
+        max = 2;
+        showAsPercentage = true;
       }
 
       const numValue =
@@ -1790,7 +1868,9 @@ function ShaderProperties({
               {key}
             </span>
             <div className="text-xs text-muted-foreground font-mono">
-              {numValue.toFixed(2)}
+              {showAsPercentage 
+                ? `${Math.round(numValue * 100)}%`
+                : numValue.toFixed(2)}
             </div>
           </div>
           <Slider
@@ -2066,19 +2146,21 @@ function ShaderProperties({
                   Foreground
                 </span>
                 <div className="flex flex-col gap-1.5">
-                  {foregroundColorParams.map((param: [string, unknown], idx) => {
+                  {foregroundColorParams.map((param: [string, unknown], idx: number) => {
                     const [paramKey, defaultValue] = param;
-                    const key = paramKey;
+                    const key: string = String(paramKey);
                     const value = getParamValue(key);
                     const displayValue = value ?? defaultValue;
-                    const colorValue =
+                    const colorValue: string =
                       (typeof displayValue === "string" &&
                       displayValue.startsWith("#")
                         ? displayValue
-                        : defaultValue) || "#ffffff";
+                        : (typeof defaultValue === "string" && defaultValue.startsWith("#")
+                          ? defaultValue
+                          : "#ffffff"));
                     return (
                       <ColorInput
-                        key={`fg-${String(key)}-${idx}`}
+                        key={`fg-${key}-${idx}`}
                         color={colorValue}
                         onChange={(newColor) =>
                           updateShaderParam(key, newColor)

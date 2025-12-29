@@ -9,12 +9,18 @@ import { meshGradientShader } from "./shaders/mesh-gradient";
 import { neuroNoiseShader } from "./shaders/neuro-noise";
 import { simplexNoiseShader } from "./shaders/simplex-noise";
 import { metaballsShader } from "./shaders/metaballs";
+import { ditheringShader } from "./shaders/dithering";
+import { dotGridShader } from "./shaders/dot-grid";
+import { spiralShader } from "./shaders/spiral";
 
 export const SHADER_REGISTRY: Map<string, ShaderDefinition> = new Map([
   [meshGradientShader.id, meshGradientShader],
   [neuroNoiseShader.id, neuroNoiseShader],
   [simplexNoiseShader.id, simplexNoiseShader],
   [metaballsShader.id, metaballsShader],
+  [ditheringShader.id, ditheringShader],
+  [dotGridShader.id, dotGridShader],
+  [spiralShader.id, spiralShader],
 ]);
 
 export function getShader(id: string): ShaderDefinition | undefined {

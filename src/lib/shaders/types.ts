@@ -5,7 +5,7 @@
  */
 
 export interface ShaderUniforms {
-  [key: string]: number | number[] | HTMLImageElement | undefined;
+  [key: string]: number | number[] | HTMLImageElement | string | undefined;
 }
 
 export interface ShaderParams {

@@ -2,7 +2,7 @@
  * React component wrapper for ShaderRenderer
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ShaderRenderer } from "./renderer";
 import type { ShaderRendererUniforms } from "./renderer";
 import type { ShaderDefinition } from "./types";
@@ -15,6 +15,81 @@ export interface ShaderRendererProps {
   speed?: number;
 }
 
+/**
+ * Load an image from a URL string
+ */
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    
+    // Handle CORS for external URLs
+    const isExternalUrl = (url: string): boolean => {
+      try {
+        if (url.startsWith('/')) return false;
+        const urlObject = new URL(url, window.location.origin);
+        return urlObject.origin !== window.location.origin;
+      } catch {
+        return false;
+      }
+    };
+    
+    if (isExternalUrl(url)) {
+      img.crossOrigin = 'anonymous';
+    }
+    
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Failed to load image from ${url}`));
+    img.src = url;
+  });
+}
+
+/**
+ * Process uniforms, converting string URLs to loaded images
+ */
+async function processUniforms(uniforms: ShaderRendererUniforms): Promise<ShaderRendererUniforms> {
+  const processed: ShaderRendererUniforms = {};
+  const imageLoadPromises: Promise<void>[] = [];
+
+  const isValidUrl = (url: string): boolean => {
+    try {
+      if (url.startsWith('/')) return true;
+      new URL(url);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  for (const [key, value] of Object.entries(uniforms)) {
+    if (typeof value === 'string' && value.trim() !== '') {
+      // Check if this uniform name suggests it's an image (e.g., u_image, u_noiseTexture)
+      if (key.includes('image') || key.includes('texture') || key.includes('Image') || key.includes('Texture')) {
+        if (isValidUrl(value)) {
+          const imagePromise = loadImage(value).then((img) => {
+            processed[key] = img;
+          }).catch((error) => {
+            console.warn(`Failed to load image for uniform ${key}:`, error);
+            // Use empty pixel as fallback
+            processed[key] = undefined;
+          });
+          imageLoadPromises.push(imagePromise);
+        } else {
+          console.warn(`Invalid URL for uniform ${key}: ${value}`);
+          processed[key] = undefined;
+        }
+      } else {
+        // Not an image uniform, keep as string
+        processed[key] = value;
+      }
+    } else {
+      processed[key] = value;
+    }
+  }
+
+  await Promise.all(imageLoadPromises);
+  return processed;
+}
+
 export function ShaderRendererComponent({
   shader,
   params,
@@ -24,10 +99,10 @@ export function ShaderRendererComponent({
 }: ShaderRendererProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<ShaderRenderer | null>(null);
+  const [loadedUniforms, setLoadedUniforms] = useState<ShaderRendererUniforms | null>(null);
 
+  // Load images from URLs
   useEffect(() => {
-    if (!canvasRef.current) return;
-
     const uniforms = shader.paramsToUniforms(params) as ShaderRendererUniforms;
     
     // Force background color to transparent - fills handle the background
@@ -35,11 +110,19 @@ export function ShaderRendererComponent({
       uniforms.u_colorBack = [0, 0, 0, 0]; // Transparent RGBA
     }
 
+    processUniforms(uniforms).then((processed) => {
+      setLoadedUniforms(processed);
+    });
+  }, [shader, params]);
+
+  useEffect(() => {
+    if (!canvasRef.current || !loadedUniforms) return;
+
     try {
       const renderer = new ShaderRenderer(
         canvasRef.current,
         shader.fragmentShader,
-        uniforms,
+        loadedUniforms,
         speed
       );
       renderer.resize(width, height);
@@ -52,7 +135,7 @@ export function ShaderRendererComponent({
     } catch (error) {
       console.error("Failed to initialize shader renderer:", error);
     }
-  }, [shader, params, speed]);
+  }, [shader, loadedUniforms, speed]);
 
   useEffect(() => {
     if (rendererRef.current) {
@@ -61,17 +144,10 @@ export function ShaderRendererComponent({
   }, [width, height]);
 
   useEffect(() => {
-    if (rendererRef.current) {
-      const uniforms = shader.paramsToUniforms(params) as ShaderRendererUniforms;
-      
-      // Force background color to transparent - fills handle the background
-      if (uniforms.u_colorBack) {
-        uniforms.u_colorBack = [0, 0, 0, 0]; // Transparent RGBA
-      }
-      
-      rendererRef.current.setUniforms(uniforms);
+    if (rendererRef.current && loadedUniforms) {
+      rendererRef.current.setUniforms(loadedUniforms);
     }
-  }, [shader, params]);
+  }, [shader, loadedUniforms]);
 
   return (
     <canvas
