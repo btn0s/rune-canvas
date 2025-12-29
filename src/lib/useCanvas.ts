@@ -1095,6 +1095,21 @@ export function useCanvas() {
     [pushHistory]
   );
 
+  // Helper to detect if a hex color is dark
+  const isDarkColor = useCallback((hex: string): boolean => {
+    // Remove # if present
+    const cleanHex = hex.replace("#", "");
+    // Ensure we have at least 6 characters (pad with 0 if needed)
+    const paddedHex = cleanHex.padEnd(6, "0");
+    // Parse RGB values
+    const r = parseInt(paddedHex.substring(0, 2), 16) || 0;
+    const g = parseInt(paddedHex.substring(2, 4), 16) || 0;
+    const b = parseInt(paddedHex.substring(4, 6), 16) || 0;
+    // Calculate brightness (simple average)
+    const brightness = (r + g + b) / 3;
+    return brightness < 128;
+  }, []);
+
   // Create text object (separate from frame/rectangle creation)
   const createText = useCallback(
     (canvasPoint: Point) => {
@@ -1132,6 +1147,18 @@ export function useCanvas() {
         };
       }
 
+      // Determine background color: use frame's solid fill if available, otherwise canvas background
+      let backgroundColor = canvasBackground;
+      if (targetParent && targetParent.type === "frame") {
+        const frame = targetParent as FrameObject;
+        const solidFill = frame.fills?.find(
+          (f) => f.type === "solid" && f.visible
+        );
+        if (solidFill && solidFill.type === "solid") {
+          backgroundColor = solidFill.color;
+        }
+      }
+
       const id = `text-${Date.now()}`;
       const name = `Text ${objectCounter.current++}`;
       const newText: TextObject = {
@@ -1158,7 +1185,7 @@ export function useCanvas() {
         verticalAlign: "top",
         textDecoration: "none",
         textTransform: "none",
-        color: "#000000",
+        color: isDarkColor(backgroundColor) ? "#ffffff" : "#000000",
         sizeMode: "auto-width",
       };
 
@@ -1168,7 +1195,7 @@ export function useCanvas() {
       setEditingTextId(id);
       setTool("select");
     },
-    [objects, pushHistory]
+    [objects, pushHistory, canvasBackground, isDarkColor]
   );
 
   // Set parent for nesting
