@@ -57,6 +57,7 @@ import {
   ChevronDown,
   CaseSensitive,
   CaseUpper,
+  Download,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Slider } from "./ui/slider";
@@ -90,6 +91,8 @@ interface PropertyPanelProps {
   sidebarMode: SidebarMode;
   canvasBackground: string;
   onCanvasBackgroundChange: (color: string) => void;
+  containerRef: React.RefObject<HTMLDivElement>;
+  exportPng: () => Promise<void>;
 }
 
 /** Props for type-specific property components - supports single or multiple objects */
@@ -99,6 +102,7 @@ interface ObjectPropertiesProps<T extends CanvasObject> {
   onUpdate: (updates: Partial<T>) => void;
   /** Apply per-object updates (for merging with existing nested values) */
   onUpdateEach: (getUpdates: (obj: T, index: number) => Partial<T>) => void;
+  exportPng?: () => Promise<void>;
 }
 
 // ============================================================================
@@ -147,6 +151,21 @@ function LayoutSection({ objects, onUpdate }: CommonPropertiesProps) {
           suffix="°"
         />
       </div>
+    </div>
+  );
+}
+
+/** Export section - for frames and shaders */
+function ExportSection({ exportPng }: { exportPng?: () => Promise<void> }) {
+  if (!exportPng) return null;
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <SectionLabel>Export</SectionLabel>
+      <PropertyButton onClick={exportPng} className="flex items-center justify-center gap-1.5">
+        <Download className="size-3.5" />
+        Export PNG
+      </PropertyButton>
     </div>
   );
 }
@@ -739,6 +758,7 @@ function FrameProperties({
   objects: frames,
   onUpdate,
   onUpdateEach,
+  exportPng,
 }: ObjectPropertiesProps<FrameObject>) {
   // Use first frame for conditional UI (e.g., flex direction icons)
   const firstFrame = frames[0];
@@ -1350,6 +1370,9 @@ function FrameProperties({
           });
         }}
       />
+
+      {/* Export Section - only show for single selection */}
+      {frames.length === 1 && <ExportSection exportPng={exportPng} />}
     </>
   );
 }
@@ -1632,6 +1655,7 @@ function ShaderProperties({
   objects: shaders,
   onUpdate,
   onUpdateEach,
+  exportPng,
 }: ObjectPropertiesProps<ShaderObject>) {
   const commonUpdate = onUpdate as (updates: Partial<CanvasObject>) => void;
   const isSingle = shaders.length === 1;
@@ -2404,6 +2428,9 @@ function ShaderProperties({
           });
         }}
       />
+
+      {/* Export Section - only show for single selection */}
+      {shaders.length === 1 && <ExportSection exportPng={exportPng} />}
     </>
   );
 }
@@ -2563,6 +2590,8 @@ export function PropertyPanel({
   sidebarMode,
   canvasBackground,
   onCanvasBackgroundChange,
+  containerRef: _containerRef,
+  exportPng,
 }: PropertyPanelProps) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -2689,6 +2718,7 @@ export function PropertyPanel({
             objects={selectedObjects as FrameObject[]}
             onUpdate={handleUpdateAll}
             onUpdateEach={handleUpdateEach}
+            exportPng={exportPng}
           />
         );
       case "text":
@@ -2713,6 +2743,7 @@ export function PropertyPanel({
             objects={selectedObjects as ShaderObject[]}
             onUpdate={handleUpdateAll}
             onUpdateEach={handleUpdateEach}
+            exportPng={exportPng}
           />
         );
       default:

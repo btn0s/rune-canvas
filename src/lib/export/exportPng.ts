@@ -112,3 +112,97 @@ export async function exportNodeToPng(
 
   await exportElement(node, fileName, pixelRatio, width, height);
 }
+
+/**
+ * Copy a DOM node to PNG and copy to clipboard
+ * 
+ * Uses html2canvas-pro to capture the full styled element including:
+ * - All CSS styling (fills, shadows, borders, border-radius, etc.)
+ * - Embedded WebGL/2D canvases (shaders)
+ * - Modern CSS features (oklch colors, transforms, etc.)
+ */
+export async function copyNodeToPng(
+  node: HTMLElement | null,
+  options: {
+    pixelRatio?: number;
+    width?: number;
+    height?: number;
+  } = {}
+): Promise<void> {
+  if (!node) {
+    throw new Error("Node element is required");
+  }
+  const { pixelRatio = 3, width, height } = options;
+
+  const html2canvas = (await import("html2canvas-pro")).default;
+  
+  // Get bounding rect to know the element's actual rendered size
+  const rect = node.getBoundingClientRect();
+  
+  // Use provided dimensions if available (from data model), otherwise use measured dimensions
+  const exportWidth = width ?? rect.width;
+  const exportHeight = height ?? rect.height;
+  
+  if (exportWidth === 0 || exportHeight === 0) {
+    throw new Error("Element has zero dimensions");
+  }
+
+  // Capture the element
+  const canvas = await html2canvas(node, {
+    width: exportWidth,
+    height: exportHeight,
+    scale: pixelRatio,
+    backgroundColor: null, // Preserve transparency
+    useCORS: true, // Allow cross-origin images
+    logging: false, // Disable console logging
+  });
+  
+  // Crop to exact dimensions
+  const exportCanvas = document.createElement("canvas");
+  exportCanvas.width = exportWidth * pixelRatio;
+  exportCanvas.height = exportHeight * pixelRatio;
+  
+  const ctx = exportCanvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("Failed to get 2D context");
+  }
+  
+  const sourceWidth = Math.min(canvas.width, exportWidth * pixelRatio);
+  const sourceHeight = Math.min(canvas.height, exportHeight * pixelRatio);
+  
+  ctx.drawImage(
+    canvas,
+    0, 0,
+    sourceWidth, sourceHeight,
+    0, 0,
+    sourceWidth, sourceHeight
+  );
+
+  // Convert canvas to blob and copy to clipboard
+  return new Promise<void>((resolve, reject) => {
+    exportCanvas.toBlob(async (blob) => {
+      if (!blob) {
+        reject(new Error("Failed to create blob"));
+        return;
+      }
+      
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "image/png": blob,
+          }),
+        ]);
+        resolve();
+      } catch (error) {
+        // Fallback: convert to data URL and use legacy clipboard API
+        try {
+          const dataUrl = exportCanvas.toDataURL("image/png");
+          await navigator.clipboard.writeText(dataUrl);
+          resolve();
+        } catch (fallbackError) {
+          reject(fallbackError);
+        }
+      }
+    }, "image/png");
+  });
+}

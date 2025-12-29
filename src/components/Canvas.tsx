@@ -62,7 +62,7 @@ import { getShader } from "@/lib/shaders/registry";
 import { cn } from "@/lib/utils";
 import type { Point, Tool } from "../lib/types";
 import type { CommandContext } from "../lib/commands/types";
-import { exportNodeToPng } from "../lib/export/exportPng";
+import { exportNodeToPng, copyNodeToPng } from "../lib/export/exportPng";
 import "../lib/commands/definitions";
 
 const HANDLE_SIZE = 8;
@@ -398,27 +398,17 @@ export function Canvas() {
     [setCommandActive, setCommandInput]
   );
 
-  const exportPng = useCallback(async () => {
-    if (!containerRef.current) return;
-    
-    // Find the selected object (frame or shader)
-    const exportableObject = selectedObjects.find(
-      (obj) => obj.type === "frame" || obj.type === "shader"
-    );
-    if (!exportableObject) {
-      console.warn("Please select a frame or shader to export");
-      return;
-    }
+  // Helper to get exportable element from selected object
+  const getExportableElement = useCallback((obj: CanvasObject): HTMLElement | null => {
+    if (!containerRef.current) return null;
+    if (obj.type !== "frame" && obj.type !== "shader") return null;
 
     // Find the object's wrapper DOM element
     const wrapperElement = containerRef.current.querySelector(
-      `[data-object-id="${exportableObject.id}"]`
+      `[data-object-id="${obj.id}"]`
     ) as HTMLElement;
     
-    if (!wrapperElement) {
-      console.error("Object element not found");
-      return;
-    }
+    if (!wrapperElement) return null;
 
     let contentElement: HTMLElement | null = null;
     
@@ -433,7 +423,24 @@ export function Canvas() {
       }
     }
 
-    const elementToExport = contentElement || wrapperElement;
+    return contentElement || wrapperElement;
+  }, []);
+
+  const exportPng = useCallback(async () => {
+    // Find the selected object (frame or shader)
+    const exportableObject = selectedObjects.find(
+      (obj) => obj.type === "frame" || obj.type === "shader"
+    );
+    if (!exportableObject) {
+      console.warn("Please select a frame or shader to export");
+      return;
+    }
+
+    const elementToExport = getExportableElement(exportableObject);
+    if (!elementToExport) {
+      console.error("Object element not found");
+      return;
+    }
 
     try {
       await exportNodeToPng(elementToExport, {
@@ -445,7 +452,34 @@ export function Canvas() {
     } catch (error) {
       console.error("Failed to export PNG:", error);
     }
-  }, [selectedObjects]);
+  }, [selectedObjects, getExportableElement]);
+
+  const copyAsPng = useCallback(async () => {
+    // Find the selected object (frame or shader)
+    const exportableObject = selectedObjects.find(
+      (obj) => obj.type === "frame" || obj.type === "shader"
+    );
+    if (!exportableObject) {
+      console.warn("Please select a frame or shader to copy");
+      return;
+    }
+
+    const elementToExport = getExportableElement(exportableObject);
+    if (!elementToExport) {
+      console.error("Object element not found");
+      return;
+    }
+
+    try {
+      await copyNodeToPng(elementToExport, {
+        pixelRatio: 3, // 3x scale for high-quality exports
+        width: exportableObject.width,
+        height: exportableObject.height,
+      });
+    } catch (error) {
+      console.error("Failed to copy PNG:", error);
+    }
+  }, [selectedObjects, getExportableElement]);
 
   const commandContext: CommandContext = useMemo(
     () => ({
@@ -1405,7 +1439,55 @@ export function Canvas() {
 
       // === Editing (Cmd/Ctrl) ===
       { key: "c", modifiers: { meta: true }, action: copySelected },
-      { key: "v", modifiers: { meta: true }, action: pasteClipboard },
+      {
+        key: "v",
+        modifiers: { meta: true },
+        action: async () => {
+          // Check for images in clipboard first
+          try {
+            const clipboardItems = await navigator.clipboard.read();
+            let imageFound = false;
+            for (const item of clipboardItems) {
+              for (const type of item.types) {
+                if (type.startsWith("image/")) {
+                  imageFound = true;
+                  const blob = await item.getType(type);
+                  const reader = new FileReader();
+                  reader.onload = (event) => {
+                    const src = event.target?.result as string;
+                    const img = new Image();
+                    img.onload = () => {
+                      if (!containerRef.current) return;
+                      const rect = containerRef.current.getBoundingClientRect();
+                      const centerX = rect.width / 2;
+                      const centerY = rect.height / 2;
+                      const canvasPoint = screenToCanvas(centerX, centerY);
+                      addImage(src, img.naturalWidth, img.naturalHeight, canvasPoint);
+                    };
+                    img.onerror = () => {
+                      console.error("Failed to load pasted image");
+                    };
+                    img.src = src;
+                  };
+                  reader.onerror = () => {
+                    console.error("Failed to read pasted image");
+                  };
+                  reader.readAsDataURL(blob);
+                  return; // Exit early, image handled
+                }
+              }
+            }
+            // No image found, use canvas paste
+            if (!imageFound) {
+              pasteClipboard();
+            }
+          } catch (error) {
+            // Clipboard API not available or failed, try sync API via paste event
+            // The paste event handler will catch it
+            pasteClipboard();
+          }
+        },
+      },
       { key: "d", modifiers: { meta: true }, action: duplicateSelected },
       {
         key: "z",
@@ -1608,6 +1690,92 @@ export function Canvas() {
     },
     [screenToCanvas, addImage]
   );
+
+  // Paste image handler
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      // Don't handle paste if user is editing text or typing in an input
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
+      // Don't handle paste if command bar is active
+      if (commandState.isActive) {
+        return;
+      }
+
+      const processImage = (blob: Blob) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const src = event.target?.result as string;
+          const img = new Image();
+          img.onload = () => {
+            if (!containerRef.current) return;
+
+            // Place image at center of viewport
+            const rect = containerRef.current.getBoundingClientRect();
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            const canvasPoint = screenToCanvas(centerX, centerY);
+
+            addImage(src, img.naturalWidth, img.naturalHeight, canvasPoint);
+          };
+          img.onerror = () => {
+            console.error("Failed to load pasted image");
+          };
+          img.src = src;
+        };
+        reader.onerror = () => {
+          console.error("Failed to read pasted image");
+        };
+        reader.readAsDataURL(blob);
+      };
+
+      // First, try the async Clipboard API (for images copied via our copy function)
+      try {
+        const clipboardItems = await navigator.clipboard.read();
+        for (const item of clipboardItems) {
+          for (const type of item.types) {
+            if (type.startsWith("image/")) {
+              e.preventDefault();
+              e.stopPropagation();
+              const blob = await item.getType(type);
+              processImage(blob);
+              return;
+            }
+          }
+        }
+      } catch (error) {
+        // Clipboard API might not be available or might fail, fall through to sync API
+      }
+
+      // Fallback to synchronous clipboard API (for external pastes)
+      if (e.clipboardData) {
+        const items = Array.from(e.clipboardData.items);
+        const imageItem = items.find((item) => item.type.startsWith("image/"));
+
+        if (imageItem) {
+          e.preventDefault();
+          e.stopPropagation();
+
+          const file = imageItem.getAsFile();
+          if (file) {
+            processImage(file);
+          }
+        }
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => {
+      window.removeEventListener("paste", handlePaste);
+    };
+  }, [screenToCanvas, addImage, commandState.isActive]);
 
   const getHandleCursor = useCallback(
     (handle: ResizeHandle | null): string => {
@@ -1984,6 +2152,8 @@ export function Canvas() {
               sidebarMode={sidebarMode}
               canvasBackground={canvasBackground}
               onCanvasBackgroundChange={setCanvasBackground}
+              containerRef={containerRef}
+              exportPng={exportPng}
             />
 
             {/* Toolbar */}
@@ -2108,8 +2278,8 @@ export function Canvas() {
                (selectedObjects[0]?.type === "frame" || selectedObjects[0]?.type === "shader") && (
                 <>
                   <ContextMenuSeparator />
-                  <ContextMenuItem onClick={exportPng}>
-                    Export PNG
+                  <ContextMenuItem onClick={copyAsPng}>
+                    Copy as PNG
                   </ContextMenuItem>
                 </>
               )}
