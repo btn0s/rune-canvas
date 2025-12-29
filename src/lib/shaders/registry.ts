@@ -29,6 +29,8 @@ import { edgeDetectionShader } from "./shaders/edge-detection";
 import { tiltShiftShader } from "./shaders/tilt-shift";
 import { fisheyeShader } from "./shaders/fisheye";
 import { cellularLoopShader } from "./shaders/cellular-loop";
+import { heatmapShader } from "./shaders/heatmap";
+import { liquidMetalShader } from "./shaders/liquid-metal";
 
 export const SHADER_REGISTRY: Map<string, ShaderDefinition> = new Map([
   [meshGradientShader.id, meshGradientShader],
@@ -55,6 +57,8 @@ export const SHADER_REGISTRY: Map<string, ShaderDefinition> = new Map([
   [tiltShiftShader.id, tiltShiftShader],
   [fisheyeShader.id, fisheyeShader],
   [cellularLoopShader.id, cellularLoopShader],
+  [heatmapShader.id, heatmapShader],
+  [liquidMetalShader.id, liquidMetalShader],
 ]);
 
 export function getShader(id: string): ShaderDefinition | undefined {
