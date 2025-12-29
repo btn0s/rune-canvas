@@ -8,6 +8,8 @@ import { useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { ShaderRendererComponent } from "@/lib/shaders/ShaderRenderer";
 import { getAllShaders } from "@/lib/shaders/registry";
@@ -50,6 +52,10 @@ export function ShaderPickerDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto p-0">
+        <DialogTitle className="sr-only">Select a shader</DialogTitle>
+        <DialogDescription className="sr-only">
+          Choose from a collection of WebGL shaders to add to your canvas
+        </DialogDescription>
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Shaders</h2>
         </div>

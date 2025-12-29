@@ -118,19 +118,31 @@ export function ShaderRendererComponent({
   useEffect(() => {
     if (!canvasRef.current || !loadedUniforms) return;
 
+    // Dispose previous renderer before creating a new one
+    if (rendererRef.current) {
+      rendererRef.current.dispose();
+      rendererRef.current = null;
+    }
+
     try {
+      // Use shared WebGL context - all shaders use the same context!
       const renderer = new ShaderRenderer(
-        canvasRef.current,
+        canvasRef.current, // Display canvas (uses 2D context for final output)
         shader.fragmentShader,
         loadedUniforms,
         speed
       );
+      
       renderer.resize(width, height);
       rendererRef.current = renderer;
 
       return () => {
+        // Always dispose, even if renderer changed (defensive cleanup)
+        if (rendererRef.current === renderer) {
+          rendererRef.current = null;
+        }
+        // Dispose the renderer (cleans up framebuffer, textures, etc.)
         renderer.dispose();
-        rendererRef.current = null;
       };
     } catch (error) {
       console.error("Failed to initialize shader renderer:", error);
@@ -154,11 +166,8 @@ export function ShaderRendererComponent({
       ref={canvasRef}
       style={{
         display: "block",
-        maxWidth: "100%",
-        maxHeight: "100%",
-        width: "auto",
-        height: "auto",
-        objectFit: "contain",
+        width: "100%",
+        height: "100%",
       }}
     />
   );

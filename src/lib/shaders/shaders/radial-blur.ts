@@ -28,23 +28,33 @@ void main() {
     // Normalize direction
     if (dist > 0.0) {
         dir /= dist;
+    } else {
+        // At center, sample directly
+        fragColor = texture(u_image, uv);
+        return;
     }
     
-    // Accumulate samples
+    // Accumulate samples along the radial direction
     vec4 color = vec4(0.0);
-    int samples = min(u_samples, 16);
+    int numSamples = min(u_samples, 16);
+    float sampleCount = float(numSamples);
     
+    // Sample along the radial direction (towards center)
     for (int i = 0; i < 16; i++) {
-        if (i >= samples) break;
+        if (i >= numSamples) break;
         
-        float t = float(i) / float(samples - 1);
+        float t = float(i) / max(sampleCount - 1.0, 1.0);
+        // Offset towards center (negative direction)
         float offset = t * u_strength * dist;
-        vec2 sampleUV = uv + dir * offset;
+        vec2 sampleUV = uv - dir * offset;
+        
+        // Clamp to valid UV range
+        sampleUV = clamp(sampleUV, vec2(0.0), vec2(1.0));
         
         color += texture(u_image, sampleUV);
     }
     
-    color /= float(samples);
+    color /= sampleCount;
     fragColor = color;
 }
 `;

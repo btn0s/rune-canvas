@@ -2,7 +2,10 @@
  * WebGL Shader Renderer
  *
  * Simplified WebGL 2.0 shader mount for rendering shaders on canvas
+ * Uses shared WebGL context to avoid context limit issues
  */
+
+import { sharedContext } from "./shared-context";
 
 // Vertex shader source - simple full-screen quad
 // Outputs v_objectUV, v_patternUV, and v_imageUV for compatibility
@@ -88,6 +91,7 @@ export class ShaderRenderer {
   private canvas: HTMLCanvasElement;
   private program: WebGLProgram | null = null;
   private uniformLocations: Map<string, WebGLUniformLocation | null> = new Map();
+  private uniformTypes: Map<string, number> = new Map(); // Store uniform types (gl.INT, gl.FLOAT, etc.)
   private rafId: number | null = null;
   private startTime = Date.now();
   private speed = 1;
@@ -96,6 +100,11 @@ export class ShaderRenderer {
   private textures: Map<string, WebGLTexture> = new Map();
   private textureUnitMap: Map<string, number> = new Map();
   private nextTextureUnit = 0;
+  private positionBuffer: WebGLBuffer | null = null;
+  private renderTargetId: string | null = null;
+  private framebuffer: WebGLFramebuffer | null = null;
+  private renderTexture: WebGLTexture | null = null;
+  private displayCtx: CanvasRenderingContext2D | null = null;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -108,11 +117,22 @@ export class ShaderRenderer {
     this.uniforms = uniforms;
     this.speed = speed;
 
-    const gl = canvas.getContext("webgl2");
-    if (!gl) {
-      throw new Error("WebGL 2.0 is not supported");
+    // Use shared WebGL context - single context for all shaders!
+    this.gl = sharedContext.getContext();
+    this.renderTargetId = `shader-${Date.now()}-${Math.random()}`;
+
+    // Initialize canvas dimensions if not set
+    if (!this.canvas.width || !this.canvas.height) {
+      const pixelRatio = window.devicePixelRatio || 1;
+      this.canvas.width = (this.canvas.offsetWidth || 1) * pixelRatio;
+      this.canvas.height = (this.canvas.offsetHeight || 1) * pixelRatio;
     }
-    this.gl = gl;
+
+    // Get or create 2D context for copying pixels to display canvas
+    this.displayCtx = this.canvas.getContext("2d", { alpha: true });
+    if (!this.displayCtx) {
+      throw new Error("Failed to get 2D context for display canvas");
+    }
 
     this.init();
   }
@@ -126,12 +146,15 @@ export class ShaderRenderer {
 
     // Setup position attribute
     const positionLocation = this.gl.getAttribLocation(this.program, "a_position");
-    const positionBuffer = this.gl.createBuffer();
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, positionBuffer);
+    this.positionBuffer = this.gl.createBuffer();
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.positionBuffer);
     const positions = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, positions, this.gl.STATIC_DRAW);
     this.gl.enableVertexAttribArray(positionLocation);
     this.gl.vertexAttribPointer(positionLocation, 2, this.gl.FLOAT, false, 0, 0);
+
+    // Create render target (framebuffer) for this shader
+    this.createRenderTarget();
 
     // Get uniform locations
     this.updateUniformLocations();
@@ -141,24 +164,119 @@ export class ShaderRenderer {
     this.start();
   }
 
+  private createRenderTarget(): void {
+    if (!this.renderTargetId) return;
+
+    // Use the same logic as resize() to ensure consistency
+    const displayWidth = this.canvas.offsetWidth || 1;
+    const displayHeight = this.canvas.offsetHeight || 1;
+    const pixelRatio = window.devicePixelRatio || 1;
+    const renderWidth = Math.max(1, Math.round(displayWidth * pixelRatio));
+    const renderHeight = Math.max(1, Math.round(displayHeight * pixelRatio));
+    
+    // Update canvas internal resolution to match
+    this.canvas.width = renderWidth;
+    this.canvas.height = renderHeight;
+
+    // Create framebuffer
+    this.framebuffer = this.gl.createFramebuffer();
+    if (!this.framebuffer) {
+      throw new Error("Failed to create framebuffer");
+    }
+
+    // Create texture to render into
+    this.renderTexture = this.gl.createTexture();
+    if (!this.renderTexture) {
+      this.gl.deleteFramebuffer(this.framebuffer);
+      throw new Error("Failed to create render texture");
+    }
+
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.renderTexture);
+    this.gl.texImage2D(
+      this.gl.TEXTURE_2D,
+      0,
+      this.gl.RGBA,
+      renderWidth,
+      renderHeight,
+      0,
+      this.gl.RGBA,
+      this.gl.UNSIGNED_BYTE,
+      null
+    );
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+
+    // Attach texture to framebuffer
+    this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.framebuffer);
+    this.gl.framebufferTexture2D(
+      this.gl.FRAMEBUFFER,
+      this.gl.COLOR_ATTACHMENT0,
+      this.gl.TEXTURE_2D,
+      this.renderTexture,
+      0
+    );
+
+    // Check framebuffer status
+    const status = this.gl.checkFramebufferStatus(this.gl.FRAMEBUFFER);
+    if (status !== this.gl.FRAMEBUFFER_COMPLETE) {
+      this.gl.deleteTexture(this.renderTexture);
+      this.gl.deleteFramebuffer(this.framebuffer);
+      throw new Error(`Framebuffer incomplete: ${status}`);
+    }
+
+    this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, null);
+  }
+
   private updateUniformLocations() {
     this.uniformLocations.clear();
-    this.uniformLocations.set("u_time", this.gl.getUniformLocation(this.program!, "u_time"));
-    this.uniformLocations.set("u_resolution", this.gl.getUniformLocation(this.program!, "u_resolution"));
-    this.uniformLocations.set("u_pixelRatio", this.gl.getUniformLocation(this.program!, "u_pixelRatio"));
+    this.uniformTypes.clear();
+    
+    if (!this.program) return;
 
-    // Get locations for all provided uniforms
+    // Query all active uniforms to get their types
+    const numUniforms = this.gl.getProgramParameter(this.program, this.gl.ACTIVE_UNIFORMS);
+    for (let i = 0; i < numUniforms; i++) {
+      const uniformInfo = this.gl.getActiveUniform(this.program, i);
+      if (uniformInfo) {
+        const location = this.gl.getUniformLocation(this.program, uniformInfo.name);
+        this.uniformLocations.set(uniformInfo.name, location);
+        this.uniformTypes.set(uniformInfo.name, uniformInfo.type);
+      }
+    }
+
+    // Also explicitly set standard uniforms if they exist
+    const timeLoc = this.gl.getUniformLocation(this.program, "u_time");
+    if (timeLoc !== null) {
+      this.uniformLocations.set("u_time", timeLoc);
+    }
+    const resolutionLoc = this.gl.getUniformLocation(this.program, "u_resolution");
+    if (resolutionLoc !== null) {
+      this.uniformLocations.set("u_resolution", resolutionLoc);
+    }
+    const pixelRatioLoc = this.gl.getUniformLocation(this.program, "u_pixelRatio");
+    if (pixelRatioLoc !== null) {
+      this.uniformLocations.set("u_pixelRatio", pixelRatioLoc);
+    }
+
+    // Also check for aspect ratio uniforms (e.g., u_imageAspectRatio for u_image)
     Object.keys(this.uniforms).forEach((key) => {
-      this.uniformLocations.set(key, this.gl.getUniformLocation(this.program!, key));
-      // Also check for aspect ratio uniforms (e.g., u_imageAspectRatio for u_image)
       if (this.uniforms[key] instanceof HTMLImageElement) {
         const aspectRatioKey = `${key}AspectRatio`;
-        this.uniformLocations.set(aspectRatioKey, this.gl.getUniformLocation(this.program!, aspectRatioKey));
+        const aspectRatioLoc = this.gl.getUniformLocation(this.program!, aspectRatioKey);
+        if (aspectRatioLoc !== null) {
+          this.uniformLocations.set(aspectRatioKey, aspectRatioLoc);
+        }
       }
     });
   }
 
   setUniforms(uniforms: ShaderRendererUniforms) {
+    if (this.gl.isContextLost()) {
+      return;
+    }
     this.uniforms = uniforms;
     this.updateUniformLocations();
     this.applyUniforms();
@@ -166,6 +284,11 @@ export class ShaderRenderer {
 
   private applyUniforms() {
     if (!this.program) return;
+    
+    // Check if context was lost
+    if (this.gl.isContextLost()) {
+      return;
+    }
 
     this.gl.useProgram(this.program);
 
@@ -194,14 +317,33 @@ export class ShaderRenderer {
       if (loc === null || loc === undefined) return;
 
       if (typeof value === "number") {
-        this.gl.uniform1f(loc, value);
+        // Check if this is an integer uniform
+        const uniformType = this.uniformTypes.get(key);
+        if (uniformType === this.gl.INT || uniformType === this.gl.SAMPLER_2D) {
+          this.gl.uniform1i(loc, Math.round(value));
+        } else {
+          this.gl.uniform1f(loc, value);
+        }
       } else if (Array.isArray(value)) {
+        const uniformType = this.uniformTypes.get(key);
         if (value.length === 2) {
-          this.gl.uniform2f(loc, value[0] as number, value[1] as number);
+          if (uniformType === this.gl.INT_VEC2) {
+            this.gl.uniform2i(loc, Math.round(value[0] as number), Math.round(value[1] as number));
+          } else {
+            this.gl.uniform2f(loc, value[0] as number, value[1] as number);
+          }
         } else if (value.length === 3) {
-          this.gl.uniform3f(loc, value[0] as number, value[1] as number, value[2] as number);
+          if (uniformType === this.gl.INT_VEC3) {
+            this.gl.uniform3i(loc, Math.round(value[0] as number), Math.round(value[1] as number), Math.round(value[2] as number));
+          } else {
+            this.gl.uniform3f(loc, value[0] as number, value[1] as number, value[2] as number);
+          }
         } else if (value.length === 4) {
-          this.gl.uniform4f(loc, value[0] as number, value[1] as number, value[2] as number, value[3] as number);
+          if (uniformType === this.gl.INT_VEC4) {
+            this.gl.uniform4i(loc, Math.round(value[0] as number), Math.round(value[1] as number), Math.round(value[2] as number), Math.round(value[3] as number));
+          } else {
+            this.gl.uniform4f(loc, value[0] as number, value[1] as number, value[2] as number, value[3] as number);
+          }
         } else if (value.length > 4 && value.length % 4 === 0) {
           // Array of vec4s (for colors array)
           this.gl.uniform4fv(loc, new Float32Array(value as number[]));
@@ -217,22 +359,194 @@ export class ShaderRenderer {
   }
 
   resize(width: number, height: number) {
-    this.canvas.width = width * (window.devicePixelRatio || 1);
-    this.canvas.height = height * (window.devicePixelRatio || 1);
-    this.canvas.style.width = `${width}px`;
-    this.canvas.style.height = `${height}px`;
+    if (this.gl.isContextLost()) {
+      return;
+    }
+    
+    // Use the actual container size (from CSS) or fall back to passed dimensions
+    // The canvas fills its container via CSS (width/height: 100%)
+    const displayWidth = this.canvas.offsetWidth || width;
+    const displayHeight = this.canvas.offsetHeight || height;
+    
+    const pixelRatio = window.devicePixelRatio || 1;
+    const renderWidth = Math.max(1, Math.round(displayWidth * pixelRatio));
+    const renderHeight = Math.max(1, Math.round(displayHeight * pixelRatio));
+    
+    // Set internal resolution (for rendering) - this determines the actual pixel resolution
+    // Don't set inline styles - let CSS handle display size (width/height: 100%)
+    const needsResize = this.canvas.width !== renderWidth || this.canvas.height !== renderHeight;
+    
+    if (needsResize) {
+      this.canvas.width = renderWidth;
+      this.canvas.height = renderHeight;
+      
+      // Update framebuffer size to match (or create if it doesn't exist)
+      if (this.framebuffer && this.renderTexture) {
+        // Recreate texture with new size
+        this.gl.deleteTexture(this.renderTexture);
+        this.gl.deleteFramebuffer(this.framebuffer);
+      }
+      
+      // Create or recreate framebuffer with correct size
+      this.renderTexture = this.gl.createTexture();
+      if (!this.renderTexture) {
+        throw new Error("Failed to create render texture");
+      }
+
+      this.gl.bindTexture(this.gl.TEXTURE_2D, this.renderTexture);
+      this.gl.texImage2D(
+        this.gl.TEXTURE_2D,
+        0,
+        this.gl.RGBA,
+        renderWidth,
+        renderHeight,
+        0,
+        this.gl.RGBA,
+        this.gl.UNSIGNED_BYTE,
+        null
+      );
+      this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
+      this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
+      this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
+      this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+
+      this.framebuffer = this.gl.createFramebuffer();
+      if (!this.framebuffer) {
+        this.gl.deleteTexture(this.renderTexture);
+        throw new Error("Failed to create framebuffer");
+      }
+
+      this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.framebuffer);
+      this.gl.framebufferTexture2D(
+        this.gl.FRAMEBUFFER,
+        this.gl.COLOR_ATTACHMENT0,
+        this.gl.TEXTURE_2D,
+        this.renderTexture,
+        0
+      );
+      
+      // Verify framebuffer is complete
+      const status = this.gl.checkFramebufferStatus(this.gl.FRAMEBUFFER);
+      if (status !== this.gl.FRAMEBUFFER_COMPLETE) {
+        this.gl.deleteTexture(this.renderTexture);
+        this.gl.deleteFramebuffer(this.framebuffer);
+        this.renderTexture = null;
+        this.framebuffer = null;
+        throw new Error(`Framebuffer incomplete after resize: ${status}`);
+      }
+      
+      this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
+      this.gl.bindTexture(this.gl.TEXTURE_2D, null);
+    }
+    
     this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
   }
 
+  /**
+   * Get the canvas element (useful when using context pool)
+   */
+  getCanvas(): HTMLCanvasElement {
+    return this.canvas;
+  }
+
   private render() {
-    if (!this.program) return;
+    if (!this.program || !this.framebuffer) return;
+    
+    // Check if context was lost - stop rendering if so
+    if (this.gl.isContextLost()) {
+      this.stop();
+      return;
+    }
+
+    // Ensure canvas has valid dimensions
+    if (this.canvas.width <= 0 || this.canvas.height <= 0) {
+      this.rafId = requestAnimationFrame(() => this.render());
+      return;
+    }
+
+    // Bind framebuffer to render into texture
+    this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.framebuffer);
+    this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    
+    // Clear the framebuffer before rendering (important for proper output)
+    this.gl.clearColor(0, 0, 0, 0); // Clear to transparent black
+    this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+
+    // Check for errors after clear
+    const clearError = this.gl.getError();
+    if (clearError !== this.gl.NO_ERROR) {
+      console.warn(`WebGL error after clear: ${clearError}`);
+    }
 
     this.applyUniforms();
 
     this.gl.useProgram(this.program);
     this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
 
+    // Check for errors after draw
+    const drawError = this.gl.getError();
+    if (drawError !== this.gl.NO_ERROR) {
+      console.warn(`WebGL error after drawArrays: ${drawError}`);
+    }
+
+    // Copy rendered result to display canvas (framebuffer is still bound)
+    this.copyToDisplay();
+
+    // Unbind framebuffer after copying
+    this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
+
     this.rafId = requestAnimationFrame(() => this.render());
+  }
+
+  private copyToDisplay(): void {
+    if (!this.framebuffer || !this.displayCtx) return;
+
+    // Ensure framebuffer is bound before reading
+    this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.framebuffer);
+    
+    // Check for WebGL errors before reading
+    const error = this.gl.getError();
+    if (error !== this.gl.NO_ERROR) {
+      console.warn(`WebGL error before readPixels: ${error}`);
+    }
+
+    // Read pixels from framebuffer
+    const pixels = new Uint8Array(this.canvas.width * this.canvas.height * 4);
+    this.gl.readPixels(
+      0,
+      0,
+      this.canvas.width,
+      this.canvas.height,
+      this.gl.RGBA,
+      this.gl.UNSIGNED_BYTE,
+      pixels
+    );
+
+    // Check for errors after reading
+    const readError = this.gl.getError();
+    if (readError !== this.gl.NO_ERROR) {
+      console.warn(`WebGL error after readPixels: ${readError}`);
+      return;
+    }
+
+    // Copy to display canvas using cached 2D context
+    const displayCtx = this.displayCtx;
+
+    // Create ImageData
+    const imageData = displayCtx.createImageData(this.canvas.width, this.canvas.height);
+    
+    // Flip vertically (WebGL origin is bottom-left, canvas 2D is top-left)
+    const flipped = new Uint8ClampedArray(imageData.data.length);
+    for (let y = 0; y < this.canvas.height; y++) {
+      const srcRow = this.canvas.height - 1 - y;
+      flipped.set(
+        pixels.subarray(srcRow * this.canvas.width * 4, (srcRow + 1) * this.canvas.width * 4),
+        y * this.canvas.width * 4
+      );
+    }
+    imageData.data.set(flipped);
+    
+    displayCtx.putImageData(imageData, 0, 0);
   }
 
   start() {
@@ -250,19 +564,35 @@ export class ShaderRenderer {
   }
 
   private setTextureUniform(uniformName: string, image: HTMLImageElement): void {
-    if (!image.complete || image.naturalWidth === 0) {
+    if (this.gl.isContextLost()) {
+      return;
+    }
+    
+    if (!image.complete || image.naturalWidth === 0 || image.naturalHeight === 0) {
       console.warn(`ShaderRenderer: image for uniform ${uniformName} is not fully loaded`);
       return;
+    }
+
+    // Check for WebGL errors before starting
+    const preError = this.gl.getError();
+    if (preError !== this.gl.NO_ERROR && preError !== this.gl.CONTEXT_LOST_WEBGL) {
+      console.warn(`ShaderRenderer: WebGL error before texture upload for ${uniformName}:`, preError);
     }
 
     // Clean up existing texture if present
     const existingTexture = this.textures.get(uniformName);
     if (existingTexture) {
       this.gl.deleteTexture(existingTexture);
+      this.textures.delete(uniformName);
     }
 
     // Get or assign texture unit
     if (!this.textureUnitMap.has(uniformName)) {
+      // Check if we've exceeded max texture units (typically 16)
+      if (this.nextTextureUnit >= 16) {
+        console.error(`ShaderRenderer: exceeded maximum texture units (16) for ${uniformName}`);
+        return;
+      }
       this.textureUnitMap.set(uniformName, this.nextTextureUnit);
       this.nextTextureUnit++;
     }
@@ -286,8 +616,21 @@ export class ShaderRenderer {
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
 
-    // Upload image to texture
-    this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, image);
+    // Upload image to texture - ensure we're using the correct format
+    try {
+      this.gl.texImage2D(
+        this.gl.TEXTURE_2D,
+        0,
+        this.gl.RGBA,
+        this.gl.RGBA,
+        this.gl.UNSIGNED_BYTE,
+        image
+      );
+    } catch (error) {
+      console.error(`ShaderRenderer: exception uploading texture ${uniformName}:`, error);
+      this.gl.deleteTexture(texture);
+      return;
+    }
 
     // Store texture for cleanup
     this.textures.set(uniformName, texture);
@@ -306,8 +649,9 @@ export class ShaderRenderer {
       this.gl.uniform1f(aspectRatioLoc, aspectRatio);
     }
 
+    // Check for errors after texture operations
     const error = this.gl.getError();
-    if (error !== this.gl.NO_ERROR) {
+    if (error !== this.gl.NO_ERROR && error !== this.gl.CONTEXT_LOST_WEBGL) {
       console.error(`ShaderRenderer: WebGL error when uploading texture ${uniformName}:`, error);
     }
   }
@@ -315,8 +659,35 @@ export class ShaderRenderer {
   dispose() {
     this.stop();
     
-    // Clean up textures
-    this.textures.forEach((texture) => {
+    // Check if context was lost - if so, just clear references
+    if (this.gl.isContextLost()) {
+      this.program = null;
+      this.textures.clear();
+      this.textureUnitMap.clear();
+      this.uniformLocations.clear();
+      this.uniformTypes.clear();
+      this.framebuffer = null;
+      this.renderTexture = null;
+      return;
+    }
+    
+    // Clean up render target (framebuffer and texture)
+    if (this.renderTexture) {
+      this.gl.deleteTexture(this.renderTexture);
+      this.renderTexture = null;
+    }
+    if (this.framebuffer) {
+      this.gl.deleteFramebuffer(this.framebuffer);
+      this.framebuffer = null;
+    }
+    
+    // Clean up textures and unbind them
+    this.textures.forEach((texture, uniformName) => {
+      const textureUnit = this.textureUnitMap.get(uniformName);
+      if (textureUnit !== undefined) {
+        this.gl.activeTexture(this.gl.TEXTURE0 + textureUnit);
+        this.gl.bindTexture(this.gl.TEXTURE_2D, null);
+      }
       this.gl.deleteTexture(texture);
     });
     this.textures.clear();
@@ -324,8 +695,39 @@ export class ShaderRenderer {
     this.nextTextureUnit = 0;
     
     if (this.program) {
+      // Unbind program first
+      this.gl.useProgram(null);
+      
+      // Get attached shaders and detach them before deleting program
+      const attachedShaders = this.gl.getAttachedShaders(this.program);
+      if (attachedShaders) {
+        attachedShaders.forEach((shader) => {
+          this.gl.detachShader(this.program!, shader);
+          this.gl.deleteShader(shader);
+        });
+      }
       this.gl.deleteProgram(this.program);
       this.program = null;
     }
+    
+    // Clean up position buffer
+    if (this.positionBuffer) {
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.positionBuffer);
+      this.gl.deleteBuffer(this.positionBuffer);
+      this.positionBuffer = null;
+    }
+    
+    // Unbind everything
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, null);
+    this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, null);
+    this.gl.bindRenderbuffer(this.gl.RENDERBUFFER, null);
+    this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
+    
+    // Clear uniform locations and types
+    this.uniformLocations.clear();
+    this.uniformTypes.clear();
+    
+    // Clear any errors
+    this.gl.getError();
   }
 }
