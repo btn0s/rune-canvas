@@ -7,6 +7,7 @@ import type {
 } from "../lib/commands/types";
 import type { FrameObject } from "../lib/types";
 import { cn } from "@/lib/utils";
+import { Search } from "lucide-react";
 
 interface CommandBarProps {
   context: CommandContext;
@@ -235,15 +236,13 @@ export function CommandBar({ context }: CommandBarProps) {
 
   const showSuggestions =
     isActive && availableSuggestions.length > 0 && !pendingCommand;
-  const showIndexPicker = isActive && pendingIndexItems && pendingIndexItems.length > 0;
+  const showIndexPicker =
+    isActive && pendingIndexItems && pendingIndexItems.length > 0;
   const showArgInput = isActive && pendingCommand && !pendingIndexItems;
 
   const clampedSelectedIndex = Math.min(
     selectedIndex,
-    Math.max(
-      0,
-      (pendingIndexItems?.length ?? availableSuggestions.length) - 1
-    )
+    Math.max(0, (pendingIndexItems?.length ?? availableSuggestions.length) - 1)
   );
 
   const getPromptText = () => {
@@ -253,118 +252,118 @@ export function CommandBar({ context }: CommandBarProps) {
   };
 
   return (
-    <div className="relative">
-      <div
-        className={cn(
-          "flex items-center gap-2 px-3 py-1.5 bg-card border border-border border-b-0 rounded-t-md min-w-[200px] transition-colors",
-          isActive && "border-primary/50"
-        )}
-      >
-        <span className="text-muted-foreground text-sm">{getPromptText()}</span>
-        {showArgInput && (
-          <input
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={(e) => setCommandInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onBlur={() => {
-              setTimeout(() => {
-                if (!inputRef.current?.matches(":focus")) {
-                  clearCommand();
-                }
-              }, 150);
-            }}
-            placeholder={pendingCommand?.argPlaceholder || "Enter value..."}
-            className="bg-transparent outline-none text-sm flex-1 placeholder:text-muted-foreground/50"
-          />
-        )}
-        {!showArgInput && (
-          <input
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={(e) => setCommandInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onBlur={() => {
-              setTimeout(() => {
-                if (!inputRef.current?.matches(":focus")) {
-                  clearCommand();
-                }
-              }, 150);
-            }}
-            placeholder="Type a command..."
-            className="bg-transparent outline-none text-sm flex-1 placeholder:text-muted-foreground/50"
-            style={{ display: pendingIndexItems ? "none" : undefined }}
-          />
-        )}
+    <div className="bg-popover border border-border rounded-lg shadow-lg overflow-hidden w-full max-w-2xl">
+      {/* Input */}
+      <div className="px-4 py-2 border-b border-border flex items-center gap-3">
+        <Search className="size-4 shrink-0 text-muted-foreground opacity-50" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={input}
+          onChange={(e) => setCommandInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={() => {
+            setTimeout(() => {
+              if (!inputRef.current?.matches(":focus")) {
+                clearCommand();
+              }
+            }, 150);
+          }}
+          placeholder={
+            showArgInput
+              ? pendingCommand?.argPlaceholder || "Enter value..."
+              : pendingIndexItems
+              ? `${pendingCommand?.name} - Select:`
+              : "Search"
+          }
+          className="flex-1 bg-transparent outline-none text-base placeholder:text-muted-foreground"
+        />
       </div>
 
-      {showIndexPicker && (
-        <div className="absolute bottom-full left-0 mb-1 w-full bg-popover border border-border rounded-md shadow-lg max-h-[300px] overflow-y-auto">
-          {pendingIndexItems.map((item, idx) => (
-            <button
-              key={item.index}
-              className={cn(
-                "w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors",
-                idx === clampedSelectedIndex ? "bg-muted" : "hover:bg-muted/50"
-              )}
-              onClick={() => {
-                if (pendingCommand?.argType) {
-                  setPendingIndex(item.index);
-                  inputRef.current?.focus();
-                } else if (pendingCommand) {
-                  executeCommand(pendingCommand, undefined, item.index);
-                }
-              }}
-              onMouseEnter={() => setCommandSelectedIndex(idx)}
-            >
-              <span className="text-muted-foreground font-mono text-xs w-4">
-                {item.index + 1}
-              </span>
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {showSuggestions && (
-        <div className="absolute bottom-full left-0 mb-1 w-full bg-popover border border-border rounded-md shadow-lg max-h-[300px] overflow-y-auto">
-          {availableSuggestions.map((cmd, idx) => (
-            <button
-              key={cmd.id}
-              className={cn(
-                "w-full px-3 py-2 text-left text-sm flex items-center justify-between gap-2 transition-colors",
-                idx === clampedSelectedIndex ? "bg-muted" : "hover:bg-muted/50"
-              )}
-              onClick={() => {
-                startCommand(cmd);
-                inputRef.current?.focus();
-              }}
-              onMouseEnter={() => setCommandSelectedIndex(idx)}
-            >
-              <div className="flex items-center gap-2">
-                <span className="font-medium">{cmd.name}</span>
-                {cmd.argType && (
-                  <span className="text-xs text-muted-foreground">
-                    (needs value)
-                  </span>
+      {/* Results */}
+      <div className="h-[300px] overflow-y-auto">
+        {showIndexPicker && (
+          <div>
+            {pendingIndexItems.map((item, idx) => (
+              <button
+                key={item.index}
+                className={cn(
+                  "w-full px-4 py-2 text-left flex items-center gap-3 transition-colors",
+                  idx === clampedSelectedIndex
+                    ? "bg-muted"
+                    : "hover:bg-muted/50"
                 )}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground font-mono">
-                  {cmd.aliases[0]}
+                onClick={() => {
+                  if (pendingCommand?.argType) {
+                    setPendingIndex(item.index);
+                    inputRef.current?.focus();
+                  } else if (pendingCommand) {
+                    executeCommand(pendingCommand, undefined, item.index);
+                  }
+                }}
+                onMouseEnter={() => setCommandSelectedIndex(idx)}
+              >
+                <span className="text-muted-foreground font-mono text-sm w-6">
+                  {item.index + 1}
                 </span>
-                {cmd.shortcutHint && (
-                  <span className="text-xs text-muted-foreground/60">
-                    {cmd.shortcutHint}
-                  </span>
-                )}
+                <span className="text-sm">{item.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {showSuggestions && (
+          <div>
+            {availableSuggestions.length === 0 ? (
+              <div className="px-4 py-4 text-center text-sm text-muted-foreground">
+                No commands found
               </div>
-            </button>
-          ))}
-        </div>
-      )}
+            ) : (
+              availableSuggestions.map((cmd, idx) => (
+                <button
+                  key={cmd.id}
+                  className={cn(
+                    "w-full px-4 py-2 text-left flex items-center justify-between gap-4 transition-colors",
+                    idx === clampedSelectedIndex
+                      ? "bg-muted"
+                      : "hover:bg-muted/50"
+                  )}
+                  onClick={() => {
+                    startCommand(cmd);
+                    inputRef.current?.focus();
+                  }}
+                  onMouseEnter={() => setCommandSelectedIndex(idx)}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="font-medium text-sm">{cmd.name}</span>
+                    {cmd.argType && (
+                      <span className="text-xs text-muted-foreground">
+                        (needs value)
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground font-mono">
+                      {cmd.aliases[0]}
+                    </span>
+                    {cmd.shortcutHint && (
+                      <span className="text-xs text-muted-foreground/60">
+                        {cmd.shortcutHint}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+
+        {showArgInput && !showIndexPicker && (
+          <div className="px-4 py-4 text-center text-sm text-muted-foreground">
+            Press Enter to confirm
+          </div>
+        )}
+      </div>
     </div>
   );
 }

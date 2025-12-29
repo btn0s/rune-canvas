@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { useCanvas } from "../lib/useCanvas";
+import { useCanvasStore } from "../lib/canvasStore";
 import {
   useKeyboardShortcuts,
   type Shortcut,
@@ -39,7 +40,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Toggle } from "@/components/ui/toggle";
+import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
+import { Search } from "lucide-react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -50,7 +53,11 @@ import {
 } from "@/components/ui/context-menu";
 import { LayersPanel } from "./LayersPanel";
 import { PropertyPanel } from "./PropertyPanel";
+import { CommandBar } from "./CommandBar";
+import { cn } from "@/lib/utils";
 import type { Point, Tool } from "../lib/types";
+import type { CommandContext } from "../lib/commands/types";
+import "../lib/commands/definitions";
 
 const HANDLE_SIZE = 8;
 const EDGE_HIT_WIDTH = 6;
@@ -256,7 +263,7 @@ function createRotatedCursor(angle: number, type: "resize" | "rotate"): string {
       </g>
     </svg>
   `;
-  
+
   const rotateSvg = `
     <svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'>
       <defs>
@@ -270,9 +277,9 @@ function createRotatedCursor(angle: number, type: "resize" | "rotate"): string {
       </g>
     </svg>
   `;
-  
+
   const svg = type === "resize" ? resizeSvg : rotateSvg;
-  const encoded = encodeURIComponent(svg.replace(/\s+/g, ' ').trim());
+  const encoded = encodeURIComponent(svg.replace(/\s+/g, " ").trim());
   return `url("data:image/svg+xml,${encoded}") 12 12, crosshair`;
 }
 
@@ -284,8 +291,6 @@ function getCursor(angle: number, type: "resize" | "rotate"): string {
   }
   return cursorCache.get(key)!;
 }
-
-
 
 export function Canvas() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -366,6 +371,71 @@ export function Canvas() {
     pasteAt,
   } = useCanvas();
 
+  const { commandState, setCommandActive, setCommandInput } = useCanvasStore();
+
+  const commandContext: CommandContext = useMemo(
+    () => ({
+      selectedIds,
+      selectedObjects,
+      objects,
+      setTool,
+      copySelected,
+      pasteClipboard,
+      duplicateSelected,
+      deleteSelected,
+      selectAllSiblings,
+      alignLeft,
+      alignRight,
+      alignTop,
+      alignBottom,
+      alignCenterH,
+      alignCenterV,
+      distributeHorizontal,
+      distributeVertical,
+      bringToFront,
+      sendToBack,
+      bringForward,
+      sendBackward,
+      frameSelection,
+      undo,
+      redo,
+      canUndo,
+      canRedo,
+      updateObject,
+      setSelectedIds: select,
+    }),
+    [
+      selectedIds,
+      selectedObjects,
+      objects,
+      setTool,
+      copySelected,
+      pasteClipboard,
+      duplicateSelected,
+      deleteSelected,
+      selectAllSiblings,
+      alignLeft,
+      alignRight,
+      alignTop,
+      alignBottom,
+      alignCenterH,
+      alignCenterV,
+      distributeHorizontal,
+      distributeVertical,
+      bringToFront,
+      sendToBack,
+      bringForward,
+      sendBackward,
+      frameSelection,
+      undo,
+      redo,
+      canUndo,
+      canRedo,
+      updateObject,
+      select,
+    ]
+  );
+
   // Space key held for temporary pan
   const [spaceHeld, setSpaceHeld] = useState(false);
 
@@ -375,7 +445,9 @@ export function Canvas() {
   // Hovered resize handle for cursor
   const [hoveredHandle, setHoveredHandle] = useState<ResizeHandle | null>(null);
 
-  const [hoveredRotationCorner, setHoveredRotationCorner] = useState<number | null>(null);
+  const [hoveredRotationCorner, setHoveredRotationCorner] = useState<
+    number | null
+  >(null);
 
   // Hovered object for visual feedback
   const [hoveredObjectId, setHoveredObjectId] = useState<string | null>(null);
@@ -385,6 +457,30 @@ export function Canvas() {
 
   // Crop mode state (meta key held during resize of an image)
   const [isCropMode, setIsCropMode] = useState(false);
+
+  // Initialize and track mouse position via CSS variables
+  useEffect(() => {
+    const updateMousePosition = (e: MouseEvent) => {
+      document.documentElement.style.setProperty("--mouse-x", `${e.clientX}px`);
+      document.documentElement.style.setProperty("--mouse-y", `${e.clientY}px`);
+    };
+
+    // Initialize to center of screen
+    document.documentElement.style.setProperty(
+      "--mouse-x",
+      `${window.innerWidth / 2}px`
+    );
+    document.documentElement.style.setProperty(
+      "--mouse-y",
+      `${window.innerHeight / 2}px`
+    );
+
+    // Track mouse movement globally
+    document.addEventListener("mousemove", updateMousePosition);
+    return () => {
+      document.removeEventListener("mousemove", updateMousePosition);
+    };
+  }, []);
 
   // Focus text element when editing starts
   useEffect(() => {
@@ -805,16 +901,36 @@ export function Canvas() {
 
       const edgeHit = EDGE_HIT_WIDTH;
 
-      if (lx >= -w / 2 + hs && lx <= w / 2 - hs && ly >= -h / 2 - edgeHit && ly <= -h / 2 + edgeHit) {
+      if (
+        lx >= -w / 2 + hs &&
+        lx <= w / 2 - hs &&
+        ly >= -h / 2 - edgeHit &&
+        ly <= -h / 2 + edgeHit
+      ) {
         return "n";
       }
-      if (lx >= -w / 2 + hs && lx <= w / 2 - hs && ly >= h / 2 - edgeHit && ly <= h / 2 + edgeHit) {
+      if (
+        lx >= -w / 2 + hs &&
+        lx <= w / 2 - hs &&
+        ly >= h / 2 - edgeHit &&
+        ly <= h / 2 + edgeHit
+      ) {
         return "s";
       }
-      if (lx >= -w / 2 - edgeHit && lx <= -w / 2 + edgeHit && ly >= -h / 2 + hs && ly <= h / 2 - hs) {
+      if (
+        lx >= -w / 2 - edgeHit &&
+        lx <= -w / 2 + edgeHit &&
+        ly >= -h / 2 + hs &&
+        ly <= h / 2 - hs
+      ) {
         return "w";
       }
-      if (lx >= w / 2 - edgeHit && lx <= w / 2 + edgeHit && ly >= -h / 2 + hs && ly <= h / 2 - hs) {
+      if (
+        lx >= w / 2 - edgeHit &&
+        lx <= w / 2 + edgeHit &&
+        ly >= -h / 2 + hs &&
+        ly <= h / 2 - hs
+      ) {
         return "e";
       }
 
@@ -847,10 +963,18 @@ export function Canvas() {
       const zoneOffset = 4;
 
       const corners = [
-        { x: -w / 2 - zoneOffset - zoneSize, y: -h / 2 - zoneOffset - zoneSize, angle: 0 },
+        {
+          x: -w / 2 - zoneOffset - zoneSize,
+          y: -h / 2 - zoneOffset - zoneSize,
+          angle: 0,
+        },
         { x: w / 2 + zoneOffset, y: -h / 2 - zoneOffset - zoneSize, angle: 90 },
         { x: w / 2 + zoneOffset, y: h / 2 + zoneOffset, angle: 180 },
-        { x: -w / 2 - zoneOffset - zoneSize, y: h / 2 + zoneOffset, angle: 270 },
+        {
+          x: -w / 2 - zoneOffset - zoneSize,
+          y: h / 2 + zoneOffset,
+          angle: 270,
+        },
       ];
 
       for (const corner of corners) {
@@ -877,7 +1001,7 @@ export function Canvas() {
 
       for (const obj of objects) {
         if (obj.locked) continue;
-        
+
         // Get actual DOM position for accurate hit testing
         const el = containerRef.current.querySelector(
           `[data-object-id="${obj.id}"]`
@@ -1040,7 +1164,8 @@ export function Canvas() {
       const rotationCorner = hitTestRotationHandle(screenX, screenY);
       setHoveredRotationCorner(rotationCorner);
 
-      const handle = rotationCorner !== null ? null : hitTestHandle(screenX, screenY);
+      const handle =
+        rotationCorner !== null ? null : hitTestHandle(screenX, screenY);
       setHoveredHandle(handle);
 
       if (!handle && rotationCorner === null) {
@@ -1130,13 +1255,53 @@ export function Canvas() {
   // Keyboard shortcuts (declarative)
   const shortcuts: Shortcut[] = useMemo(
     () => [
-      // === Tools ===
-      { key: "v", action: () => setTool("select") },
-      { key: "h", action: () => setTool("hand") },
-      { key: "f", action: () => setTool("frame") },
-      { key: "t", action: () => setTool("text") },
-      { key: "s", action: () => setTool("shader") },
-      { key: "Escape", action: () => setTool("select") },
+      // === Command Bar ===
+      {
+        key: "k",
+        modifiers: { meta: true },
+        action: () => {
+          setCommandActive(true);
+          setCommandInput("");
+        },
+      },
+      {
+        key: "Escape",
+        action: () => {
+          if (commandState.isActive) {
+            setCommandActive(false);
+            setCommandInput("");
+          } else {
+            setTool("select");
+          }
+        },
+      },
+
+      // === Tools (only when command bar is not active) ===
+      {
+        key: "v",
+        action: () => setTool("select"),
+        when: () => !commandState.isActive,
+      },
+      {
+        key: "h",
+        action: () => setTool("hand"),
+        when: () => !commandState.isActive,
+      },
+      {
+        key: "f",
+        action: () => setTool("frame"),
+        when: () => !commandState.isActive,
+      },
+      {
+        key: "t",
+        action: () => setTool("text"),
+        when: () => !commandState.isActive,
+      },
+      {
+        key: "s",
+        action: () => setTool("shader"),
+        when: () => !commandState.isActive,
+      },
 
       // === Editing (Cmd/Ctrl) ===
       { key: "c", modifiers: { meta: true }, action: copySelected },
@@ -1232,6 +1397,9 @@ export function Canvas() {
       },
     ],
     [
+      commandState.isActive,
+      setCommandActive,
+      setCommandInput,
       setTool,
       copySelected,
       pasteClipboard,
@@ -1405,6 +1573,11 @@ export function Canvas() {
             onDrop={handleDrop}
             onContextMenu={handleContextMenu}
           >
+            {/* Command hint */}
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 text-xs text-muted-foreground/50 pointer-events-none">
+              ⌘K to open command bar
+            </div>
+
             {/* DOM layer - objects */}
             <div
               className="absolute top-0 left-0 origin-top-left pointer-events-none"
@@ -1416,14 +1589,16 @@ export function Canvas() {
                 // Render an object (always recursive - children render inside parent)
                 const renderObject = (obj: CanvasObject): React.ReactNode => {
                   if (!obj.visible) return null;
-                  
+
                   const isSelected = selectedIds.includes(obj.id);
                   const isEditing = editingTextId === obj.id;
                   const isPotentialParent = potentialParentId === obj.id;
                   const frame = isFrame(obj) ? obj : null;
 
                   // Get children for this object (filter out hidden)
-                  const children = getChildren(obj, objects).filter(c => c.visible);
+                  const children = getChildren(obj, objects).filter(
+                    (c) => c.visible
+                  );
 
                   // During drag (with actual movement), objects break out of flex flow
                   const isBeingDragged =
@@ -1621,8 +1796,16 @@ export function Canvas() {
               selectedIds={selectedIds}
               onSelect={select}
               onHoverLayer={setHoveredObjectId}
-              onToggleVisibility={(id) => updateObject(id, { visible: !objects.find(o => o.id === id)?.visible })}
-              onToggleLock={(id) => updateObject(id, { locked: !objects.find(o => o.id === id)?.locked })}
+              onToggleVisibility={(id) =>
+                updateObject(id, {
+                  visible: !objects.find((o) => o.id === id)?.visible,
+                })
+              }
+              onToggleLock={(id) =>
+                updateObject(id, {
+                  locked: !objects.find((o) => o.id === id)?.locked,
+                })
+              }
               onRename={(id, name) => updateObject(id, { name })}
               sidebarMode={sidebarMode}
             />
@@ -1638,27 +1821,69 @@ export function Canvas() {
             />
 
             {/* Toolbar */}
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex gap-1 p-1.5 bg-card border border-border border-b-0 rounded-t-lg">
-              {TOOLS.map((t) => (
-                <Tooltip key={t.id}>
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 flex flex-col gap-2 items-center">
+              <div
+                className={cn(
+                  "transition-all duration-200 ease-out",
+                  commandState.isActive
+                    ? "translate-y-0 opacity-100 z-50"
+                    : "translate-y-full opacity-0 pointer-events-none z-20"
+                )}
+              >
+                <CommandBar context={commandContext} />
+              </div>
+
+              <div className="flex gap-1 p-1.5 bg-card border border-border border-b-0 rounded-t-lg">
+                {TOOLS.map((t) => (
+                  <Tooltip key={t.id}>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Toggle
+                          size="sm"
+                          pressed={tool === t.id}
+                          onPressedChange={() => setTool(t.id)}
+                          aria-label={t.label}
+                        >
+                          {t.icon}
+                        </Toggle>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="top"
+                      className="flex items-center gap-2"
+                    >
+                      <span>{t.label}</span>
+                      <Kbd>{t.shortcut}</Kbd>
+                    </TooltipContent>
+                  </Tooltip>
+                ))}
+                <Tooltip>
                   <TooltipTrigger asChild>
-                    <span>
-                      <Toggle
-                        size="sm"
-                        pressed={tool === t.id}
-                        onPressedChange={() => setTool(t.id)}
-                        aria-label={t.label}
-                      >
-                        {t.icon}
-                      </Toggle>
-                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setCommandActive(true);
+                        setCommandInput("");
+                      }}
+                      aria-label="Open command bar"
+                      className="h-8 px-2 gap-1.5"
+                    >
+                      <Search className="size-4" />
+                      <Kbd className="text-xs">⌘K</Kbd>
+                    </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="top" className="flex items-center gap-2">
-                    <span>{t.label}</span>
-                    <Kbd>{t.shortcut}</Kbd>
+                  <TooltipContent
+                    side="top"
+                    className="flex items-center gap-2"
+                  >
+                    <span>Command</span>
+                    <Kbd>⌘K</Kbd>
                   </TooltipContent>
                 </Tooltip>
-              ))}
+              </div>
+
+              {/* Command Bar - slides up from toolbar */}
             </div>
           </div>
         </ContextMenuTrigger>

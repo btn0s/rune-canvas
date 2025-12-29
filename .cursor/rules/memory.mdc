@@ -1,0 +1,37 @@
+---
+description: Guidelines for using the memory MCP system
+alwaysApply: true
+---
+
+# Memory Usage
+
+## Use Memory Extensively
+
+Use the memory MCP system proactively and extensively. When asked a question that might be stored in memory, search thoroughly before answering—exhaust all relevant queries. Save relevant information consistently.
+
+## Two Types of Memory
+
+### Project-Level Memory
+Store information specific to this project:
+- Architecture decisions and patterns
+- Project-specific preferences and conventions
+- Implementation details and solutions
+- Project context and constraints
+
+### Cross-Project / Personal Memory
+Store information that applies across projects or is personal:
+- User preferences (coding style, tools, workflows)
+- Personal context (location, timezone, preferences)
+- Cross-project patterns and learnings
+- Reusable knowledge and preferences
+
+## When to Store
+
+**Always store:**
+- User preferences and personal context
+- Important decisions and their rationale
+- Lessons learned and patterns that worked
+- Project-specific conventions and choices
+- Context that should persist across conversations
+
+**When in doubt, store it.** Memory is cheap; lost context is expensive.
