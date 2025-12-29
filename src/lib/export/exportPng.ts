@@ -1,9 +1,9 @@
 /**
  * PNG Export Utilities
  *
- * Export canvas objects to PNG images
- * - Shaders: Direct canvas.toDataURL() export (fast, pixel-perfect)
- * - Frames: html2canvas-pro (supports modern CSS like oklch, handles fonts/transforms)
+ * Export canvas objects to PNG images using html2canvas-pro.
+ * This properly captures all CSS styling (fills, shadows, borders, etc.)
+ * for both frames and shaders, while also handling embedded WebGL canvases.
  */
 
 /**
@@ -18,89 +18,69 @@ function sanitizeFileName(name: string): string {
 }
 
 /**
- * Export a shader object by finding its canvas and using toDataURL directly
- * Optionally scales up the canvas for higher resolution exports
+ * Export a DOM element using html2canvas-pro (supports modern CSS like oklch)
+ * Properly captures all styling including fills, shadows, borders, and embedded canvases.
  */
-async function exportShaderCanvas(
-  shaderElement: HTMLElement,
+async function exportElement(
+  element: HTMLElement,
   fileName: string,
-  pixelRatio: number = 3
-): Promise<void> {
-  // Find the canvas element within the shader
-  const sourceCanvas = shaderElement.querySelector("canvas") as HTMLCanvasElement;
-  if (!sourceCanvas) {
-    throw new Error("Shader canvas not found");
-  }
-
-  if (sourceCanvas.width === 0 || sourceCanvas.height === 0) {
-    throw new Error("Shader canvas has zero dimensions");
-  }
-
-  let dataUrl: string;
-  
-  if (pixelRatio === 1) {
-    // Export at native resolution
-    dataUrl = sourceCanvas.toDataURL("image/png");
-  } else {
-    // Scale up for higher resolution export
-    const exportCanvas = document.createElement("canvas");
-    exportCanvas.width = sourceCanvas.width * pixelRatio;
-    exportCanvas.height = sourceCanvas.height * pixelRatio;
-    
-    const ctx = exportCanvas.getContext("2d");
-    if (!ctx) {
-      throw new Error("Failed to get 2D context");
-    }
-    
-    // Use imageSmoothingEnabled for better quality when scaling up
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-    
-    // Draw the source canvas scaled up
-    ctx.drawImage(sourceCanvas, 0, 0, exportCanvas.width, exportCanvas.height);
-    
-    dataUrl = exportCanvas.toDataURL("image/png");
-  }
-  
-  // Create download link
-  const link = document.createElement("a");
-  link.download = `${sanitizeFileName(fileName)}.png`;
-  link.href = dataUrl;
-  link.click();
-}
-
-/**
- * Export a frame object using html2canvas-pro (supports modern CSS like oklch)
- */
-async function exportFrameElement(
-  frameElement: HTMLElement,
-  fileName: string,
-  pixelRatio: number = 3
+  pixelRatio: number = 3,
+  expectedWidth?: number,
+  expectedHeight?: number
 ): Promise<void> {
   const html2canvas = (await import("html2canvas-pro")).default;
   
-  // Get bounding rect for dimensions
-  const rect = frameElement.getBoundingClientRect();
+  // Get bounding rect to know the element's actual rendered size
+  const rect = element.getBoundingClientRect();
   
-  if (rect.width === 0 || rect.height === 0) {
-    throw new Error("Frame element has zero dimensions");
+  // Use provided dimensions if available (from data model), otherwise use measured dimensions
+  // This ensures we export at the correct size even if the element is scaled/transformed
+  const width = expectedWidth ?? rect.width;
+  const height = expectedHeight ?? rect.height;
+  
+  if (width === 0 || height === 0) {
+    throw new Error("Element has zero dimensions");
   }
 
   // Use html2canvas-pro which supports modern CSS (oklch, etc.)
-  // It handles CSS transforms, fonts, and complex layouts
-  const canvas = await html2canvas(frameElement, {
-    width: rect.width,
-    height: rect.height,
+  // It handles CSS transforms, fonts, complex layouts, and embedded canvases
+  // Capture the element - html2canvas will capture it at its current position
+  const canvas = await html2canvas(element, {
+    width,
+    height,
     scale: pixelRatio,
-    backgroundColor: "#ffffff",
+    backgroundColor: null, // Preserve transparency
     useCORS: true, // Allow cross-origin images
     logging: false, // Disable console logging
-    windowWidth: rect.width,
-    windowHeight: rect.height,
   });
+  
+  // html2canvas might return a canvas that's larger than the element
+  // (due to shadows, outlines, or positioning). Crop to exact dimensions.
+  // The element should be at the top-left of the captured canvas.
+  const exportCanvas = document.createElement("canvas");
+  exportCanvas.width = width * pixelRatio;
+  exportCanvas.height = height * pixelRatio;
+  
+  const ctx = exportCanvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("Failed to get 2D context");
+  }
+  
+  // Crop from top-left (where the element should be)
+  // If canvas is larger, take the top-left portion
+  const sourceWidth = Math.min(canvas.width, width * pixelRatio);
+  const sourceHeight = Math.min(canvas.height, height * pixelRatio);
+  
+  ctx.drawImage(
+    canvas,
+    0, 0, // Source position (top-left)
+    sourceWidth, sourceHeight, // Source size
+    0, 0, // Destination position
+    sourceWidth, sourceHeight // Destination size
+  );
 
   // Convert canvas to data URL and download
-  const dataUrl = canvas.toDataURL("image/png");
+  const dataUrl = exportCanvas.toDataURL("image/png");
   
   const link = document.createElement("a");
   link.download = `${sanitizeFileName(fileName)}.png`;
@@ -111,27 +91,24 @@ async function exportFrameElement(
 /**
  * Export a DOM node to PNG and trigger download
  * 
- * Automatically detects if it's a shader (has canvas) or frame (DOM content)
+ * Uses html2canvas-pro to capture the full styled element including:
+ * - All CSS styling (fills, shadows, borders, border-radius, etc.)
+ * - Embedded WebGL/2D canvases (shaders)
+ * - Modern CSS features (oklch colors, transforms, etc.)
  */
 export async function exportNodeToPng(
   node: HTMLElement | null,
   options: {
     fileName?: string;
     pixelRatio?: number;
+    width?: number;
+    height?: number;
   } = {}
 ): Promise<void> {
   if (!node) {
     throw new Error("Node element is required");
   }
-  const { fileName = "export", pixelRatio = 3 } = options;
+  const { fileName = "export", pixelRatio = 3, width, height } = options;
 
-  // Check if this is a shader (has a canvas element)
-  const canvas = node.querySelector("canvas");
-  if (canvas && canvas.width > 0 && canvas.height > 0) {
-    // Shader: export canvas with optional scaling
-    await exportShaderCanvas(node, fileName, pixelRatio);
-  } else {
-    // Frame: use html2canvas-pro for modern CSS support (oklch, etc.)
-    await exportFrameElement(node, fileName, pixelRatio);
-  }
+  await exportElement(node, fileName, pixelRatio, width, height);
 }

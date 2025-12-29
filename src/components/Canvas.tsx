@@ -411,20 +411,43 @@ export function Canvas() {
       return;
     }
 
-    // Find the object's DOM element
-    const objectElement = containerRef.current.querySelector(
+    // Find the object's wrapper DOM element
+    const wrapperElement = containerRef.current.querySelector(
       `[data-object-id="${exportableObject.id}"]`
     ) as HTMLElement;
     
-    if (!objectElement) {
+    if (!wrapperElement) {
       console.error("Object element not found");
       return;
     }
 
+    // Find the content element (the styled div, not the wrapper with label)
+    // The label is positioned absolutely above, so we want the first child div
+    // that's not the label (which has bottom: "100%" positioning)
+    let contentElement: HTMLElement | null = null;
+    
+    for (const child of Array.from(wrapperElement.children)) {
+      if (child instanceof HTMLElement) {
+        const style = window.getComputedStyle(child);
+        // Skip the label (it's positioned absolutely above with bottom: "100%")
+        if (style.position === "absolute" && style.bottom !== "auto") {
+          continue;
+        }
+        // This should be the content div (frame or shader styled div)
+        contentElement = child;
+        break;
+      }
+    }
+
+    // Fallback to wrapper if we can't find content element
+    const elementToExport = contentElement || wrapperElement;
+
     try {
-      await exportNodeToPng(objectElement, {
+      await exportNodeToPng(elementToExport, {
         fileName: exportableObject.name,
         pixelRatio: 3, // 3x scale for high-quality exports
+        width: exportableObject.width,
+        height: exportableObject.height,
       });
     } catch (error) {
       console.error("Failed to export PNG:", error);
