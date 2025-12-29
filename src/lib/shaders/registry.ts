@@ -15,6 +15,7 @@ import { spiralShader } from "./shaders/spiral";
 import { waterShader } from "./shaders/water";
 import { flutedGlassShader } from "./shaders/fluted-glass";
 import { imageDitheringShader } from "./shaders/image-dithering";
+import { bumpedSineWarpShader } from "./shaders/bumped-sine-warp";
 
 export const SHADER_REGISTRY: Map<string, ShaderDefinition> = new Map([
   [meshGradientShader.id, meshGradientShader],
@@ -27,6 +28,7 @@ export const SHADER_REGISTRY: Map<string, ShaderDefinition> = new Map([
   [waterShader.id, waterShader],
   [flutedGlassShader.id, flutedGlassShader],
   [imageDitheringShader.id, imageDitheringShader],
+  [bumpedSineWarpShader.id, bumpedSineWarpShader],
 ]);
 
 export function getShader(id: string): ShaderDefinition | undefined {
