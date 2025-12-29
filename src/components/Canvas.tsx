@@ -1639,11 +1639,6 @@ export function Canvas() {
             onDrop={handleDrop}
             onContextMenu={handleContextMenu}
           >
-            {/* Command hint */}
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 text-xs text-muted-foreground/50 pointer-events-none">
-              ⌘K to open command bar
-            </div>
-
             {/* DOM layer - objects */}
             <div
               className="absolute top-0 left-0 origin-top-left pointer-events-none"

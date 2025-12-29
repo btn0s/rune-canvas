@@ -12,6 +12,9 @@ import { metaballsShader } from "./shaders/metaballs";
 import { ditheringShader } from "./shaders/dithering";
 import { dotGridShader } from "./shaders/dot-grid";
 import { spiralShader } from "./shaders/spiral";
+import { waterShader } from "./shaders/water";
+import { flutedGlassShader } from "./shaders/fluted-glass";
+import { imageDitheringShader } from "./shaders/image-dithering";
 
 export const SHADER_REGISTRY: Map<string, ShaderDefinition> = new Map([
   [meshGradientShader.id, meshGradientShader],
@@ -21,6 +24,9 @@ export const SHADER_REGISTRY: Map<string, ShaderDefinition> = new Map([
   [ditheringShader.id, ditheringShader],
   [dotGridShader.id, dotGridShader],
   [spiralShader.id, spiralShader],
+  [waterShader.id, waterShader],
+  [flutedGlassShader.id, flutedGlassShader],
+  [imageDitheringShader.id, imageDitheringShader],
 ]);
 
 export function getShader(id: string): ShaderDefinition | undefined {
