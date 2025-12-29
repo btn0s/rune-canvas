@@ -32,7 +32,14 @@ import {
   getChildren,
   isFrame,
 } from "../lib/objects";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Toggle } from "@/components/ui/toggle";
+import { Kbd } from "@/components/ui/kbd";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -43,14 +50,197 @@ import {
 } from "@/components/ui/context-menu";
 import { LayersPanel } from "./LayersPanel";
 import { PropertyPanel } from "./PropertyPanel";
-import { CommandBar, useCommandKeyCapture } from "./CommandBar";
-import type { Point } from "../lib/types";
-import type { CommandContext } from "../lib/commands/types";
-import "../lib/commands/definitions";
+import type { Point, Tool } from "../lib/types";
 
 const HANDLE_SIZE = 8;
 const EDGE_HIT_WIDTH = 6;
 const CORNER_HANDLES: ResizeHandle[] = ["nw", "ne", "se", "sw"];
+
+const TOOLS: {
+  id: Tool;
+  label: string;
+  shortcut: string;
+  icon: React.ReactNode;
+}[] = [
+  {
+    id: "select",
+    label: "Select",
+    shortcut: "V",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="size-5">
+        <path
+          d="m5.0581,3.5724l10.6813,3.903c1.0363.3787,1.0063,1.8545-.0445,2.1908l-4.5677,1.4617-1.4616,4.5674c-.3363,1.0509-1.8123,1.0808-2.1908.0444L3.5728,5.0575c-.338-.9253.5601-1.8232,1.4853-1.4851Z"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+      </svg>
+    ),
+  },
+  {
+    id: "hand",
+    label: "Hand",
+    shortcut: "H",
+    icon: (
+      <svg
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        stroke="currentColor"
+        className="size-5"
+      >
+        <line
+          x1="16"
+          y1="5"
+          x2="16"
+          y2="11"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+        <line
+          x1="13"
+          y1="4"
+          x2="13"
+          y2="12"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+        <line
+          x1="10"
+          y1="3"
+          x2="10"
+          y2="13"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+        <line
+          x1="7"
+          y1="4"
+          x2="7"
+          y2="12"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+        <line
+          x1="7.384"
+          y1="15.082"
+          x2="3.5"
+          y2="10"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2.5"
+        />
+        <path
+          d="m7,10.5v1.5l-.793,1.43c.615,2.065,2.528,3.57,4.793,3.57,2.761,0,5-2.239,5-5v-1.5H7Z"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+      </svg>
+    ),
+  },
+  {
+    id: "frame",
+    label: "Frame",
+    shortcut: "F",
+    icon: (
+      <svg
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        className="size-5"
+      >
+        <path
+          d="m7,16h-3c-.5523,0-1-.4477-1-1V5c0-.5523.4477-1,1-1h3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+        <path
+          d="m13,16h3c.5523,0,1-.4477,1-1V5c0-.5523-.4477-1-1-1h-3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+      </svg>
+    ),
+  },
+  {
+    id: "text",
+    label: "Text",
+    shortcut: "T",
+    icon: (
+      <svg
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        className="size-5"
+      >
+        <line
+          x1="16"
+          y1="4"
+          x2="4"
+          y2="4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+        <line
+          x1="10"
+          y1="16"
+          x2="10"
+          y2="4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+      </svg>
+    ),
+  },
+  {
+    id: "shader",
+    label: "Shader",
+    shortcut: "S",
+    icon: (
+      <svg
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        stroke="currentColor"
+        className="size-5"
+      >
+        <polygon
+          points="6.5 10 7.3077 12.6923 10 13.5 7.3077 14.3077 6.5 17 5.6923 14.3077 3 13.5 5.6923 12.6923 6.5 10"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+        <polygon
+          points="13.5 3 14.3077 5.6923 17 6.5 14.3077 7.3077 13.5 10 12.6923 7.3077 10 6.5 12.6923 5.6923 13.5 3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+        <path
+          d="m6.6526,3.978l-1.2005-.4533-.4506-1.2087c-.1563-.4214-.8468-.4214-1.0031,0l-.4506,1.2087-1.2005.4533c-.2086.079-.3474.2802-.3474.505s.1388.4259.3474.505l1.2005.4533.4506,1.2087c.0781.2107.2783.3501.5015.3501s.4234-.1394.5015-.3501l.4506-1.2087,1.2005-.4533c.2086-.079.3474-.2802.3474-.505s-.1388-.4259-.3474-.505Z"
+          strokeWidth="0"
+        />
+        <path
+          d="m17.6526,14.978l-1.2005-.4533-.4506-1.2087c-.1563-.4214-.8468-.4214-1.0031,0l-.4506,1.2087-1.2005.4533c-.2086.079-.3474.2802-.3474.505s.1388.4259.3474.505l1.2005.4533.4506,1.2087c.0781.2107.2783.3501.5015.3501s.4234-.1394.5015-.3501l.4506-1.2087,1.2005-.4533c.2086-.079.3474-.2802.3474-.505s-.1388-.4259-.3474-.505Z"
+          strokeWidth="0"
+        />
+      </svg>
+    ),
+  },
+];
 
 function createRotatedCursor(angle: number, type: "resize" | "rotate"): string {
   const resizeSvg = `
@@ -175,71 +365,6 @@ export function Canvas() {
     frameSelection,
     pasteAt,
   } = useCanvas();
-
-  useCommandKeyCapture(editingTextId);
-
-  const commandContext: CommandContext = useMemo(
-    () => ({
-      selectedIds,
-      selectedObjects,
-      objects,
-      setTool,
-      copySelected,
-      pasteClipboard,
-      duplicateSelected,
-      deleteSelected,
-      selectAllSiblings,
-      alignLeft,
-      alignRight,
-      alignTop,
-      alignBottom,
-      alignCenterH,
-      alignCenterV,
-      distributeHorizontal,
-      distributeVertical,
-      bringToFront,
-      sendToBack,
-      bringForward,
-      sendBackward,
-      frameSelection,
-      undo,
-      redo,
-      canUndo,
-      canRedo,
-      updateObject,
-      setSelectedIds: select,
-    }),
-    [
-      selectedIds,
-      selectedObjects,
-      objects,
-      setTool,
-      copySelected,
-      pasteClipboard,
-      duplicateSelected,
-      deleteSelected,
-      selectAllSiblings,
-      alignLeft,
-      alignRight,
-      alignTop,
-      alignBottom,
-      alignCenterH,
-      alignCenterV,
-      distributeHorizontal,
-      distributeVertical,
-      bringToFront,
-      sendToBack,
-      bringForward,
-      sendBackward,
-      frameSelection,
-      undo,
-      redo,
-      canUndo,
-      canRedo,
-      updateObject,
-      select,
-    ]
-  );
 
   // Space key held for temporary pan
   const [spaceHeld, setSpaceHeld] = useState(false);
@@ -1003,10 +1128,14 @@ export function Canvas() {
   }, [selectedObjects, updateObject, pushHistory]);
 
   // Keyboard shortcuts (declarative)
-  // Single-key shortcuts removed to allow command bar usage; only modifier-based shortcuts remain
   const shortcuts: Shortcut[] = useMemo(
     () => [
-      // === Tools (Escape only) ===
+      // === Tools ===
+      { key: "v", action: () => setTool("select") },
+      { key: "h", action: () => setTool("hand") },
+      { key: "f", action: () => setTool("frame") },
+      { key: "t", action: () => setTool("text") },
+      { key: "s", action: () => setTool("shader") },
       { key: "Escape", action: () => setTool("select") },
 
       // === Editing (Cmd/Ctrl) ===
@@ -1508,10 +1637,28 @@ export function Canvas() {
               onCanvasBackgroundChange={setCanvasBackground}
             />
 
-            {/* Bottom toolbar container */}
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex items-center gap-4">
-              {/* Command Bar */}
-              <CommandBar context={commandContext} />
+            {/* Toolbar */}
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex gap-1 p-1.5 bg-card border border-border border-b-0 rounded-t-lg">
+              {TOOLS.map((t) => (
+                <Tooltip key={t.id}>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Toggle
+                        size="sm"
+                        pressed={tool === t.id}
+                        onPressedChange={() => setTool(t.id)}
+                        aria-label={t.label}
+                      >
+                        {t.icon}
+                      </Toggle>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="flex items-center gap-2">
+                    <span>{t.label}</span>
+                    <Kbd>{t.shortcut}</Kbd>
+                  </TooltipContent>
+                </Tooltip>
+              ))}
             </div>
           </div>
         </ContextMenuTrigger>
