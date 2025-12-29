@@ -871,14 +871,34 @@ export function Canvas() {
     if (hoveredObjectId && container) {
       const hoveredObj = objects.find((o) => o.id === hoveredObjectId);
       if (hoveredObj) {
-        const objTransform = getObjectTransform(hoveredObj, objects);
-        const screenTr: TransformedRect = {
-          cx: objTransform.cx * transform.scale + transform.x,
-          cy: objTransform.cy * transform.scale + transform.y,
-          width: objTransform.width * transform.scale,
-          height: objTransform.height * transform.scale,
-          rotation: objTransform.rotation,
-        };
+        // Use DOM position for accurate highlighting (accounts for parent borders/padding)
+        const el = container.querySelector(
+          `[data-object-id="${hoveredObj.id}"]`
+        ) as HTMLElement;
+        
+        let screenTr: TransformedRect;
+        
+        if (el) {
+          const elRect = el.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
+          screenTr = {
+            cx: elRect.left - containerRect.left + elRect.width / 2,
+            cy: elRect.top - containerRect.top + elRect.height / 2,
+            width: elRect.width,
+            height: elRect.height,
+            rotation: hoveredObj.rotation,
+          };
+        } else {
+          // Fallback to object model if element not found
+          const objTransform = getObjectTransform(hoveredObj, objects);
+          screenTr = {
+            cx: objTransform.cx * transform.scale + transform.x,
+            cy: objTransform.cy * transform.scale + transform.y,
+            width: objTransform.width * transform.scale,
+            height: objTransform.height * transform.scale,
+            rotation: objTransform.rotation,
+          };
+        }
 
         ctx.strokeStyle = "#3b82f6";
         ctx.lineWidth = 1;

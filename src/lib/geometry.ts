@@ -1,5 +1,5 @@
 import type { Point } from "./types";
-import type { CanvasObject } from "./objects/types";
+import type { CanvasObject, FrameObject, ShaderObject } from "./objects/types";
 
 // ============================================================================
 // Types
@@ -20,11 +20,50 @@ export interface Rect {
 // ============================================================================
 
 /**
+ * Get the border offset for a frame/shader that affects child positioning.
+ * With box-sizing: border-box, borders are inside the element,
+ * so children are positioned inside the border.
+ */
+function getParentBorderOffset(parent: CanvasObject): { x: number; y: number } {
+  // Only frames and shaders can have borders
+  if (parent.type !== "frame" && parent.type !== "shader") {
+    return { x: 0, y: 0 };
+  }
+
+  const obj = parent as FrameObject | ShaderObject;
+  
+  // No border defined
+  if (!obj.border || !obj.borderWidth) {
+    return { x: 0, y: 0 };
+  }
+
+  const borderWidth = obj.borderWidth;
+  const borderSide = obj.borderSide || "all";
+
+  // Calculate offset based on which sides have borders
+  let offsetX = 0;
+  let offsetY = 0;
+
+  if (borderSide === "all") {
+    offsetX = borderWidth;
+    offsetY = borderWidth;
+  } else if (borderSide === "left") {
+    offsetX = borderWidth;
+  } else if (borderSide === "top") {
+    offsetY = borderWidth;
+  }
+  // right and bottom borders don't affect child positioning (top-left origin)
+
+  return { x: offsetX, y: offsetY };
+}
+
+/**
  * Get the absolute canvas-space position of an object,
  * accounting for parent transforms in the hierarchy.
  *
  * Objects store positions relative to their parent. This function
- * walks up the parent chain to compute the absolute position.
+ * walks up the parent chain to compute the absolute position,
+ * including offsets from parent borders (with box-sizing: border-box).
  */
 export function getCanvasPosition(
   obj: CanvasObject,
@@ -37,8 +76,16 @@ export function getCanvasPosition(
   while (parentId) {
     const parent = objects.find((o) => o.id === parentId);
     if (!parent) break;
+    
+    // Add parent position
     x += parent.x;
     y += parent.y;
+    
+    // Account for parent border offset (children are positioned inside borders)
+    const borderOffset = getParentBorderOffset(parent);
+    x += borderOffset.x;
+    y += borderOffset.y;
+    
     parentId = parent.parentId;
   }
 
