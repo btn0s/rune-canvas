@@ -82,11 +82,11 @@ export const rippleShader: ShaderDefinition = {
   fragmentShader,
   defaultParams: {
     image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
-    frequency: 10,
-    amplitude: 0.01,
-    speed: 2,
+    frequency: 12,
+    amplitude: 0.015,
+    speed: 1.5,
     center: [0.5, 0.5],
-    waveCount: 1,
+    waveCount: 2,
   },
   presets: [
     {

@@ -108,13 +108,15 @@ function ShaderPreview({
       onClick={onSelect}
     >
       <div className="aspect-square bg-black/50 relative rounded-md overflow-hidden border border-border group-hover:border-primary transition-colors">
-        <ShaderRendererComponent
-          shader={shader}
-          params={shader.defaultParams}
-          width={200}
-          height={200}
-          speed={1}
-        />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <ShaderRendererComponent
+            shader={shader}
+            params={shader.defaultParams}
+            width={200}
+            height={200}
+            speed={1}
+          />
+        </div>
       </div>
       <div className="mt-2 text-center">
         <h3 className="text-xs font-medium">{shader.name}</h3>

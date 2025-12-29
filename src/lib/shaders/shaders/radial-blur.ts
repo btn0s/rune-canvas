@@ -77,9 +77,9 @@ export const radialBlurShader: ShaderDefinition = {
   fragmentShader,
   defaultParams: {
     image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
-    strength: 0.1,
+    strength: 0.08,
     center: [0.5, 0.5],
-    samples: 8,
+    samples: 10,
   },
   presets: [
     {

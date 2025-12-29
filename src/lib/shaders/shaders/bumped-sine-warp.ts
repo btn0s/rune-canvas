@@ -154,12 +154,12 @@ export const bumpedSineWarpShader: ShaderDefinition = {
   fragmentShader,
   defaultParams: {
     image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
-    bumpFactor: 0.05,
-    lightSpeed: 1.0,
-    warpSpeed: 0.5,
-    warpIntensity: 1.0,
-    specularPower: 12.0,
-    reflectionStrength: 3.0,
+    bumpFactor: 0.06,
+    lightSpeed: 0.8,
+    warpSpeed: 0.4,
+    warpIntensity: 0.9,
+    specularPower: 14.0,
+    reflectionStrength: 2.5,
   },
   presets: [
     {

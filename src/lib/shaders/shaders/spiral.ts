@@ -18,16 +18,16 @@ uniform float u_strokeTaper;
 uniform float u_noise;
 uniform float u_noiseFrequency;
 uniform float u_softness;
-uniform float u_scale;
 
-in vec2 v_objectUV;
+in vec2 v_patternUV;
 out vec4 fragColor;
 
 ${declarePI}
 ${simplexNoise}
 
 void main() {
-  vec2 uv = (v_objectUV + .5) * 2. * u_scale;
+  // Center v_patternUV (which is [0, 100]) and scale to match Paper's coordinate system
+  vec2 uv = 2. * (v_patternUV - 50.0);
 
   float t = u_time;
   float l = length(uv);
@@ -85,7 +85,6 @@ function paramsToUniforms(params: ShaderParams): ShaderUniforms {
     u_noise: (params.noise as number) ?? 0,
     u_noiseFrequency: (params.noiseFrequency as number) ?? 0,
     u_softness: (params.softness as number) ?? 0,
-    u_scale: (params.scale as number) ?? 1,
   };
 }
 
@@ -96,17 +95,16 @@ export const spiralShader: ShaderDefinition = {
   category: "Effects",
   fragmentShader,
   defaultParams: {
-    colorBack: "#001429",
-    colorFront: "#79D1FF",
-    density: 1,
-    distortion: 0,
-    strokeWidth: 0.5,
-    strokeTaper: 0,
-    strokeCap: 0,
-    noise: 0,
-    noiseFrequency: 0,
-    softness: 0,
-    scale: 1,
+    colorBack: "#0a0e27",
+    colorFront: "#60a5fa",
+    density: 0.25,
+    distortion: 0.15,
+    strokeWidth: 0.6,
+    strokeTaper: 0.1,
+    strokeCap: 0.2,
+    noise: 0.3,
+    noiseFrequency: 0.2,
+    softness: 0.1,
   },
   presets: [
     {
@@ -122,7 +120,6 @@ export const spiralShader: ShaderDefinition = {
         noise: 0,
         noiseFrequency: 0,
         softness: 0,
-        scale: 1,
       },
     },
     {
@@ -138,7 +135,6 @@ export const spiralShader: ShaderDefinition = {
         noise: 0.74,
         noiseFrequency: 0.33,
         softness: 0.02,
-        scale: 1,
       },
     },
     {
@@ -154,7 +150,6 @@ export const spiralShader: ShaderDefinition = {
         noise: 1,
         noiseFrequency: 0.25,
         softness: 0,
-        scale: 1.3,
       },
     },
     {
@@ -170,7 +165,6 @@ export const spiralShader: ShaderDefinition = {
         noise: 0,
         noiseFrequency: 0.3,
         softness: 0.5,
-        scale: 0.45,
       },
     },
   ],

@@ -79,8 +79,8 @@ export const kaleidoscopeShader: ShaderDefinition = {
   fragmentShader,
   defaultParams: {
     image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
-    segments: 6,
-    rotation: 0,
+    segments: 8,
+    rotation: 15,
     offset: 0,
   },
   presets: [

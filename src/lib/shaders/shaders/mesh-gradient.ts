@@ -140,11 +140,11 @@ export const meshGradientShader: ShaderDefinition = {
   category: "Effects",
   fragmentShader,
   defaultParams: {
-    colors: ["#e0eaff", "#241d9a", "#f75092", "#9f50d3"],
-    distortion: 0.8,
-    swirl: 0.1,
-    grainMixer: 0,
-    grainOverlay: 0,
+    colors: ["#667eea", "#764ba2", "#f093fb", "#4facfe"],
+    distortion: 0.6,
+    swirl: 0.15,
+    grainMixer: 0.05,
+    grainOverlay: 0.02,
   },
   presets: [
     {

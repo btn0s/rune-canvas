@@ -84,10 +84,10 @@ export const neuroNoiseShader: ShaderDefinition = {
   fragmentShader,
   defaultParams: {
     colorFront: "#ffffff",
-    colorMid: "#47a6ff",
-    colorBack: "#000000",
-    brightness: 0.05,
-    contrast: 0.3,
+    colorMid: "#8b5cf6",
+    colorBack: "#0f172a",
+    brightness: 0.08,
+    contrast: 0.4,
   },
   presets: [
     {

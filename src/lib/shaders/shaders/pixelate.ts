@@ -53,7 +53,7 @@ export const pixelateShader: ShaderDefinition = {
   fragmentShader,
   defaultParams: {
     image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
-    pixelSize: 4,
+    pixelSize: 6,
   },
   presets: [
     {

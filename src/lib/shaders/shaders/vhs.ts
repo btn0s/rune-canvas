@@ -97,11 +97,11 @@ export const vhsShader: ShaderDefinition = {
   fragmentShader,
   defaultParams: {
     image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
-    scanlineIntensity: 0.3,
-    noiseIntensity: 0.1,
-    colorBleed: 0.5,
-    vignette: 1.2,
-    jitter: 0.3,
+    scanlineIntensity: 0.25,
+    noiseIntensity: 0.08,
+    colorBleed: 0.4,
+    vignette: 1.1,
+    jitter: 0.25,
   },
   presets: [
     {

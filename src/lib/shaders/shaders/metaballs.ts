@@ -114,10 +114,10 @@ export const metaballsShader: ShaderDefinition = {
   category: "Effects",
   fragmentShader,
   defaultParams: {
-    colors: ["#ff6b6b", "#4ecdc4", "#45b7d1"],
-    colorBack: "#000000",
-    size: 0.3,
-    count: 8,
+    colors: ["#8b5cf6", "#ec4899", "#06b6d4"],
+    colorBack: "#0f172a",
+    size: 0.35,
+    count: 6,
   },
   presets: [
     {

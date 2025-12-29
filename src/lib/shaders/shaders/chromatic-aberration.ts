@@ -77,7 +77,7 @@ export const chromaticAberrationShader: ShaderDefinition = {
   fragmentShader,
   defaultParams: {
     image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
-    strength: 0.02,
+    strength: 0.015,
     angle: 0,
   },
   presets: [

@@ -233,12 +233,12 @@ export const ditheringShader: ShaderDefinition = {
   category: "Effects",
   fragmentShader,
   defaultParams: {
-    colorBack: "#000000",
-    colorFront: "#00b2ff",
+    colorBack: "#1e293b",
+    colorFront: "#60a5fa",
     shape: "sphere",
     type: "4x4",
-    scale: 0.6,
-    size: 2,
+    scale: 0.7,
+    size: 3,
   },
   presets: [
     {

@@ -79,9 +79,9 @@ export const simplexNoiseShader: ShaderDefinition = {
   category: "Effects",
   fragmentShader,
   defaultParams: {
-    colors: ["#ff0000", "#00ff00", "#0000ff"],
-    stepsPerColor: 1,
-    softness: 0.5,
+    colors: ["#667eea", "#764ba2", "#f093fb"],
+    stepsPerColor: 2,
+    softness: 0.3,
   },
   presets: [
     {

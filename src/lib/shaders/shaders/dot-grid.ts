@@ -7,7 +7,6 @@ import { colorToVec4 } from "../types";
 const fragmentShader = `#version 300 es
 precision mediump float;
 
-uniform float u_time;
 uniform vec4 u_colorBack;
 uniform vec4 u_colorFill;
 uniform vec4 u_colorStroke;
@@ -18,9 +17,8 @@ uniform float u_strokeWidth;
 uniform float u_sizeRange;
 uniform float u_opacityRange;
 uniform float u_shape;
-uniform float u_scale;
 
-in vec2 v_objectUV;
+in vec2 v_patternUV;
 out vec4 fragColor;
 
 ${declarePI}
@@ -33,7 +31,9 @@ float polygon(vec2 p, float N, float rot) {
 }
 
 void main() {
-  vec2 shape_uv = (v_objectUV + .5) * u_scale * 100.;
+  // x100 is a default multiplier between vertex and fragment shaders
+  // we use it to avoid UV precision issues
+  vec2 shape_uv = 100. * v_patternUV;
 
   vec2 gap = max(abs(vec2(u_gapX, u_gapY)), vec2(1e-6));
   vec2 grid = fract(shape_uv / gap) + 1e-4;
@@ -113,7 +113,6 @@ function paramsToUniforms(params: ShaderParams): ShaderUniforms {
     u_sizeRange: (params.sizeRange as number) ?? 0.3,
     u_opacityRange: (params.opacityRange as number) ?? 0.5,
     u_shape: shapeMap[(params.shape as string) || "circle"] ?? 0,
-    u_scale: (params.scale as number) ?? 1,
   };
 }
 
@@ -124,17 +123,16 @@ export const dotGridShader: ShaderDefinition = {
   category: "Effects",
   fragmentShader,
   defaultParams: {
-    colorBack: "#000000",
-    colorFill: "#ffffff",
-    colorStroke: "#000000",
-    dotSize: 0.3,
-    gapX: 0.1,
-    gapY: 0.1,
-    strokeWidth: 0.05,
-    sizeRange: 0.3,
-    opacityRange: 0.5,
+    colorBack: "#ffffff",
+    colorFill: "#3b82f6",
+    colorStroke: "#1e40af",
+    dotSize: 0.25,
+    gapX: 0.08,
+    gapY: 0.08,
+    strokeWidth: 0.03,
+    sizeRange: 0.2,
+    opacityRange: 0.3,
     shape: "circle",
-    scale: 1,
   },
   presets: [
     {
@@ -150,7 +148,6 @@ export const dotGridShader: ShaderDefinition = {
         sizeRange: 0.3,
         opacityRange: 0.5,
         shape: "circle",
-        scale: 1,
       },
     },
     {
@@ -166,7 +163,6 @@ export const dotGridShader: ShaderDefinition = {
         sizeRange: 0.4,
         opacityRange: 0.6,
         shape: "diamond",
-        scale: 1.2,
       },
     },
     {
@@ -182,7 +178,6 @@ export const dotGridShader: ShaderDefinition = {
         sizeRange: 0.2,
         opacityRange: 0.3,
         shape: "square",
-        scale: 0.8,
       },
     },
   ],
