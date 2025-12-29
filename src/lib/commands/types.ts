@@ -134,6 +134,7 @@ export interface CommandState {
   pendingCommand: Command | null;
   pendingIndexItems: IndexedPropertyItem[] | null;
   pendingIndex: number | null;
+  recentCommands: string[]; // Command IDs
 }
 
 export const initialCommandState: CommandState = {
@@ -144,4 +145,5 @@ export const initialCommandState: CommandState = {
   pendingCommand: null,
   pendingIndexItems: null,
   pendingIndex: null,
+  recentCommands: [],
 };

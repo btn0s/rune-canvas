@@ -42,7 +42,7 @@ import {
 import { Toggle } from "@/components/ui/toggle";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
-import { Search } from "lucide-react";
+import { Terminal } from "lucide-react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -1869,7 +1869,7 @@ export function Canvas() {
                       aria-label="Open command bar"
                       className="h-8 px-2 gap-1.5"
                     >
-                      <Search className="size-4" />
+                      <Terminal className="size-4" />
                       <Kbd className="text-xs">⌘K</Kbd>
                     </Button>
                   </TooltipTrigger>

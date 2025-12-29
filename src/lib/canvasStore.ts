@@ -2,7 +2,34 @@ import { create } from "zustand";
 import type { CanvasObject, Tool, Transform } from "./types";
 import type { Command, CommandState } from "./commands/types";
 import { initialCommandState } from "./commands/types";
-import { searchCommands } from "./commands/registry";
+import { searchCommands, getCommandById } from "./commands/registry";
+
+const RECENT_COMMANDS_KEY = "design-canvas-recent-commands";
+const MAX_RECENT_COMMANDS = 10;
+
+function loadRecentCommands(): string[] {
+  try {
+    const stored = localStorage.getItem(RECENT_COMMANDS_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return Array.isArray(parsed) ? parsed.slice(0, MAX_RECENT_COMMANDS) : [];
+    }
+  } catch {
+    // Ignore errors
+  }
+  return [];
+}
+
+function saveRecentCommands(commands: string[]): void {
+  try {
+    localStorage.setItem(
+      RECENT_COMMANDS_KEY,
+      JSON.stringify(commands.slice(0, MAX_RECENT_COMMANDS))
+    );
+  } catch {
+    // Ignore errors
+  }
+}
 
 type SceneState = {
   objects: CanvasObject[];
@@ -60,6 +87,7 @@ interface CanvasStoreState extends SceneState {
   setPendingIndexItems: (items: { index: number; label: string }[] | null) => void;
   setPendingIndex: (index: number | null) => void;
   clearCommand: () => void;
+  addRecentCommand: (commandId: string) => void;
 }
 
 type SceneUpdateOptions = {
@@ -105,7 +133,10 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
   editingTextId: null,
   canvasBackground: "#0a0a0a",
   history: { past: [], future: [] },
-  commandState: initialCommandState,
+  commandState: {
+    ...initialCommandState,
+    recentCommands: loadRecentCommands(),
+  },
   setScene: (updater, options = {}) =>
     set((state) => {
       const currentScene = getScene(state);
@@ -227,7 +258,16 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
   canRedo: () => get().history.future.length > 0,
   setCommandInput: (input: string) =>
     set((state) => {
-      const suggestions = input.trim() ? searchCommands(input.trim()) : [];
+      let suggestions: Command[] = [];
+      if (input.trim()) {
+        suggestions = searchCommands(input.trim());
+      } else {
+        // Show recent commands when input is empty
+        const recent = state.commandState.recentCommands
+          .map((id) => getCommandById(id))
+          .filter((cmd): cmd is Command => cmd !== undefined);
+        suggestions = recent;
+      }
       return {
         commandState: {
           ...state.commandState,
@@ -284,8 +324,27 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
     })),
   clearCommand: () =>
     set(() => ({
-      commandState: initialCommandState,
+      commandState: {
+        ...initialCommandState,
+        recentCommands: loadRecentCommands(),
+      },
     })),
+  addRecentCommand: (commandId: string) =>
+    set((state) => {
+      const current = state.commandState.recentCommands;
+      // Remove if already exists, then add to front
+      const updated = [
+        commandId,
+        ...current.filter((id) => id !== commandId),
+      ].slice(0, MAX_RECENT_COMMANDS);
+      saveRecentCommands(updated);
+      return {
+        commandState: {
+          ...state.commandState,
+          recentCommands: updated,
+        },
+      };
+    }),
 }));
 
 export type { CanvasStoreState, SceneState as CanvasSceneState };

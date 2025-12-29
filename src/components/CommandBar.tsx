@@ -7,7 +7,7 @@ import type {
 } from "../lib/commands/types";
 import type { FrameObject } from "../lib/types";
 import { cn } from "@/lib/utils";
-import { Search } from "lucide-react";
+import { Terminal } from "lucide-react";
 
 interface CommandBarProps {
   context: CommandContext;
@@ -71,6 +71,7 @@ export function CommandBar({ context }: CommandBarProps) {
     setPendingIndexItems,
     setPendingIndex,
     clearCommand,
+    addRecentCommand,
   } = useCanvasStore();
 
   const {
@@ -104,9 +105,10 @@ export function CommandBar({ context }: CommandBarProps) {
       }
 
       cmd.execute(context, args, index);
+      addRecentCommand(cmd.id);
       clearCommand();
     },
-    [context, clearCommand]
+    [context, clearCommand, addRecentCommand]
   );
 
   const startCommand = useCallback(
@@ -239,6 +241,7 @@ export function CommandBar({ context }: CommandBarProps) {
   const showIndexPicker =
     isActive && pendingIndexItems && pendingIndexItems.length > 0;
   const showArgInput = isActive && pendingCommand && !pendingIndexItems;
+  const isShowingRecent = isActive && !input.trim() && !pendingCommand;
 
   const clampedSelectedIndex = Math.min(
     selectedIndex,
@@ -254,8 +257,8 @@ export function CommandBar({ context }: CommandBarProps) {
   return (
     <div className="bg-popover border border-border rounded-lg shadow-lg overflow-hidden w-full max-w-2xl">
       {/* Input */}
-      <div className="px-4 py-2 border-b border-border flex items-center gap-3">
-        <Search className="size-4 shrink-0 text-muted-foreground opacity-50" />
+      <div className="px-2 py-1.5 border-b border-border flex items-center gap-2">
+        <Terminal className="size-4 shrink-0 text-muted-foreground opacity-50" />
         <input
           ref={inputRef}
           type="text"
@@ -274,9 +277,9 @@ export function CommandBar({ context }: CommandBarProps) {
               ? pendingCommand?.argPlaceholder || "Enter value..."
               : pendingIndexItems
               ? `${pendingCommand?.name} - Select:`
-              : "Search"
+              : "type a command"
           }
-          className="flex-1 bg-transparent outline-none text-base placeholder:text-muted-foreground"
+          className="flex-1 bg-transparent outline-none text-base placeholder:text-sm placeholder:text-muted-foreground"
         />
       </div>
 
@@ -288,7 +291,7 @@ export function CommandBar({ context }: CommandBarProps) {
               <button
                 key={item.index}
                 className={cn(
-                  "w-full px-4 py-2 text-left flex items-center gap-3 transition-colors",
+                  "w-full px-2 py-1 text-left flex items-center gap-2 transition-colors",
                   idx === clampedSelectedIndex
                     ? "bg-muted"
                     : "hover:bg-muted/50"
@@ -315,51 +318,58 @@ export function CommandBar({ context }: CommandBarProps) {
         {showSuggestions && (
           <div>
             {availableSuggestions.length === 0 ? (
-              <div className="px-4 py-4 text-center text-sm text-muted-foreground">
+              <div className="px-2 py-2 text-center text-sm text-muted-foreground">
                 No commands found
               </div>
             ) : (
-              availableSuggestions.map((cmd, idx) => (
-                <button
-                  key={cmd.id}
-                  className={cn(
-                    "w-full px-4 py-2 text-left flex items-center justify-between gap-4 transition-colors",
-                    idx === clampedSelectedIndex
-                      ? "bg-muted"
-                      : "hover:bg-muted/50"
-                  )}
-                  onClick={() => {
-                    startCommand(cmd);
-                    inputRef.current?.focus();
-                  }}
-                  onMouseEnter={() => setCommandSelectedIndex(idx)}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="font-medium text-sm">{cmd.name}</span>
-                    {cmd.argType && (
-                      <span className="text-xs text-muted-foreground">
-                        (needs value)
-                      </span>
-                    )}
+              <>
+                {isShowingRecent && availableSuggestions.length > 0 && (
+                  <div className="px-2 py-1 text-xs font-medium text-muted-foreground uppercase tracking-wide border-b border-border">
+                    Recent
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground font-mono">
-                      {cmd.aliases[0]}
-                    </span>
-                    {cmd.shortcutHint && (
-                      <span className="text-xs text-muted-foreground/60">
-                        {cmd.shortcutHint}
-                      </span>
+                )}
+                {availableSuggestions.map((cmd, idx) => (
+                  <button
+                    key={cmd.id}
+                    className={cn(
+                      "w-full px-2 py-1 text-left flex items-center justify-between gap-2 transition-colors",
+                      idx === clampedSelectedIndex
+                        ? "bg-muted"
+                        : "hover:bg-muted/50"
                     )}
-                  </div>
-                </button>
-              ))
+                    onClick={() => {
+                      startCommand(cmd);
+                      inputRef.current?.focus();
+                    }}
+                    onMouseEnter={() => setCommandSelectedIndex(idx)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">{cmd.name}</span>
+                      {cmd.argType && (
+                        <span className="text-xs text-muted-foreground">
+                          (needs value)
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground font-mono">
+                        {cmd.aliases[0]}
+                      </span>
+                      {cmd.shortcutHint && (
+                        <span className="text-xs text-muted-foreground/60">
+                          {cmd.shortcutHint}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </>
             )}
           </div>
         )}
 
         {showArgInput && !showIndexPicker && (
-          <div className="px-4 py-4 text-center text-sm text-muted-foreground">
+          <div className="px-2 py-2 text-center text-sm text-muted-foreground">
             Press Enter to confirm
           </div>
         )}
