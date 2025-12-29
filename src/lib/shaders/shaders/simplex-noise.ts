@@ -91,6 +91,22 @@ export const simplexNoiseShader: ShaderDefinition = {
         softness: 0.5,
       },
     },
+    {
+      name: "Smooth",
+      params: {
+        colors: ["#ff6b6b", "#4ecdc4", "#45b7d1", "#f7b731"],
+        stepsPerColor: 2,
+        softness: 0.8,
+      },
+    },
+    {
+      name: "Sharp",
+      params: {
+        colors: ["#000000", "#ffffff"],
+        stepsPerColor: 1,
+        softness: 0.1,
+      },
+    },
   ],
   paramsToUniforms,
 };

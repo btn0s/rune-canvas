@@ -54,3 +54,24 @@ float snoise(vec2 v) {
   return 130.0 * dot(m, g);
 }
 `;
+
+// Procedural noise function for metaballs (alternative to texture-based randomR)
+// language=GLSL
+export const proceduralNoise1D = `
+float hash(float n) {
+  return fract(sin(n) * 43758.5453);
+}
+
+float noise(float x) {
+  float i = floor(x);
+  float f = fract(x);
+  float u = f * f * (3.0 - 2.0 * f);
+  return mix(hash(i), hash(i + 1.0), u);
+}
+`;
+
+// Color banding fix for smoother gradients
+// language=GLSL
+export const colorBandingFix = `
+  color += 1. / 256. * (fract(sin(dot(.014 * gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453123) - .5);
+`;

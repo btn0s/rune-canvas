@@ -33,6 +33,7 @@ import {
   computeImageWrapperStyle,
   getChildren,
   isFrame,
+  computeFillStyles,
 } from "../lib/objects";
 import {
   Tooltip,
@@ -1830,6 +1831,9 @@ export function Canvas() {
                             );
                           }
 
+                          // Compute fill styles for background
+                          const fillStyles = computeFillStyles(shaderObj.fills);
+                          
                           return (
                             <div
                               style={{
@@ -1837,6 +1841,7 @@ export function Canvas() {
                                 height: obj.height,
                                 position: "relative",
                                 overflow: "hidden",
+                                ...fillStyles,
                               }}
                             >
                               <ShaderRendererComponent

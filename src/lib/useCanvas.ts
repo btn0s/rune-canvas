@@ -1144,6 +1144,7 @@ export function useCanvas() {
         locked: false,
         shaderType,
         shaderParams,
+        fills: [],
       };
 
       setObjects((prev) => [...prev, newShader]);

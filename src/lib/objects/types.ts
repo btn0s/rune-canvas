@@ -334,6 +334,9 @@ export interface ShaderObject extends BaseObject {
 
   /** Shader-specific parameters stored as a JSON object */
   shaderParams: Record<string, unknown>;
+
+  // === Stackable Fills (rendered bottom to top) ===
+  fills: Fill[];
 }
 
 // ============================================================================

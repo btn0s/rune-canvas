@@ -166,6 +166,26 @@ export const meshGradientShader: ShaderDefinition = {
         grainOverlay: 0,
       },
     },
+    {
+      name: "Beach",
+      params: {
+        colors: ["#bcecf6", "#00aaff", "#00f7ff", "#ffd447"],
+        distortion: 0.8,
+        swirl: 0.35,
+        grainMixer: 0,
+        grainOverlay: 0,
+      },
+    },
+    {
+      name: "Ink",
+      params: {
+        colors: ["#ffffff", "#000000"],
+        distortion: 1,
+        swirl: 0.2,
+        grainMixer: 0,
+        grainOverlay: 0,
+      },
+    },
   ],
   paramsToUniforms,
 };

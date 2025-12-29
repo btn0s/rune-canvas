@@ -1,5 +1,5 @@
 import type { ShaderDefinition, ShaderParams, ShaderUniforms } from "../types";
-import { declarePI } from "../shader-utils";
+import { declarePI, proceduralNoise1D, colorBandingFix } from "../shader-utils";
 import { colorToVec4 } from "../types";
 
 const maxColorCount = 8;
@@ -21,14 +21,7 @@ in vec2 v_objectUV;
 out vec4 fragColor;
 
 ${declarePI}
-
-float hash(float n) {
-  return fract(sin(n) * 43758.5453);
-}
-
-float noise(vec2 p) {
-  return hash(p.x + hash(p.y));
-}
+${proceduralNoise1D}
 
 float getBallShape(vec2 uv, vec2 c, float p) {
   float s = .5 * length(uv - c);
@@ -39,6 +32,7 @@ float getBallShape(vec2 uv, vec2 c, float p) {
 
 void main() {
   vec2 shape_uv = v_objectUV;
+
   shape_uv += .5;
 
   const float firstFrameOffset = 2503.4;
@@ -55,30 +49,45 @@ void main() {
     float angle = TWO_PI * idxFract;
 
     float speed = 1. - .2 * idxFract;
-    float noiseX = noise(vec2(angle * 10. + float(i) + t * speed, 0.));
-    float noiseY = noise(vec2(angle * 20. + float(i) - t * speed, 0.));
+    float noiseX = noise(angle * 10. + float(i) + t * speed);
+    float noiseY = noise(angle * 20. + float(i) - t * speed);
 
     vec2 pos = vec2(.5) + 1e-4 + .9 * (vec2(noiseX, noiseY) - .5);
 
-    int colorIdx = i % int(u_colorsCount);
-    vec4 ballColor = u_colors[colorIdx];
-    float ballSize = u_size * (0.8 + 0.4 * noise(vec2(float(i), 1.)));
+    int safeIndex = i % int(u_colorsCount + 0.5);
+    vec4 ballColor = u_colors[safeIndex];
+    ballColor.rgb *= ballColor.a;
 
-    float shape = getBallShape(shape_uv, pos, 1.5 / ballSize);
+    float sizeFrac = 1.;
+    if (float(i) > floor(u_count - 1.)) {
+      sizeFrac *= fract(u_count);
+    }
+
+    float shape = getBallShape(shape_uv, pos, 45. - 30. * u_size * sizeFrac);
+    shape *= pow(u_size, .2);
+    shape = smoothstep(0., 1., shape);
+
+    totalColor += ballColor.rgb * shape;
     totalShape += shape;
-    totalColor += ballColor.rgb * ballColor.a * shape;
     totalOpacity += ballColor.a * shape;
   }
 
-  float finalShape = smoothstep(0.3, 0.7, totalShape);
-  vec3 finalColor = totalColor / max(totalShape, 1e-4);
-  float finalOpacity = clamp(totalOpacity / max(totalShape, 1e-4), 0., 1.);
+  totalColor /= max(totalShape, 1e-4);
+  totalOpacity /= max(totalShape, 1e-4);
+
+  float edge_width = fwidth(totalShape);
+  float finalShape = smoothstep(.4, .4 + edge_width, totalShape);
+
+  vec3 color = totalColor * finalShape;
+  float opacity = totalOpacity * finalShape;
 
   vec3 bgColor = u_colorBack.rgb * u_colorBack.a;
-  finalColor = mix(bgColor, finalColor, finalShape);
-  finalOpacity = mix(u_colorBack.a, finalOpacity, finalShape);
+  color = color + bgColor * (1. - opacity);
+  opacity = opacity + u_colorBack.a * (1. - opacity);
 
-  fragColor = vec4(finalColor, finalOpacity);
+  ${colorBandingFix}
+
+  fragColor = vec4(color, opacity);
 }
 `;
 
@@ -117,6 +126,33 @@ export const metaballsShader: ShaderDefinition = {
         colorBack: "#000000",
         size: 0.3,
         count: 8,
+      },
+    },
+    {
+      name: "Solar",
+      params: {
+        colors: ["#ffc800", "#ff5500", "#ffc105"],
+        colorBack: "#102f84",
+        size: 0.75,
+        count: 7,
+      },
+    },
+    {
+      name: "Ink Drops",
+      params: {
+        colors: ["#000000"],
+        colorBack: "#ffffff",
+        size: 0.1,
+        count: 18,
+      },
+    },
+    {
+      name: "Background",
+      params: {
+        colors: ["#ae00ff", "#00ff95", "#ffc105"],
+        colorBack: "#2a273f",
+        size: 0.81,
+        count: 13,
       },
     },
   ],

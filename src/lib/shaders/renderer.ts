@@ -6,6 +6,7 @@
 
 // Vertex shader source - simple full-screen quad
 // Outputs both v_objectUV and v_patternUV for compatibility
+// v_objectUV is centered at origin (can go negative) to match Paper shader behavior
 const vertexShaderSource = `#version 300 es
 precision mediump float;
 
@@ -16,10 +17,17 @@ out vec2 v_patternUV;
 
 void main() {
   gl_Position = a_position;
-  vec2 uv = a_position.xy * 0.5 + 0.5;
-  uv.y = 1.0 - uv.y; // Flip Y
-  v_objectUV = uv;
-  v_patternUV = uv * 100.0; // Scale for pattern UV (used by some shaders)
+  
+  // Map from [-1, 1] to [0, 1] for pattern UV
+  vec2 patternUV = a_position.xy * 0.5 + 0.5;
+  patternUV.y = 1.0 - patternUV.y; // Flip Y (top becomes 0, bottom becomes 1)
+  v_patternUV = patternUV * 100.0; // Scale for pattern UV (used by some shaders)
+  
+  // For object UV, output centered at origin [-0.5, 0.5] (matches Paper shader behavior)
+  // Shaders can add 0.5 to get [0, 1] range centered properly
+  vec2 objectUV = a_position.xy * 0.5;
+  objectUV.y = -objectUV.y; // Flip Y (top becomes 0.5, bottom becomes -0.5)
+  v_objectUV = objectUV;
 }
 `;
 

@@ -393,7 +393,7 @@ function hexToRgba(hex: string, opacity: number): string {
  * Fills are rendered bottom-to-top (first in array = bottom layer).
  * CSS backgrounds are rendered top-to-bottom, so we reverse.
  */
-function computeFillStyles(fills: Fill[] | undefined): { background?: string } {
+export function computeFillStyles(fills: Fill[] | undefined): { background?: string } {
   if (!fills || fills.length === 0) {
     return {};
   }
