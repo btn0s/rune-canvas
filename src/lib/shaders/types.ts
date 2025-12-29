@@ -84,6 +84,12 @@ export type ParamControl =
 export interface ParamDefinition {
   control: ParamControl;
   defaultValue: unknown;
+  /** If true, value persists when applying presets */
+  stickyOnPresetApply?: boolean;
+  /** If true, param is not shown in UI */
+  hidden?: boolean;
+  /** Grouping hint: "foreground" | "background" | "other" */
+  group?: "foreground" | "background" | "other";
 }
 
 /**

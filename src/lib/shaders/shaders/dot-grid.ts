@@ -143,14 +143,17 @@ export const dotGridShader: ShaderDefinition = {
     colorBack: {
       control: { type: "color", label: "Background" },
       defaultValue: "#ffffff",
+      hidden: true,
     },
     colorFill: {
       control: { type: "color", label: "Fill" },
       defaultValue: "#3b82f6",
+      group: "foreground",
     },
     colorStroke: {
       control: { type: "color", label: "Stroke" },
       defaultValue: "#1e40af",
+      group: "foreground",
     },
     dotSize: {
       control: {

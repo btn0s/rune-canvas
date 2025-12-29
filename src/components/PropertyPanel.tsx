@@ -1897,258 +1897,17 @@ function ShaderProperties({
     }
   };
 
-  const renderParamControlHeuristic = (key: string, defaultValue: unknown) => {
+
+  const renderParamControl = (key: string) => {
     const value = getParamValue(key);
-    const displayValue = value ?? defaultValue;
-
-    if (
-      Array.isArray(defaultValue) &&
-      typeof defaultValue[0] === "string" &&
-      defaultValue[0].startsWith("#")
-    ) {
-      const colors = Array.isArray(displayValue)
-        ? (displayValue as string[]).filter(
-            (c) => typeof c === "string" && c.startsWith("#")
-          )
-        : Array.isArray(defaultValue)
-        ? (defaultValue as string[])
-        : [];
-
-      return (
-        <div key={key} className="flex flex-col gap-1.5">
-          <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-            Foreground
-          </span>
-          <div className="flex flex-col gap-1.5">
-            {colors.map((color, idx) => {
-              const colorValue =
-                typeof color === "string" && color.startsWith("#")
-                  ? color
-                  : "#ffffff";
-              return (
-                <div key={idx} className="flex items-center gap-1.5 min-w-0">
-                  <div className="flex-1 min-w-0">
-                    <ColorInput
-                      color={colorValue}
-                      onChange={(newColor) => {
-                        const newColors = [...colors];
-                        newColors[idx] = newColor;
-                        updateShaderParam(key, newColors);
-                      }}
-                    />
-                  </div>
-                  {colors.length > 1 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0 shrink-0"
-                      onClick={() => {
-                        const newColors = colors.filter((_, i) => i !== idx);
-                        updateShaderParam(key, newColors);
-                      }}
-                    >
-                      <Minus className="size-3" />
-                    </Button>
-                  )}
-                </div>
-              );
-            })}
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => {
-                updateShaderParam(key, [...colors, "#ffffff"]);
-              }}
-            >
-              <Plus className="size-3 mr-1" />
-              Add Color
-            </Button>
-          </div>
-        </div>
-      );
-    }
-
-    if (typeof defaultValue === "string" && defaultValue.startsWith("#")) {
-      const colorValue =
-        (typeof displayValue === "string" && displayValue.startsWith("#")
-          ? displayValue
-          : defaultValue) || "#ffffff";
-
-      return (
-        <div key={key} className="flex flex-col gap-1.5">
-          <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-            {formatLabel(key)}
-          </span>
-          <ColorInput
-            color={colorValue}
-            onChange={(newColor) => updateShaderParam(key, newColor)}
-          />
-        </div>
-      );
-    }
-
-    if (
-      typeof defaultValue === "string" &&
-      !defaultValue.startsWith("#") &&
-      (key.toLowerCase().includes("image") || key.toLowerCase().includes("texture"))
-    ) {
-      const imageUrl = typeof displayValue === "string" ? displayValue : "";
-      return (
-        <div key={key} className="flex flex-col gap-1.5">
-          <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-            Image URL
-          </span>
-          <Input
-            value={imageUrl}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              updateShaderParam(key, e.target.value)
-            }
-            placeholder="Enter image URL..."
-            className="h-7 text-xs"
-          />
-        </div>
-      );
-    }
-
-    if (typeof defaultValue === "string" && !defaultValue.startsWith("#") && shaderDef) {
-      const enumValues = new Set<string>();
-      enumValues.add(defaultValue);
-      shaderDef.presets?.forEach((preset) => {
-        const presetValue = preset.params[key];
-        if (typeof presetValue === "string") {
-          enumValues.add(presetValue);
-        }
-      });
-
-      const enumArray = Array.from(enumValues);
-
-      if (enumArray.length >= 2 && enumArray.length <= 4) {
-        const currentValue = typeof displayValue === "string" ? displayValue : defaultValue;
-
-        return (
-          <div key={key} className="flex flex-col gap-1.5">
-            <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-              {key}
-            </span>
-            <ToggleGroup
-              type="single"
-              value={currentValue}
-              onValueChange={(val) => {
-                if (val) updateShaderParam(key, val);
-              }}
-              className="w-full"
-              variant="outline"
-              size="sm"
-              spacing={0}
-            >
-              {enumArray.map((enumVal) => (
-                <ToggleGroupItem
-                  key={enumVal}
-                  value={enumVal}
-                  className="flex-1 text-xs capitalize"
-                >
-                  {enumVal}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </div>
-        );
-      }
-
-      if (enumArray.length > 4) {
-        const currentValue = typeof displayValue === "string" ? displayValue : defaultValue;
-
-        return (
-          <div key={key} className="flex flex-col gap-1.5">
-            <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-              {key}
-            </span>
-            <PropertySelect
-              value={currentValue}
-              onValueChange={(val) => updateShaderParam(key, val)}
-            >
-              {enumArray.map((enumVal) => (
-                <SelectItem
-                  key={String(enumVal)}
-                  value={String(enumVal)}
-                  className="capitalize text-xs"
-                >
-                  {enumVal}
-                </SelectItem>
-              ))}
-            </PropertySelect>
-          </div>
-        );
-      }
-    }
-
-    if (typeof defaultValue === "number") {
-      let min = 0;
-      let max = 1;
-      let step = 0.01;
-      let showAsPercentage = false;
-
-      if (key.includes("count") || key.includes("Count")) {
-        max = 20;
-        step = 1;
-      } else if (key.includes("size") || key.includes("Size")) {
-        max = 2;
-        step = 0.01;
-      } else if (key.includes("steps") || key.includes("Steps")) {
-        max = 10;
-        step = 1;
-      } else if (key === "speed" || key === "scale") {
-        max = 2;
-        showAsPercentage = true;
-      }
-
-      const numValue =
-        typeof displayValue === "number" ? displayValue : defaultValue;
-
-      return (
-        <div key={key} className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-              {key}
-            </span>
-            <div className="text-xs text-muted-foreground font-mono">
-              {showAsPercentage
-                ? `${Math.round(numValue * 100)}%`
-                : numValue.toFixed(2)}
-            </div>
-          </div>
-          <Slider
-            value={[numValue]}
-            onValueChange={([val]) => updateShaderParam(key, val)}
-            min={min}
-            max={max}
-            step={step}
-            className="w-full"
-          />
-        </div>
-      );
-    }
-
-    return (
-      <div key={key} className="flex flex-col gap-1.5">
-        <SectionLabel>{key}</SectionLabel>
-        <div className="text-xs text-muted-foreground font-mono p-1.5 bg-muted rounded">
-          {JSON.stringify(displayValue)}
-        </div>
-      </div>
-    );
-  };
-
-  const renderParamControl = (key: string, defaultValue: unknown) => {
-    const value = getParamValue(key);
+    const paramDef = shaderDef?.paramDefinitions?.[key];
     
-    if (shaderDef?.paramDefinitions?.[key]) {
-      const paramDef = shaderDef.paramDefinitions[key];
-      return renderControlFromDefinition(key, paramDef, value);
+    if (!paramDef) {
+      // Fallback: if no definition, don't render
+      return null;
     }
     
-    return renderParamControlHeuristic(key, defaultValue);
+    return renderControlFromDefinition(key, paramDef, value);
   };
 
   if (!shaderDef) {
@@ -2163,31 +1922,29 @@ function ShaderProperties({
     );
   }
 
-  const foregroundColorParams: [string, unknown][] = [];
-  const backgroundColorParams: [string, unknown][] = [];
-  const otherParams: [string, unknown][] = [];
+  // Group params by their group metadata from paramDefinitions
+  const foregroundParams: string[] = [];
+  const backgroundParams: string[] = [];
+  const otherParams: string[] = [];
 
-  Object.entries(shaderDef.defaultParams).forEach(([key, defaultValue]) => {
-    if (
-      key.toLowerCase().includes("back") ||
-      key.toLowerCase() === "background"
-    ) {
-      return;
-    }
-    else if (
-      Array.isArray(defaultValue) &&
-      typeof defaultValue[0] === "string" &&
-      defaultValue[0].startsWith("#")
-    ) {
-      foregroundColorParams.push([key, defaultValue]);
-    }
-    else if (typeof defaultValue === "string" && defaultValue.startsWith("#")) {
-      foregroundColorParams.push([key, defaultValue]);
-    }
-    else {
-      otherParams.push([key, defaultValue]);
-    }
-  });
+  if (shaderDef.paramDefinitions) {
+    Object.entries(shaderDef.paramDefinitions).forEach(([key, paramDef]) => {
+      // Skip hidden params
+      if (paramDef.hidden) {
+        return;
+      }
+      
+      // Group by metadata
+      const group = paramDef.group || "other";
+      if (group === "foreground") {
+        foregroundParams.push(key);
+      } else if (group === "background") {
+        backgroundParams.push(key);
+      } else {
+        otherParams.push(key);
+      }
+    });
+  }
 
   // Check if fills are the same across all shaders
   const fillsAreSame = useMemo(() => {
@@ -2370,11 +2127,17 @@ function ShaderProperties({
             onValueChange={(presetName) => {
               const preset = shaderDef.presets.find((p) => p.name === presetName);
               if (preset) {
-                // Preserve the current image value when applying preset
-                const currentImage = shader.shaderParams?.image;
+                // Preserve params marked as stickyOnPresetApply
                 const newParams = { ...preset.params };
-                if (currentImage !== undefined && currentImage !== "") {
-                  newParams.image = currentImage;
+                if (shaderDef.paramDefinitions) {
+                  Object.entries(shaderDef.paramDefinitions).forEach(([key, paramDef]) => {
+                    if (paramDef.stickyOnPresetApply) {
+                      const currentValue = shader.shaderParams[key];
+                      if (currentValue !== undefined && currentValue !== "") {
+                        newParams[key] = currentValue;
+                      }
+                    }
+                  });
                 }
                 onUpdate({ shaderParams: newParams } as Partial<ShaderObject>);
               }
@@ -2389,70 +2152,30 @@ function ShaderProperties({
         </div>
       )}
 
-      {/* Foreground Colors */}
-      {foregroundColorParams.length > 0 && (
+      {/* Foreground Parameters */}
+      {foregroundParams.length > 0 && (
         <div className="flex flex-col gap-3 pt-1">
           <div className="flex flex-col gap-3">
-            {/* Special case: neuro-noise shader - show all colors as a stack */}
-            {shader.shaderType === "neuroNoise" ? (
-              <>
-                <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                  Foreground
-                </span>
-                <div className="flex flex-col gap-1.5">
-                  {foregroundColorParams.map((param: [string, unknown], idx: number) => {
-                    const [paramKey, defaultValue] = param;
-                    const key: string = String(paramKey);
-                    const value = getParamValue(key);
-                    const displayValue = value ?? defaultValue;
-                    const colorValue: string =
-                      (typeof displayValue === "string" &&
-                      displayValue.startsWith("#")
-                        ? displayValue
-                        : (typeof defaultValue === "string" && defaultValue.startsWith("#")
-                          ? defaultValue
-                          : "#ffffff"));
-                    return (
-                      <ColorInput
-                        key={`fg-${key}-${idx}`}
-                        color={colorValue}
-                        onChange={(newColor) =>
-                          updateShaderParam(key, newColor)
-                        }
-                      />
-                    );
-                  })}
-                </div>
-              </>
-            ) : (
-              foregroundColorParams.map(([key, defaultValue]) =>
-                renderParamControl(key, defaultValue)
-              )
-            )}
+            {foregroundParams.map((key) => renderParamControl(key)).filter(Boolean)}
           </div>
         </div>
       )}
 
-      {/* Background Colors - skip for neuro-noise since it's included in foreground */}
-      {backgroundColorParams.length > 0 &&
-        shader.shaderType !== "neuroNoise" && (
-          <div className="flex flex-col gap-3 pt-1">
-            <div className="flex flex-col gap-3">
-              {backgroundColorParams.map(([key, defaultValue]) =>
-                renderParamControl(key, defaultValue)
-              )}
-            </div>
+      {/* Background Parameters */}
+      {backgroundParams.length > 0 && (
+        <div className="flex flex-col gap-3 pt-1">
+          <div className="flex flex-col gap-3">
+            {backgroundParams.map((key) => renderParamControl(key)).filter(Boolean)}
           </div>
-        )}
+        </div>
+      )}
 
       {/* Other Parameters */}
       {otherParams.length > 0 && (
         <div className="flex flex-col gap-3 pt-1">
           <SectionLabel>Parameters</SectionLabel>
           <div className="flex flex-col gap-3">
-            {otherParams.map(([key, defaultValue]) =>
-              renderParamControl(key, defaultValue)
-            )}
+            {otherParams.map((key) => renderParamControl(key)).filter(Boolean)}
           </div>
         </div>
       )}

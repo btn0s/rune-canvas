@@ -99,6 +99,7 @@ export const radialBlurShader: ShaderDefinition = {
     image: {
       control: { type: "imageUrl", label: "Image" },
       defaultValue: "",
+      stickyOnPresetApply: true,
     },
     strength: {
       control: {

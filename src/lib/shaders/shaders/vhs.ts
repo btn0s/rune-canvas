@@ -111,6 +111,7 @@ export const vhsShader: ShaderDefinition = {
     image: {
       control: { type: "imageUrl", label: "Image" },
       defaultValue: "",
+      stickyOnPresetApply: true,
     },
     scanlineIntensity: {
       control: {

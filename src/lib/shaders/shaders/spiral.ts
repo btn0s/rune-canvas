@@ -115,10 +115,12 @@ export const spiralShader: ShaderDefinition = {
     colorBack: {
       control: { type: "color", label: "Background" },
       defaultValue: "#0a0e27",
+      hidden: true,
     },
     colorFront: {
       control: { type: "color", label: "Foreground" },
       defaultValue: "#60a5fa",
+      group: "foreground",
     },
     density: {
       control: {

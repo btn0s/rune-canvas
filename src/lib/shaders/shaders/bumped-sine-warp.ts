@@ -169,6 +169,7 @@ export const bumpedSineWarpShader: ShaderDefinition = {
     image: {
       control: { type: "imageUrl", label: "Image" },
       defaultValue: "",
+      stickyOnPresetApply: true,
     },
     bumpFactor: {
       control: {

@@ -249,10 +249,12 @@ export const ditheringShader: ShaderDefinition = {
     colorBack: {
       control: { type: "color", label: "Background" },
       defaultValue: "#1e293b",
+      hidden: true,
     },
     colorFront: {
       control: { type: "color", label: "Foreground" },
       defaultValue: "#60a5fa",
+      group: "foreground",
     },
     shape: {
       control: {

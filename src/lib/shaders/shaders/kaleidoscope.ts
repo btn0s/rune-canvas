@@ -91,6 +91,7 @@ export const kaleidoscopeShader: ShaderDefinition = {
     image: {
       control: { type: "imageUrl", label: "Image" },
       defaultValue: "",
+      stickyOnPresetApply: true,
     },
     segments: {
       control: {

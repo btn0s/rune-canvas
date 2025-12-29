@@ -160,10 +160,12 @@ export const waterShader: ShaderDefinition = {
     image: {
       control: { type: "imageUrl", label: "Image" },
       defaultValue: "",
+      stickyOnPresetApply: true,
     },
     colorBack: {
       control: { type: "color", label: "Background" },
       defaultValue: "#909090",
+      hidden: true,
     },
     colorHighlight: {
       control: { type: "color", label: "Highlight" },

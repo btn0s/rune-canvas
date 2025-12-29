@@ -88,6 +88,7 @@ export const chromaticAberrationShader: ShaderDefinition = {
     image: {
       control: { type: "imageUrl", label: "Image" },
       defaultValue: "",
+      stickyOnPresetApply: true,
     },
     strength: {
       control: {

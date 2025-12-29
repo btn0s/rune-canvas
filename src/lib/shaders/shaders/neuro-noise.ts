@@ -98,14 +98,17 @@ export const neuroNoiseShader: ShaderDefinition = {
     colorFront: {
       control: { type: "color", label: "Foreground" },
       defaultValue: "#ffffff",
+      group: "foreground",
     },
     colorMid: {
       control: { type: "color", label: "Mid" },
       defaultValue: "#8b5cf6",
+      group: "foreground",
     },
     colorBack: {
       control: { type: "color", label: "Background" },
       defaultValue: "#0f172a",
+      hidden: true,
     },
     brightness: {
       control: {

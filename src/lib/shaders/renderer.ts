@@ -1,8 +1,11 @@
 /**
  * WebGL Shader Renderer
  *
- * Simplified WebGL 2.0 shader mount for rendering shaders on canvas
- * Uses shared WebGL context to avoid context limit issues
+ * Core WebGL rendering logic only - handles shader compilation, uniform binding,
+ * framebuffer management, and pixel readback. Does NOT handle React lifecycle,
+ * asset loading, or presentation policies (see ShaderRenderer.tsx).
+ *
+ * Uses shared WebGL context to avoid context limit issues.
  */
 
 import { sharedContext } from "./shared-context";
@@ -113,7 +116,6 @@ export class ShaderRenderer {
   // Performance: cached buffers (recreated on resize)
   private pixelBuffer: Uint8Array | null = null;
   private imageData: ImageData | null = null;
-  private flippedBuffer: Uint8ClampedArray | null = null;
   // Performance: FPS throttling
   private targetFps = 60;
   private lastRenderTime = 0;
@@ -678,7 +680,6 @@ export class ShaderRenderer {
         this.canvas.width,
         this.canvas.height
       );
-      this.flippedBuffer = new Uint8ClampedArray(this.imageData.data.length);
     }
 
     // Reuse cached buffer
@@ -701,20 +702,9 @@ export class ShaderRenderer {
 
     const displayCtx = this.displayCtx;
     const imageData = this.imageData!;
-    const flipped = this.flippedBuffer!;
 
-    // Flip vertically (WebGL origin is bottom-left, canvas 2D is top-left)
-    for (let y = 0; y < this.canvas.height; y++) {
-      const srcRow = this.canvas.height - 1 - y;
-      flipped.set(
-        pixels.subarray(
-          srcRow * this.canvas.width * 4,
-          (srcRow + 1) * this.canvas.width * 4
-        ),
-        y * this.canvas.width * 4
-      );
-    }
-    imageData.data.set(flipped);
+    // Write pixels directly to ImageData (CSS transform handles Y-flip)
+    imageData.data.set(pixels);
 
     displayCtx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     displayCtx.putImageData(imageData, 0, 0);
@@ -875,7 +865,6 @@ export class ShaderRenderer {
       this.displayCtx = null;
       this.pixelBuffer = null;
       this.imageData = null;
-      this.flippedBuffer = null;
       return;
     }
 
@@ -920,7 +909,6 @@ export class ShaderRenderer {
     this.displayCtx = null;
     this.pixelBuffer = null;
     this.imageData = null;
-    this.flippedBuffer = null;
   }
 
   dispose() {

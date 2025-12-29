@@ -2,6 +2,23 @@
  * Common GLSL utility functions used across shaders
  */
 
+import type { ShaderRendererUniforms } from './renderer';
+
+/**
+ * Prepare shader uniforms for rendering by applying presentation policies.
+ * Currently forces background colors to transparent so fills can handle backgrounds.
+ */
+export function prepareShaderUniforms(uniforms: ShaderRendererUniforms): ShaderRendererUniforms {
+  const prepared = { ...uniforms };
+  
+  // Force background color to transparent - fills handle the background
+  if (prepared.u_colorBack) {
+    prepared.u_colorBack = [0, 0, 0, 0]; // Transparent RGBA
+  }
+  
+  return prepared;
+}
+
 // language=GLSL
 export const declarePI = `
 #define TWO_PI 6.28318530718

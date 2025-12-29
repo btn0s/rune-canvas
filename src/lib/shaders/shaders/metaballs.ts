@@ -132,6 +132,7 @@ export const metaballsShader: ShaderDefinition = {
     colorBack: {
       control: { type: "color", label: "Background" },
       defaultValue: "#0f172a",
+      hidden: true,
     },
     size: {
       control: {

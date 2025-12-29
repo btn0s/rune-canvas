@@ -63,6 +63,7 @@ export const pixelateShader: ShaderDefinition = {
     image: {
       control: { type: "imageUrl", label: "Image" },
       defaultValue: "",
+      stickyOnPresetApply: true,
     },
     pixelSize: {
       control: {

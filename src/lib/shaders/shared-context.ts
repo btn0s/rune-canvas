@@ -7,6 +7,11 @@
  * 
  * Also coordinates rendering across all shaders with a single RAF loop
  * to ensure predictable state management and efficient batching.
+ * 
+ * Responsibilities:
+ * - WebGL context creation and lifecycle
+ * - Centralized requestAnimationFrame coordination
+ * - Renderer registration/unregistration
  */
 
 type RendererFrameCallback = () => void;

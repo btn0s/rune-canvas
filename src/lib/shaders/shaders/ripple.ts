@@ -96,6 +96,7 @@ export const rippleShader: ShaderDefinition = {
     image: {
       control: { type: "imageUrl", label: "Image" },
       defaultValue: "",
+      stickyOnPresetApply: true,
     },
     frequency: {
       control: {

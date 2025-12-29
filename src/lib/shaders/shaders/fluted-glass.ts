@@ -416,10 +416,12 @@ export const flutedGlassShader: ShaderDefinition = {
     image: {
       control: { type: "imageUrl", label: "Image" },
       defaultValue: "",
+      stickyOnPresetApply: true,
     },
     colorBack: {
       control: { type: "color", label: "Background" },
       defaultValue: "#00000000",
+      hidden: true,
     },
     colorShadow: {
       control: { type: "color", label: "Shadow" },

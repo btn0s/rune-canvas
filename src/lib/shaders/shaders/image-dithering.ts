@@ -192,18 +192,22 @@ export const imageDitheringShader: ShaderDefinition = {
     image: {
       control: { type: "imageUrl", label: "Image" },
       defaultValue: "",
+      stickyOnPresetApply: true,
     },
     colorFront: {
       control: { type: "color", label: "Foreground" },
       defaultValue: "#94ffaf",
+      group: "foreground",
     },
     colorBack: {
       control: { type: "color", label: "Background" },
       defaultValue: "#000c38",
+      hidden: true,
     },
     colorHighlight: {
       control: { type: "color", label: "Highlight" },
       defaultValue: "#eaff94",
+      group: "foreground",
     },
     type: {
       control: {

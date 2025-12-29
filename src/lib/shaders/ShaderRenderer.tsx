@@ -1,11 +1,16 @@
 /**
  * React component wrapper for ShaderRenderer
+ *
+ * Handles React lifecycle, asset loading (image URLs → HTMLImageElement),
+ * and presentation policies (e.g., forcing background transparency).
+ * Delegates actual WebGL rendering to ShaderRenderer class.
  */
 
 import { useEffect, useRef, useState } from "react";
 import { ShaderRenderer } from "./renderer";
 import type { ShaderRendererUniforms } from "./renderer";
 import type { ShaderDefinition } from "./types";
+import { prepareShaderUniforms } from "./shader-utils";
 
 export interface ShaderRendererProps {
   shader: ShaderDefinition;
@@ -47,8 +52,12 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 
 /**
  * Process uniforms, converting string URLs to loaded images
+ * Uses paramDefinitions to identify which params are image URLs
  */
-async function processUniforms(uniforms: ShaderRendererUniforms): Promise<ShaderRendererUniforms> {
+async function processUniforms(
+  uniforms: ShaderRendererUniforms,
+  paramDefinitions?: import('./types').ParamDefinitions
+): Promise<ShaderRendererUniforms> {
   const processed: ShaderRendererUniforms = {};
   const imageLoadPromises: Promise<void>[] = [];
 
@@ -64,8 +73,10 @@ async function processUniforms(uniforms: ShaderRendererUniforms): Promise<Shader
 
   for (const [key, value] of Object.entries(uniforms)) {
     if (typeof value === 'string' && value.trim() !== '') {
-      // Check if this uniform name suggests it's an image (e.g., u_image, u_noiseTexture)
-      if (key.includes('image') || key.includes('texture') || key.includes('Image') || key.includes('Texture')) {
+      // Check if this param is defined as an imageUrl type in paramDefinitions
+      const isImageParam = paramDefinitions?.[key]?.control.type === 'imageUrl';
+      
+      if (isImageParam) {
         if (isValidUrl(value)) {
           const imagePromise = loadImage(value).then((img) => {
             processed[key] = img;
@@ -108,13 +119,9 @@ export function ShaderRendererComponent({
   // Load images from URLs
   useEffect(() => {
     const uniforms = shader.paramsToUniforms(params) as ShaderRendererUniforms;
-    
-    // Force background color to transparent - fills handle the background
-    if (uniforms.u_colorBack) {
-      uniforms.u_colorBack = [0, 0, 0, 0]; // Transparent RGBA
-    }
+    const preparedUniforms = prepareShaderUniforms(uniforms);
 
-    processUniforms(uniforms).then((processed) => {
+    processUniforms(preparedUniforms, shader.paramDefinitions).then((processed) => {
       setLoadedUniforms(processed);
     });
   }, [shader, params]);
@@ -228,6 +235,7 @@ export function ShaderRendererComponent({
         display: "block",
         width: "100%",
         height: "100%",
+        transform: "scaleY(-1)",
       }}
     />
   );
