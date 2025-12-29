@@ -16,7 +16,6 @@ import type { ParamControl } from "@/lib/shaders/types";
 import { createSolidFill, createShadow, createInnerShadow } from "../lib/objects/types";
 import { useState, useRef, useMemo } from "react";
 import { SelectItem } from "./ui/select";
-import { Input } from "./ui/input";
 import {
   ArrowRight,
   ArrowDown,
@@ -1868,22 +1867,8 @@ function ShaderProperties({
       }
 
       case "imageUrl": {
-        const imageUrl = typeof value === "string" ? value : "";
-        return (
-          <div key={key} className="flex flex-col gap-1.5">
-            <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-              {formatLabel(key, control.label)}
-            </span>
-            <Input
-              value={imageUrl}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                updateShaderParam(key, e.target.value)
-              }
-              placeholder="Enter image URL..."
-              className="h-7 text-xs"
-            />
-          </div>
-        );
+        // ImageUrl parameters are no longer editable - they're handled via fills
+        return null;
       }
 
       case "number": {
@@ -1955,6 +1940,11 @@ function ShaderProperties({
     Object.entries(shaderDef.paramDefinitions).forEach(([key, paramDef]) => {
       // Skip hidden params
       if (paramDef.hidden) {
+        return;
+      }
+      
+      // Skip imageUrl params completely - they're handled via fills now
+      if (paramDef.control.type === "imageUrl") {
         return;
       }
       

@@ -59,6 +59,8 @@ import { CommandBar } from "./CommandBar";
 import { ShaderPickerDialog } from "./ShaderPickerDialog";
 import { ShaderRendererComponent } from "@/lib/shaders/ShaderRenderer";
 import { getShader } from "@/lib/shaders/registry";
+import type { ShaderDefinition } from "@/lib/shaders/types";
+import type { ImageFill } from "@/lib/objects/types";
 import { cn } from "@/lib/utils";
 import type { Point, Tool } from "../lib/types";
 import type { CommandContext } from "../lib/commands/types";
@@ -1869,6 +1871,37 @@ export function Canvas() {
               }}
             >
               {(() => {
+                // Helper: Merge image fills into shader params for image shaders
+                const mergeImageFillIntoShaderParams = (
+                  shaderDef: ShaderDefinition,
+                  shaderObj: ShaderObject
+                ): Record<string, unknown> => {
+                  const params = { ...shaderObj.shaderParams };
+                  
+                  // Find imageUrl parameters in the shader definition
+                  const imageParamNames = Object.entries(shaderDef.paramDefinitions || {})
+                    .filter(([_, def]) => def.control.type === 'imageUrl')
+                    .map(([name]) => name);
+                  
+                  // If shader has image parameters, check for image fills
+                  if (imageParamNames.length > 0) {
+                    // Find the first visible image fill
+                    const imageFill = shaderObj.fills.find(
+                      (fill): fill is ImageFill => 
+                        fill.type === 'image' && fill.visible
+                    );
+                    
+                    // Use the image fill's src for all image parameters
+                    if (imageFill) {
+                      for (const paramName of imageParamNames) {
+                        params[paramName] = imageFill.src;
+                      }
+                    }
+                  }
+                  
+                  return params;
+                };
+
                 // Render an object (always recursive - children render inside parent)
                 const renderObject = (obj: CanvasObject): React.ReactNode => {
                   if (!obj.visible) return null;
@@ -2065,11 +2098,14 @@ export function Canvas() {
 
                           const shaderStyles = computeShaderStyle(shaderObj);
                           
+                          // Merge image fills into shader params if applicable
+                          const mergedParams = mergeImageFillIntoShaderParams(shaderDef, shaderObj);
+                          
                           return (
                             <div style={shaderStyles}>
                               <ShaderRendererComponent
                                 shader={shaderDef}
-                                params={shaderObj.shaderParams}
+                                params={mergedParams}
                                 width={obj.width}
                                 height={obj.height}
                                 speed={1}
@@ -2137,7 +2173,9 @@ export function Canvas() {
                   const centerX = rect.width / 2;
                   const centerY = rect.height / 2;
                   const canvasPoint = screenToCanvas(centerX, centerY);
-                  createShader(shaderId, shaderDef.defaultParams, canvasPoint, null, shaderDef.name);
+                  createShader(shaderId, shaderDef.defaultParams, canvasPoint, null, shaderDef.name).catch((error) => {
+                    console.error("Failed to create shader:", error);
+                  });
                   setTool("select");
                   setShaderPickerOpen(false);
                 }

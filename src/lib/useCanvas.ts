@@ -19,7 +19,9 @@ import type {
   TextObject,
   ShaderObject,
 } from "./objects/types";
-import { createSolidFill } from "./objects/types";
+import { createSolidFill, type ImageFill } from "./objects/types";
+import { getShader } from "./shaders/registry";
+import type { ShaderDefinition } from "./shaders/types";
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 4;
@@ -1110,9 +1112,46 @@ export function useCanvas() {
     return brightness < 128;
   }, []);
 
+  // Helper: Load image and get dimensions
+  const loadImageDimensions = (src: string): Promise<{ width: number; height: number }> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      };
+      img.onerror = () => {
+        // Fallback dimensions if image fails to load
+        resolve({ width: 400, height: 400 });
+      };
+      img.src = src;
+    });
+  };
+
+  // Helper: Create image fill from URL
+  const createImageFillFromUrl = async (
+    src: string,
+    fillId: string
+  ): Promise<ImageFill> => {
+    const dimensions = await loadImageDimensions(src);
+    return {
+      id: fillId,
+      type: "image",
+      visible: true,
+      opacity: 1,
+      src,
+      naturalWidth: dimensions.width,
+      naturalHeight: dimensions.height,
+      fillMode: "fill",
+      cropX: 0,
+      cropY: 0,
+      cropWidth: dimensions.width,
+      cropHeight: dimensions.height,
+    };
+  };
+
   // Create shader object
   const createShader = useCallback(
-    (
+    async (
       shaderType: string,
       shaderParams: Record<string, unknown>,
       position: Point,
@@ -1125,6 +1164,38 @@ export function useCanvas() {
       const name = `${baseName} ${objectCounter.current++}`;
       const presetWidth = 400;
       const presetHeight = 400;
+
+      // Get shader definition to check for imageUrl parameters
+      const shaderDef = getShader(shaderType);
+      const fills: ImageFill[] = [];
+      const finalShaderParams = { ...shaderParams };
+
+      // Check if shader has imageUrl parameters and create image fills
+      if (shaderDef?.paramDefinitions) {
+        for (const [paramName, paramDef] of Object.entries(shaderDef.paramDefinitions)) {
+          if (paramDef.control.type === "imageUrl") {
+            // Get image URL from params or defaultParams
+            const imageUrl = 
+              (shaderParams[paramName] as string) || 
+              (shaderDef.defaultParams[paramName] as string) || 
+              "";
+            
+            if (imageUrl && typeof imageUrl === "string") {
+              // Create image fill
+              const fillId = `fill-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+              try {
+                const imageFill = await createImageFillFromUrl(imageUrl, fillId);
+                fills.push(imageFill);
+              } catch (error) {
+                console.warn(`Failed to create image fill for ${paramName}:`, error);
+              }
+            }
+            
+            // Remove image parameter from shaderParams
+            delete finalShaderParams[paramName];
+          }
+        }
+      }
 
       const newShader: ShaderObject = {
         id,
@@ -1140,8 +1211,8 @@ export function useCanvas() {
         visible: true,
         locked: false,
         shaderType,
-        shaderParams,
-        fills: [],
+        shaderParams: finalShaderParams,
+        fills,
         radius: 0,
         clipContent: false,
         shadows: [],
