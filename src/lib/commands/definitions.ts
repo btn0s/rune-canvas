@@ -47,6 +47,15 @@ defineCommand({
   execute: (ctx) => ctx.setTool("text"),
 });
 
+defineCommand({
+  id: "shader",
+  name: "Shader Tool",
+  aliases: ["s", "shade"],
+  category: "tool",
+  shortcutHint: "S",
+  execute: (ctx) => ctx.setTool("shader"),
+});
+
 // =============================================================================
 // CLIPBOARD
 // =============================================================================

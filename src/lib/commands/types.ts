@@ -45,7 +45,7 @@ export interface Command {
   minSelection?: number;
 
   /** Required object type(s) for this command */
-  requiresType?: ("frame" | "text" | "image")[];
+  requiresType?: ("frame" | "text" | "image" | "shader")[];
 
   /** The action to execute - index is provided for indexed property commands */
   execute: (ctx: CommandContext, args?: string, index?: number) => void;

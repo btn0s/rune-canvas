@@ -3,6 +3,7 @@ import type {
   FrameObject,
   TextObject,
   ImageObject,
+  ShaderObject,
   BlendMode,
   SidebarMode,
   Fill,
@@ -10,6 +11,7 @@ import type {
   GradientFill,
   ImageFill,
 } from "../lib/types";
+import { getShader } from "@/lib/shaders/registry";
 import { createSolidFill, createShadow, createInnerShadow } from "../lib/types";
 import { useState, useRef } from "react";
 import { SelectItem } from "./ui/select";
@@ -1620,6 +1622,218 @@ function TextProperties({
 }
 
 // ============================================================================
+// SHADER PROPERTIES
+// ============================================================================
+
+function ShaderProperties({
+  objects: shaders,
+  onUpdate,
+  onUpdateEach: _onUpdateEach,
+}: ObjectPropertiesProps<ShaderObject>) {
+  const commonUpdate = onUpdate as (updates: Partial<CanvasObject>) => void;
+  const isSingle = shaders.length === 1;
+
+  if (!isSingle) {
+    // Multiple shaders selected - show only common properties
+    return (
+      <>
+        <LayoutSection objects={shaders} onUpdate={commonUpdate} />
+        <OpacityInput objects={shaders} onUpdate={commonUpdate} />
+      </>
+    );
+  }
+
+  const shader = shaders[0];
+  const shaderDef = getShader(shader.shaderType);
+
+  const updateShaderParam = (key: string, value: unknown) => {
+    const newParams = { ...shader.shaderParams, [key]: value };
+    onUpdate({ shaderParams: newParams } as Partial<ShaderObject>);
+  };
+
+  const getParamValue = (key: string): unknown => {
+    return shader.shaderParams[key] ?? shaderDef?.defaultParams[key];
+  };
+
+  const renderParamControl = (key: string, defaultValue: unknown) => {
+    const value = getParamValue(key);
+    const displayValue = value ?? defaultValue;
+
+    // Color array (e.g., colors: ["#ff0000", "#00ff00"])
+    if (
+      Array.isArray(defaultValue) &&
+      typeof defaultValue[0] === "string" &&
+      defaultValue[0].startsWith("#")
+    ) {
+      const colors = Array.isArray(displayValue) 
+        ? (displayValue as string[]).filter(c => typeof c === "string" && c.startsWith("#"))
+        : Array.isArray(defaultValue) 
+          ? (defaultValue as string[])
+          : [];
+      return (
+        <div key={key} className="flex flex-col gap-1.5">
+          <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+            {key}
+          </span>
+          <div className="flex flex-col gap-1.5">
+            {colors.map((color, idx) => {
+              const colorValue = typeof color === "string" && color.startsWith("#") ? color : "#ffffff";
+              return (
+                <div key={idx} className="flex items-center gap-1.5 min-w-0">
+                  <div className="flex-1 min-w-0">
+                    <ColorInput
+                      color={colorValue}
+                      onChange={(newColor) => {
+                        const newColors = [...colors];
+                        newColors[idx] = newColor;
+                        updateShaderParam(key, newColors);
+                      }}
+                    />
+                  </div>
+                  {colors.length > 1 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 shrink-0"
+                      onClick={() => {
+                        const newColors = colors.filter((_, i) => i !== idx);
+                        updateShaderParam(key, newColors);
+                      }}
+                    >
+                      <Minus className="size-3" />
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => {
+                updateShaderParam(key, [...colors, "#ffffff"]);
+              }}
+            >
+              <Plus className="size-3 mr-1" />
+              Add Color
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    // Single color string
+    if (typeof defaultValue === "string" && defaultValue.startsWith("#")) {
+      const colorValue = (typeof displayValue === "string" && displayValue.startsWith("#") 
+        ? displayValue 
+        : defaultValue) || "#ffffff";
+      return (
+        <div key={key} className="flex flex-col gap-1.5">
+          <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+            {key}
+          </span>
+          <ColorInput
+            color={colorValue}
+            onChange={(newColor) => updateShaderParam(key, newColor)}
+          />
+        </div>
+      );
+    }
+
+    // Number (0-1 range typically, but could be other ranges)
+    if (typeof defaultValue === "number") {
+      // Determine range based on parameter name and value
+      let min = 0;
+      let max = 1;
+      let step = 0.01;
+
+      if (key.includes("count") || key.includes("Count")) {
+        max = 20;
+        step = 1;
+      } else if (key.includes("size") || key.includes("Size")) {
+        max = 2;
+        step = 0.01;
+      } else if (key.includes("steps") || key.includes("Steps")) {
+        max = 10;
+        step = 1;
+      }
+
+      const numValue =
+        typeof displayValue === "number" ? displayValue : defaultValue;
+
+      return (
+        <div key={key} className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+              {key}
+            </span>
+            <div className="text-xs text-muted-foreground font-mono">
+              {numValue.toFixed(2)}
+            </div>
+          </div>
+          <Slider
+            value={[numValue]}
+            onValueChange={([val]) => updateShaderParam(key, val)}
+            min={min}
+            max={max}
+            step={step}
+            className="w-full"
+          />
+        </div>
+      );
+    }
+
+    // Unknown type - show as JSON
+    return (
+      <div key={key} className="flex flex-col gap-1.5">
+        <SectionLabel>{key}</SectionLabel>
+        <div className="text-xs text-muted-foreground font-mono p-1.5 bg-muted rounded">
+          {JSON.stringify(displayValue)}
+        </div>
+      </div>
+    );
+  };
+
+  if (!shaderDef) {
+    return (
+      <>
+        <LayoutSection objects={shaders} onUpdate={commonUpdate} />
+        <OpacityInput objects={shaders} onUpdate={commonUpdate} />
+        <div className="text-sm text-muted-foreground">
+          Unknown shader: {shader.shaderType}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <LayoutSection objects={shaders} onUpdate={commonUpdate} />
+      <OpacityInput objects={shaders} onUpdate={commonUpdate} />
+
+      <div className="flex flex-col gap-1.5">
+        <SectionLabel>Shader</SectionLabel>
+        <div className="text-sm font-medium">{shaderDef.name}</div>
+        {shaderDef.description && (
+          <div className="text-xs text-muted-foreground">
+            {shaderDef.description}
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-3 pt-1">
+        <SectionLabel>Parameters</SectionLabel>
+        <div className="flex flex-col gap-3">
+          {Object.entries(shaderDef.defaultParams).map(([key, defaultValue]) =>
+            renderParamControl(key, defaultValue)
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ============================================================================
 // IMAGE PROPERTIES
 // ============================================================================
 
@@ -1918,6 +2132,14 @@ export function PropertyPanel({
             onUpdateEach={handleUpdateEach}
           />
         );
+      case "shader":
+        return (
+          <ShaderProperties
+            objects={selectedObjects as ShaderObject[]}
+            onUpdate={handleUpdateAll}
+            onUpdateEach={handleUpdateEach}
+          />
+        );
       default:
         return null;
     }
@@ -1959,6 +2181,8 @@ export function PropertyPanel({
       case "text":
         return [20, 14, 18, 12];
       case "image":
+        return [20, 16, 12];
+      case "shader":
         return [20, 16, 12];
       default:
         return [20, 16, 12];

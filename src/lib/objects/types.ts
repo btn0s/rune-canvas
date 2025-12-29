@@ -29,7 +29,7 @@ export interface Bounds extends Point, Size {}
 // Common Types
 // ============================================================================
 
-export type ObjectType = "frame" | "text" | "image";
+export type ObjectType = "frame" | "text" | "image" | "shader";
 
 /** How an object sizes itself */
 export type SizeMode = "fixed" | "fit" | "expand";
@@ -323,10 +323,24 @@ export interface ImageObject extends BaseObject {
 }
 
 // ============================================================================
+// Shader Object
+// ============================================================================
+
+export interface ShaderObject extends BaseObject {
+  type: "shader";
+
+  /** Shader type identifier (e.g., "meshGradient", "neuroNoise") */
+  shaderType: string;
+
+  /** Shader-specific parameters stored as a JSON object */
+  shaderParams: Record<string, unknown>;
+}
+
+// ============================================================================
 // Union Type
 // ============================================================================
 
-export type CanvasObject = FrameObject | TextObject | ImageObject;
+export type CanvasObject = FrameObject | TextObject | ImageObject | ShaderObject;
 
 // ============================================================================
 // Type Guards
@@ -342,4 +356,8 @@ export function isText(obj: CanvasObject): obj is TextObject {
 
 export function isImage(obj: CanvasObject): obj is ImageObject {
   return obj.type === "image";
+}
+
+export function isShader(obj: CanvasObject): obj is ShaderObject {
+  return obj.type === "shader";
 }

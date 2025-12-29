@@ -269,7 +269,15 @@ export interface TextObject extends BaseObject {
   sizeMode: TextSizeMode;
 }
 
-export type CanvasObject = FrameObject | ImageObject | TextObject;
+export interface ShaderObject extends BaseObject {
+  type: "shader";
+  /** Shader type identifier (e.g., "meshGradient", "neuroNoise") */
+  shaderType: string;
+  /** Shader-specific parameters stored as a JSON object */
+  shaderParams: Record<string, unknown>;
+}
+
+export type CanvasObject = FrameObject | ImageObject | TextObject | ShaderObject;
 
 export type Tool = "select" | "hand" | "frame" | "text" | "shader";
 

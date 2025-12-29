@@ -95,6 +95,13 @@ export function computeWrapperStyle(ctx: StyleContext): CSSProperties {
         break;
       }
 
+      case "shader": {
+        // Shaders always have fixed size
+        style.width = object.width;
+        style.height = object.height;
+        break;
+      }
+
       case "frame": {
         const frameObj = object as FrameObject;
         // Frames handle their own sizing based on widthMode/heightMode

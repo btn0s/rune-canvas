@@ -307,7 +307,7 @@ export function ColorInput({
   };
 
   return (
-    <div className="flex items-center h-7 w-full bg-input/30 border border-border rounded-md overflow-hidden">
+    <div className="flex items-center h-7 w-full min-w-0 bg-input/30 border border-border rounded-md overflow-hidden">
       {/* Color swatch - opens popover */}
       <Popover>
         <PopoverTrigger asChild>

@@ -13,13 +13,16 @@ import { useResize } from "./interactions/useResize";
 import { useRotation } from "./interactions/useRotation";
 import {
   createSolidFill,
-  type CanvasObject,
-  type FrameObject,
-  type ImageObject,
-  type TextObject,
   type Guide,
   type Point,
 } from "./types";
+import type {
+  CanvasObject,
+  FrameObject,
+  ImageObject,
+  TextObject,
+  ShaderObject,
+} from "./objects/types";
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 4;
@@ -1110,6 +1113,45 @@ export function useCanvas() {
     return brightness < 128;
   }, []);
 
+  // Create shader object
+  const createShader = useCallback(
+    (
+      shaderType: string,
+      shaderParams: Record<string, unknown>,
+      position: Point,
+      parentId: string | null = null,
+      shaderName?: string
+    ) => {
+      pushHistory();
+      const id = `shader-${Date.now()}`;
+      const baseName = shaderName || "Shader";
+      const name = `${baseName} ${objectCounter.current++}`;
+      const presetWidth = 400;
+      const presetHeight = 400;
+
+      const newShader: ShaderObject = {
+        id,
+        name,
+        type: "shader",
+        parentId,
+        x: position.x - presetWidth / 2,
+        y: position.y - presetHeight / 2,
+        width: presetWidth,
+        height: presetHeight,
+        opacity: 1,
+        rotation: 0,
+        visible: true,
+        locked: false,
+        shaderType,
+        shaderParams,
+      };
+
+      setObjects((prev) => [...prev, newShader]);
+      setSelectedIds([id]);
+    },
+    [pushHistory]
+  );
+
   // Create text object (separate from frame/rectangle creation)
   const createText = useCallback(
     (canvasPoint: Point) => {
@@ -1308,6 +1350,7 @@ export function useCanvas() {
     updateObject,
     updateTextContent,
     createText,
+    createShader,
     setParent,
     bringToFront,
     sendToBack,

@@ -25,6 +25,7 @@ import {
   type FrameObject,
   type ImageObject,
   type TextObject,
+  type ShaderObject,
   computeWrapperStyle,
   computeFrameStyle,
   computeTextStyle,
@@ -54,6 +55,9 @@ import {
 import { LayersPanel } from "./LayersPanel";
 import { PropertyPanel } from "./PropertyPanel";
 import { CommandBar } from "./CommandBar";
+import { ShaderPickerDialog } from "./ShaderPickerDialog";
+import { ShaderRendererComponent } from "@/lib/shaders/ShaderRenderer";
+import { getShader } from "@/lib/shaders/registry";
 import { cn } from "@/lib/utils";
 import type { Point, Tool } from "../lib/types";
 import type { CommandContext } from "../lib/commands/types";
@@ -358,6 +362,7 @@ export function Canvas() {
     addImage,
     updateTextContent,
     createText,
+    createShader,
     updateObject,
     pushHistory,
     undo,
@@ -394,8 +399,8 @@ export function Canvas() {
   const commandContext: CommandContext = useMemo(
     () => ({
       selectedIds,
-      selectedObjects,
-      objects,
+      selectedObjects: selectedObjects as import("../lib/types").CanvasObject[],
+      objects: objects as import("../lib/types").CanvasObject[],
       setTool,
       copySelected,
       pasteClipboard,
@@ -419,7 +424,9 @@ export function Canvas() {
       redo,
       canUndo,
       canRedo,
-      updateObject,
+      updateObject: (id: string, updates: Partial<import("../lib/types").CanvasObject>) => {
+        updateObject(id, updates as Partial<CanvasObject>);
+      },
       setSelectedIds: select,
     }),
     [
@@ -475,6 +482,9 @@ export function Canvas() {
 
   // Crop mode state (meta key held during resize of an image)
   const [isCropMode, setIsCropMode] = useState(false);
+
+  // Shader picker dialog state
+  const [shaderPickerOpen, setShaderPickerOpen] = useState(false);
 
   // Initialize and track mouse position via CSS variables
   useEffect(() => {
@@ -1146,6 +1156,8 @@ export function Canvas() {
       startCreate(canvasPoint);
     } else if (tool === "text") {
       createText(canvasPoint);
+    } else if (tool === "shader") {
+      setShaderPickerOpen(true);
     }
   };
 
@@ -1317,7 +1329,10 @@ export function Canvas() {
       },
       {
         key: "s",
-        action: () => setTool("shader"),
+        action: () => {
+          setTool("shader");
+          setShaderPickerOpen(true);
+        },
         when: () => !commandState.isActive,
       },
 
@@ -1767,7 +1782,7 @@ export function Canvas() {
                                 // Fixed mode: don't sync anything
 
                                 if (Object.keys(updates).length > 0) {
-                                  updateObject(obj.id, updates, {
+                                  updateObject(obj.id, updates as Partial<import("../lib/types").CanvasObject>, {
                                     commit: false,
                                   });
                                 }
@@ -1781,6 +1796,39 @@ export function Canvas() {
                               style={computeTextStyle(textObj, isEditing)}
                             >
                               {textObj.content || (isEditing ? "" : "\u200B")}
+                            </div>
+                          );
+                        })()}
+
+                      {obj.type === "shader" &&
+                        (() => {
+                          const shaderObj = obj as ShaderObject;
+                          const shaderDef = getShader(shaderObj.shaderType);
+
+                          if (!shaderDef) {
+                            return (
+                              <div className="w-full h-full flex items-center justify-center text-muted-foreground text-sm">
+                                Unknown shader: {shaderObj.shaderType}
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div
+                              style={{
+                                width: obj.width,
+                                height: obj.height,
+                                position: "relative",
+                                overflow: "hidden",
+                              }}
+                            >
+                              <ShaderRendererComponent
+                                shader={shaderDef}
+                                params={shaderObj.shaderParams}
+                                width={obj.width}
+                                height={obj.height}
+                                speed={1}
+                              />
                             </div>
                           );
                         })()}
@@ -1826,6 +1874,28 @@ export function Canvas() {
               }
               onRename={(id, name) => updateObject(id, { name })}
               sidebarMode={sidebarMode}
+            />
+
+            {/* Shader picker dialog */}
+            <ShaderPickerDialog
+              open={shaderPickerOpen}
+              onOpenChange={(open) => {
+                setShaderPickerOpen(open);
+                if (!open && tool === "shader") {
+                  setTool("select");
+                }
+              }}
+              onSelect={(shaderId) => {
+                const shaderDef = getShader(shaderId);
+                if (shaderDef) {
+                  const rect = containerRef.current!.getBoundingClientRect();
+                  const centerX = rect.width / 2;
+                  const centerY = rect.height / 2;
+                  const canvasPoint = screenToCanvas(centerX, centerY);
+                  createShader(shaderId, shaderDef.defaultParams, canvasPoint, null, shaderDef.name);
+                  setTool("select");
+                }
+              }}
             />
 
             {/* Property panel */}

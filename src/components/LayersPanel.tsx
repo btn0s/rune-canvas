@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { ChevronRight, Frame, Type, Image, Eye, EyeOff, Lock, Unlock } from "lucide-react";
+import { ChevronRight, Frame, Type, Image, Sparkles, Eye, EyeOff, Lock, Unlock } from "lucide-react";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import type { SidebarMode } from "@/lib/types";
 
@@ -7,7 +7,7 @@ interface LayerItem {
   id: string;
   name: string;
   parentId: string | null;
-  type: "frame" | "text" | "image";
+  type: "frame" | "text" | "image" | "shader";
   visible: boolean;
   locked: boolean;
 }
@@ -28,6 +28,8 @@ function LayerTypeIcon({
       return <Type className={iconClass} />;
     case "image":
       return <Image className={iconClass} />;
+    case "shader":
+      return <Sparkles className={iconClass} />;
     default:
       return null;
   }
