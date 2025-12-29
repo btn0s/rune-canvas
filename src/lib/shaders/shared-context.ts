@@ -111,17 +111,32 @@ class SharedWebGLContext {
         return;
       }
 
+      // If no renderers are registered, stop the loop
+      if (this.renderers.size === 0) {
+        this.stopRenderLoop();
+        return;
+      }
+
       // Render all registered renderers in a single frame
       // This ensures predictable state management with the shared context
-      for (const renderFrame of this.renderers) {
+      // Use Array.from to create a snapshot to avoid issues if renderers are removed during iteration
+      const renderersSnapshot = Array.from(this.renderers);
+      for (const renderFrame of renderersSnapshot) {
         try {
           renderFrame();
         } catch (error) {
           console.error("Error in shader render frame:", error);
+          // If a renderer throws an error, it might be disposed - remove it from the set
+          this.renderers.delete(renderFrame);
         }
       }
 
-      this.rafId = requestAnimationFrame(renderAll);
+      // Only continue loop if we still have renderers (they might have been removed during rendering)
+      if (this.renderers.size > 0) {
+        this.rafId = requestAnimationFrame(renderAll);
+      } else {
+        this.rafId = null;
+      }
     };
 
     this.rafId = requestAnimationFrame(renderAll);

@@ -572,11 +572,21 @@ export class ShaderRenderer {
   }
 
   /**
+   * Get the fragment shader source (for comparison)
+   */
+  getShaderSource(): string {
+    return this.fragmentShaderSource;
+  }
+
+  /**
    * Render a single frame (called by centralized render coordinator)
    * This method is called once per frame by the shared context's render loop
    */
   renderFrame(): void {
-    if (!this.program || !this.framebuffer) return;
+    // Early return if renderer is invalid (but don't auto-stop - let component handle that)
+    if (!this.program || !this.framebuffer || !this.displayCtx || !this.positionBuffer) {
+      return;
+    }
 
     // Check if context was lost - unregister from coordinator if so
     if (this.gl.isContextLost()) {
@@ -594,8 +604,9 @@ export class ShaderRenderer {
     // 1. Bind framebuffer first (isolates rendering target)
     // 2. Set viewport (scoped to our framebuffer)
     // 3. Use program (sets shader state)
-    // 4. Apply uniforms (sets shader parameters)
-    // 5. Draw
+    // 4. Bind position buffer and set up vertex attributes (other renderers may have changed this)
+    // 5. Apply uniforms (sets shader parameters)
+    // 6. Draw
 
     this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.framebuffer);
     this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
@@ -604,8 +615,16 @@ export class ShaderRenderer {
     this.gl.clearColor(0, 0, 0, 0); // Clear to transparent black
     this.gl.clear(this.gl.COLOR_BUFFER_BIT);
 
-    // Use program BEFORE applying uniforms (ensures uniforms go to correct program)
+    // Use program BEFORE setting up attributes (ensures we're setting attributes on correct program)
     this.gl.useProgram(this.program);
+
+    // Rebind position buffer and set up vertex attributes (shared context state may have changed)
+    if (this.positionBuffer) {
+      const positionLocation = this.gl.getAttribLocation(this.program, "a_position");
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.positionBuffer);
+      this.gl.enableVertexAttribArray(positionLocation);
+      this.gl.vertexAttribPointer(positionLocation, 2, this.gl.FLOAT, false, 0, 0);
+    }
 
     // Apply uniforms (now that program is bound)
     this.applyUniforms();
@@ -843,9 +862,13 @@ export class ShaderRenderer {
     }
   }
 
-  dispose() {
-    this.stop();
-
+  /**
+   * Clean up WebGL resources (framebuffers, textures, programs)
+   * This does NOT stop rendering - use stop() for that
+   * IMPORTANT: With shared context, only clean up THIS renderer's resources.
+   * Don't touch global state (useProgram, bindBuffer, etc.) as it affects other renderers.
+   */
+  private cleanupResources(): void {
     // Check if context was lost - if so, just clear references
     if (this.gl.isContextLost()) {
       this.program = null;
@@ -855,10 +878,11 @@ export class ShaderRenderer {
       this.uniformTypes.clear();
       this.framebuffer = null;
       this.renderTexture = null;
+      this.displayCtx = null;
       return;
     }
 
-    // Clean up render target (framebuffer and texture)
+    // Clean up render target (framebuffer and texture) - these are isolated to this renderer
     if (this.renderTexture) {
       this.gl.deleteTexture(this.renderTexture);
       this.renderTexture = null;
@@ -868,24 +892,16 @@ export class ShaderRenderer {
       this.framebuffer = null;
     }
 
-    // Clean up textures and unbind them
-    this.textures.forEach((texture, uniformName) => {
-      const textureUnit = this.textureUnitMap.get(uniformName);
-      if (textureUnit !== undefined) {
-        this.gl.activeTexture(this.gl.TEXTURE0 + textureUnit);
-        this.gl.bindTexture(this.gl.TEXTURE_2D, null);
-      }
+    // Clean up textures - just delete them, don't touch texture units (affects other renderers)
+    this.textures.forEach((texture) => {
       this.gl.deleteTexture(texture);
     });
     this.textures.clear();
     this.textureUnitMap.clear();
     this.nextTextureUnit = 0;
 
+    // Clean up program and shaders - just delete, don't unbind
     if (this.program) {
-      // Unbind program first
-      this.gl.useProgram(null);
-
-      // Get attached shaders and detach them before deleting program
       const attachedShaders = this.gl.getAttachedShaders(this.program);
       if (attachedShaders) {
         attachedShaders.forEach((shader) => {
@@ -895,26 +911,29 @@ export class ShaderRenderer {
       }
       this.gl.deleteProgram(this.program);
       this.program = null;
+      // Don't call useProgram(null) - affects other renderers using shared context
     }
 
-    // Clean up position buffer
+    // Clean up position buffer - just delete, don't unbind
     if (this.positionBuffer) {
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.positionBuffer);
       this.gl.deleteBuffer(this.positionBuffer);
       this.positionBuffer = null;
     }
 
-    // Unbind everything
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, null);
-    this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, null);
-    this.gl.bindRenderbuffer(this.gl.RENDERBUFFER, null);
-    this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
-
-    // Clear uniform locations and types
+    // Clear references (these don't affect WebGL state)
     this.uniformLocations.clear();
     this.uniformTypes.clear();
+    this.displayCtx = null;
+  }
 
-    // Clear any errors
-    this.gl.getError();
+  /**
+   * Fully dispose the renderer - stops rendering and cleans up all resources
+   * Only call this when the component is unmounting
+   */
+  dispose() {
+    // Stop rendering (unregister from coordinator)
+    this.stop();
+    // Clean up WebGL resources
+    this.cleanupResources();
   }
 }

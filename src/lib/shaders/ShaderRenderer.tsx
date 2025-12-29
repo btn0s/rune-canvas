@@ -118,9 +118,17 @@ export function ShaderRendererComponent({
   useEffect(() => {
     if (!canvasRef.current || !loadedUniforms) return;
 
-    // Dispose previous renderer before creating a new one
-    if (rendererRef.current) {
-      rendererRef.current.dispose();
+    // If renderer exists and only uniforms changed, update uniforms instead of recreating
+    if (rendererRef.current && rendererRef.current.getShaderSource() === shader.fragmentShader) {
+      rendererRef.current.setUniforms(loadedUniforms);
+      rendererRef.current.setSpeed(speed);
+      return;
+    }
+
+    // Dispose previous renderer before creating a new one (only if shader changed)
+    const previousRenderer = rendererRef.current;
+    if (previousRenderer) {
+      previousRenderer.dispose();
       rendererRef.current = null;
     }
 
@@ -137,12 +145,12 @@ export function ShaderRendererComponent({
       rendererRef.current = renderer;
 
       return () => {
-        // Always dispose, even if renderer changed (defensive cleanup)
+        // Only dispose if this is the current renderer (component unmounting)
+        // Don't dispose if renderer was already replaced by a new one
         if (rendererRef.current === renderer) {
           rendererRef.current = null;
+          renderer.dispose();
         }
-        // Dispose the renderer (cleans up framebuffer, textures, etc.)
-        renderer.dispose();
       };
     } catch (error) {
       console.error("Failed to initialize shader renderer:", error);
