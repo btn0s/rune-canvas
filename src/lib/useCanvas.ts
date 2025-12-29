@@ -11,11 +11,7 @@ import {
 import { useDrag } from "./interactions/useDrag";
 import { useResize } from "./interactions/useResize";
 import { useRotation } from "./interactions/useRotation";
-import {
-  createSolidFill,
-  type Guide,
-  type Point,
-} from "./types";
+import type { Guide, Point } from "./types";
 import type {
   CanvasObject,
   FrameObject,
@@ -23,6 +19,7 @@ import type {
   TextObject,
   ShaderObject,
 } from "./objects/types";
+import { createSolidFill } from "./objects/types";
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 4;

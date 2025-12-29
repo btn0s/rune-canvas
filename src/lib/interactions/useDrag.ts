@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import type { CanvasObject, Point, Guide } from "../types";
+import type { Point, Guide } from "../types";
+import type { CanvasObject } from "../objects/types";
 import { getCanvasPosition } from "../geometry";
 import { calculateSnapping } from "../snapping";
 import {

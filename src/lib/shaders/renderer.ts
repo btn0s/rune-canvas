@@ -110,6 +110,16 @@ export class ShaderRenderer {
   private renderTexture: WebGLTexture | null = null;
   private displayCtx: CanvasRenderingContext2D | null = null;
   private renderFrameCallback: () => void;
+  // Performance: cached buffers (recreated on resize)
+  private pixelBuffer: Uint8Array | null = null;
+  private imageData: ImageData | null = null;
+  private flippedBuffer: Uint8ClampedArray | null = null;
+  // Performance: FPS throttling
+  private targetFps = 60;
+  private lastRenderTime = 0;
+  private frameInterval = 1000 / 60; // ms per frame at 60fps
+  // Performance: pause support
+  private paused = false;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -445,6 +455,25 @@ export class ShaderRenderer {
     this.speed = speed;
   }
 
+  setTargetFps(fps: number) {
+    this.targetFps = Math.max(1, Math.min(120, fps));
+    this.frameInterval = 1000 / this.targetFps;
+  }
+
+  setPaused(paused: boolean) {
+    if (this.paused === paused) return;
+    this.paused = paused;
+    if (paused) {
+      this.stop();
+    } else {
+      this.start();
+    }
+  }
+
+  isPaused(): boolean {
+    return this.paused;
+  }
+
   resize(width: number, height: number) {
     if (this.gl.isContextLost()) {
       return;
@@ -557,6 +586,19 @@ export class ShaderRenderer {
    * This method is called once per frame by the shared context's render loop
    */
   renderFrame(): void {
+    // Early return if paused
+    if (this.paused) {
+      return;
+    }
+
+    // FPS throttling: skip frame if called too soon
+    const now = Date.now();
+    if (now - this.lastRenderTime < this.frameInterval) {
+      return;
+    }
+    this.lastRenderTime = now;
+
+    // Early return if renderer is invalid (but don't auto-stop - let component handle that)
     if (
       !this.program ||
       !this.framebuffer ||
@@ -566,11 +608,13 @@ export class ShaderRenderer {
       return;
     }
 
+    // Check if context was lost - unregister from coordinator if so
     if (this.gl.isContextLost()) {
       this.stop();
       return;
     }
 
+    // Ensure canvas has valid dimensions
     if (this.canvas.width <= 0 || this.canvas.height <= 0) {
       return;
     }
@@ -626,7 +670,19 @@ export class ShaderRenderer {
       console.warn(`WebGL error before readPixels: ${error}`);
     }
 
-    const pixels = new Uint8Array(this.canvas.width * this.canvas.height * 4);
+    // Recreate buffers if size changed
+    const bufferSize = this.canvas.width * this.canvas.height * 4;
+    if (!this.pixelBuffer || this.pixelBuffer.length !== bufferSize) {
+      this.pixelBuffer = new Uint8Array(bufferSize);
+      this.imageData = this.displayCtx.createImageData(
+        this.canvas.width,
+        this.canvas.height
+      );
+      this.flippedBuffer = new Uint8ClampedArray(this.imageData.data.length);
+    }
+
+    // Reuse cached buffer
+    const pixels = this.pixelBuffer!;
     this.gl.readPixels(
       0,
       0,
@@ -644,12 +700,10 @@ export class ShaderRenderer {
     }
 
     const displayCtx = this.displayCtx;
-    const imageData = displayCtx.createImageData(
-      this.canvas.width,
-      this.canvas.height
-    );
+    const imageData = this.imageData!;
+    const flipped = this.flippedBuffer!;
 
-    const flipped = new Uint8ClampedArray(imageData.data.length);
+    // Flip vertically (WebGL origin is bottom-left, canvas 2D is top-left)
     for (let y = 0; y < this.canvas.height; y++) {
       const srcRow = this.canvas.height - 1 - y;
       flipped.set(
@@ -668,6 +722,7 @@ export class ShaderRenderer {
 
   start() {
     this.startTime = Date.now();
+    this.lastRenderTime = 0; // Reset throttling
     // Register with centralized render coordinator
     // The coordinator will call renderFrame() each frame
     sharedContext.registerRenderer(this.renderFrameCallback);
@@ -818,6 +873,9 @@ export class ShaderRenderer {
       this.framebuffer = null;
       this.renderTexture = null;
       this.displayCtx = null;
+      this.pixelBuffer = null;
+      this.imageData = null;
+      this.flippedBuffer = null;
       return;
     }
 
@@ -860,6 +918,9 @@ export class ShaderRenderer {
     this.uniformLocations.clear();
     this.uniformTypes.clear();
     this.displayCtx = null;
+    this.pixelBuffer = null;
+    this.imageData = null;
+    this.flippedBuffer = null;
   }
 
   dispose() {

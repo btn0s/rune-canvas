@@ -122,6 +122,8 @@ function ShaderPreview({
               width={200}
               height={200}
               speed={1}
+              targetFps={isHovered ? 60 : 10}
+              paused={false}
             />
           </div>
         </div>

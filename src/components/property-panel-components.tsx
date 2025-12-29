@@ -513,7 +513,7 @@ export function PropertyButton({
 // These support multi-selection by accepting arrays and computing mixed values
 // ============================================================================
 
-import type { ShadowProps, BorderSide } from "@/lib/types";
+import type { ShadowProps, BorderSide } from "@/lib/objects/types";
 import { SelectItem } from "./ui/select";
 
 /**

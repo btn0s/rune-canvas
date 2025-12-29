@@ -9,14 +9,14 @@
  * 3. Discriminated union via `type` field for type narrowing
  */
 
+import type { Point } from "../types";
+
 // ============================================================================
 // Primitives
 // ============================================================================
 
-export interface Point {
-  x: number;
-  y: number;
-}
+// Re-export Point for convenience
+export type { Point } from "../types";
 
 export interface Size {
   width: number;

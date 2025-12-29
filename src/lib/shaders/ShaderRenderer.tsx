@@ -13,6 +13,8 @@ export interface ShaderRendererProps {
   width: number;
   height: number;
   speed?: number;
+  targetFps?: number;
+  paused?: boolean;
 }
 
 /**
@@ -96,6 +98,8 @@ export function ShaderRendererComponent({
   width,
   height,
   speed = 1,
+  targetFps,
+  paused = false,
 }: ShaderRendererProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<ShaderRenderer | null>(null);
@@ -122,6 +126,10 @@ export function ShaderRendererComponent({
     if (rendererRef.current && rendererRef.current.getShaderSource() === shader.fragmentShader) {
       rendererRef.current.setUniforms(loadedUniforms);
       rendererRef.current.setSpeed(speed);
+      if (targetFps !== undefined) {
+        rendererRef.current.setTargetFps(targetFps);
+      }
+      rendererRef.current.setPaused(paused);
       return;
     }
 
@@ -142,6 +150,10 @@ export function ShaderRendererComponent({
       );
       
       renderer.resize(width, height);
+      if (targetFps !== undefined) {
+        renderer.setTargetFps(targetFps);
+      }
+      renderer.setPaused(paused);
       rendererRef.current = renderer;
 
       return () => {
@@ -168,6 +180,46 @@ export function ShaderRendererComponent({
       rendererRef.current.setUniforms(loadedUniforms);
     }
   }, [shader, loadedUniforms]);
+
+  // Update targetFps when it changes
+  useEffect(() => {
+    if (rendererRef.current && targetFps !== undefined) {
+      rendererRef.current.setTargetFps(targetFps);
+    }
+  }, [targetFps]);
+
+  // Update paused state when it changes
+  useEffect(() => {
+    if (rendererRef.current) {
+      rendererRef.current.setPaused(paused);
+    }
+  }, [paused]);
+
+  // IntersectionObserver: auto-pause when offscreen
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !rendererRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (rendererRef.current) {
+          // Only auto-pause if not explicitly paused by prop
+          // If explicitly paused, don't override
+          if (!paused) {
+            rendererRef.current.setPaused(!entry.isIntersecting);
+          }
+        }
+      },
+      { threshold: 0 }
+    );
+
+    observer.observe(canvas);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [paused]);
 
   return (
     <canvas

@@ -1,3 +1,4 @@
+import type { SidebarMode } from "../lib/types";
 import type {
   CanvasObject,
   FrameObject,
@@ -5,15 +6,14 @@ import type {
   ImageObject,
   ShaderObject,
   BlendMode,
-  SidebarMode,
   Fill,
   SolidFill,
   GradientFill,
   ImageFill,
-} from "../lib/types";
+} from "../lib/objects/types";
 import { getShader } from "@/lib/shaders/registry";
 import type { ParamControl } from "@/lib/shaders/types";
-import { createSolidFill, createShadow, createInnerShadow } from "../lib/types";
+import { createSolidFill, createShadow, createInnerShadow } from "../lib/objects/types";
 import { useState, useRef, useMemo } from "react";
 import { SelectItem } from "./ui/select";
 import { Input } from "./ui/input";

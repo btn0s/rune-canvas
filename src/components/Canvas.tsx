@@ -62,6 +62,7 @@ import { getShader } from "@/lib/shaders/registry";
 import { cn } from "@/lib/utils";
 import type { Point, Tool } from "../lib/types";
 import type { CommandContext } from "../lib/commands/types";
+import { exportNodeToPng } from "../lib/export/exportPng";
 import "../lib/commands/definitions";
 
 const HANDLE_SIZE = 8;
@@ -397,6 +398,39 @@ export function Canvas() {
     [setCommandActive, setCommandInput]
   );
 
+  const exportPng = useCallback(async () => {
+    if (!containerRef.current) return;
+    
+    // Find the selected object (frame or shader)
+    const exportableObject = selectedObjects.find(
+      (obj) => obj.type === "frame" || obj.type === "shader"
+    );
+    if (!exportableObject) {
+      // Show a toast or message - for now just console.warn
+      console.warn("Please select a frame or shader to export");
+      return;
+    }
+
+    // Find the object's DOM element
+    const objectElement = containerRef.current.querySelector(
+      `[data-object-id="${exportableObject.id}"]`
+    ) as HTMLElement;
+    
+    if (!objectElement) {
+      console.error("Object element not found");
+      return;
+    }
+
+    try {
+      await exportNodeToPng(objectElement, {
+        fileName: exportableObject.name,
+        pixelRatio: 2,
+      });
+    } catch (error) {
+      console.error("Failed to export PNG:", error);
+    }
+  }, [selectedObjects]);
+
   const commandContext: CommandContext = useMemo(
     () => ({
       selectedIds,
@@ -427,6 +461,7 @@ export function Canvas() {
       canRedo,
       updateObject,
       setSelectedIds: select,
+      exportPng,
     }),
     [
       selectedIds,
@@ -457,6 +492,7 @@ export function Canvas() {
       canRedo,
       updateObject,
       select,
+      exportPng,
     ]
   );
 
@@ -1359,13 +1395,11 @@ export function Canvas() {
         key: "z",
         modifiers: { meta: true },
         action: undo,
-        when: () => canUndo,
       },
       {
         key: "z",
         modifiers: { meta: true, shift: true },
         action: redo,
-        when: () => canRedo,
       },
       {
         key: "a",
@@ -1473,12 +1507,27 @@ export function Canvas() {
       sendBackward,
       frameSelection,
       setSidebarMode,
+      undo,
+      redo,
     ]
   );
 
   useKeyboardShortcuts(shortcuts, {
     enabled: !editingTextId,
     onKeyDown: (e) => {
+      // Prevent browser default undo/redo early (before contentEditable check)
+      if (e.key === "z" && (e.metaKey || e.ctrlKey)) {
+        const target = e.target as HTMLElement;
+        // Only prevent if not in an actual input/textarea
+        if (
+          target.tagName !== "INPUT" &&
+          target.tagName !== "TEXTAREA" &&
+          !target.isContentEditable
+        ) {
+          e.preventDefault();
+        }
+      }
+      
       const target = e.target as HTMLElement;
       if (target?.isContentEditable) return;
       
@@ -2036,6 +2085,15 @@ export function Canvas() {
                   <ContextMenuItem onClick={distributeVertical}>
                     Distribute vertically
                     <ContextMenuShortcut>⌥⇧V</ContextMenuShortcut>
+                  </ContextMenuItem>
+                </>
+              )}
+              {selectedObjects.length === 1 && 
+               (selectedObjects[0]?.type === "frame" || selectedObjects[0]?.type === "shader") && (
+                <>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onClick={exportPng}>
+                    Export PNG
                   </ContextMenuItem>
                 </>
               )}

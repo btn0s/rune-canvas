@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import type { CanvasObject, Point } from "../types";
+import type { Point } from "../types";
+import type { CanvasObject } from "../objects/types";
 import { getSelectionBounds } from "../objectUtils";
 import { angleBetweenPoints, normalizeAngle, rotatePoint, getCanvasPosition } from "../geometry";
 import { useHistoryCapture } from "./useHistoryCapture";

@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import type { CanvasObject, Tool, Transform } from "./types";
+import type { Tool, Transform } from "./types";
+import type { CanvasObject } from "./objects/types";
 import type { Command, CommandState } from "./commands/types";
 import { initialCommandState } from "./commands/types";
 import { searchCommands, getCommandById } from "./commands/registry";

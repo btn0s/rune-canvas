@@ -1,4 +1,5 @@
-import type { CanvasObject, Point } from "./types";
+import type { Point } from "./types";
+import type { CanvasObject } from "./objects/types";
 
 // ============================================================================
 // Types
