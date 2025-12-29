@@ -294,12 +294,23 @@ export class ShaderRenderer {
     for (let i = 0; i < numUniforms; i++) {
       const uniformInfo = this.gl.getActiveUniform(this.program, i);
       if (uniformInfo) {
+        // For array uniforms, WebGL returns name as "name[0]", but we want to store
+        // both the indexed name and the base name for lookup flexibility
+        const baseName = uniformInfo.name.replace(/\[0\]$/, "");
         const location = this.gl.getUniformLocation(
           this.program,
           uniformInfo.name
         );
+        
+        // Store with the exact name from WebGL
         this.uniformLocations.set(uniformInfo.name, location);
         this.uniformTypes.set(uniformInfo.name, uniformInfo.type);
+        
+        // Also store with base name if it's an array (for convenience)
+        if (baseName !== uniformInfo.name) {
+          this.uniformLocations.set(baseName, location);
+          this.uniformTypes.set(baseName, uniformInfo.type);
+        }
       }
     }
 
@@ -343,8 +354,10 @@ export class ShaderRenderer {
       return;
     }
     this.uniforms = uniforms;
+    // Update uniform locations (doesn't require program to be bound)
     this.updateUniformLocations();
-    this.applyUniforms();
+    // Don't apply uniforms here - they'll be applied during renderFrame()
+    // when the program is bound. This avoids state conflicts with shared context.
   }
 
   private applyUniforms() {
