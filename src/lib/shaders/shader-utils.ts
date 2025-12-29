@@ -16,6 +16,15 @@ vec2 rotate(vec2 uv, float th) {
 `;
 
 // language=GLSL
+export const proceduralHash11 = `
+float hash11(float p) {
+  p = fract(p * 0.3183099) + 0.1;
+  p *= p + 19.19;
+  return fract(p * p);
+}
+`;
+
+// language=GLSL
 export const proceduralHash21 = `
 float hash21(vec2 p) {
   p = fract(p * vec2(0.3183099, 0.3678794)) + 0.1;

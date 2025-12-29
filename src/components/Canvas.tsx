@@ -1435,9 +1435,11 @@ export function Canvas() {
         action: () => moveSelected(10, 0),
       },
 
-      // === Z-order (with modifiers only) ===
+      // === Z-order ===
+      { key: "]", action: bringToFront },
       { key: "]", modifiers: { meta: true }, action: bringForward },
       { key: "[", modifiers: { meta: true }, action: sendBackward },
+      { key: "[", action: sendToBack },
 
       // === Grouping ===
       {
@@ -1474,6 +1476,8 @@ export function Canvas() {
       toggleFlex,
       toggleClipContent,
       moveSelected,
+      bringToFront,
+      sendToBack,
       bringForward,
       sendBackward,
       frameSelection,
