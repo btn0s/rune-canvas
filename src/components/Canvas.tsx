@@ -64,10 +64,11 @@ const EDGE_HIT_WIDTH = 6;
 const CORNER_HANDLES: ResizeHandle[] = ["nw", "ne", "se", "sw"];
 
 const TOOLS: {
-  id: Tool;
+  id: Tool | "command";
   label: string;
   shortcut: string;
   icon: React.ReactNode;
+  onClick?: () => void;
 }[] = [
   {
     id: "select",
@@ -372,6 +373,23 @@ export function Canvas() {
   } = useCanvas();
 
   const { commandState, setCommandActive, setCommandInput } = useCanvasStore();
+
+  const allTools = useMemo(
+    () => [
+      ...TOOLS,
+      {
+        id: "command" as const,
+        label: "Command",
+        shortcut: "⌘K",
+        icon: <Terminal className="size-4" />,
+        onClick: () => {
+          setCommandActive(true);
+          setCommandInput("");
+        },
+      },
+    ],
+    [setCommandActive, setCommandInput]
+  );
 
   const commandContext: CommandContext = useMemo(
     () => ({
@@ -1834,18 +1852,38 @@ export function Canvas() {
               </div>
 
               <div className="flex gap-1 p-1.5 bg-card border border-border border-b-0 rounded-t-lg">
-                {TOOLS.map((t) => (
+                {allTools.map((t) => (
                   <Tooltip key={t.id}>
                     <TooltipTrigger asChild>
                       <span>
-                        <Toggle
-                          size="sm"
-                          pressed={tool === t.id}
-                          onPressedChange={() => setTool(t.id)}
-                          aria-label={t.label}
-                        >
-                          {t.icon}
-                        </Toggle>
+                        {t.onClick ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={t.onClick}
+                            aria-label={t.label}
+                            className="h-8 px-2"
+                          >
+                            {t.icon}
+                          </Button>
+                        ) : (
+                          <Toggle
+                            size="sm"
+                            pressed={
+                              t.id !== "command"
+                                ? tool === (t.id as Tool)
+                                : false
+                            }
+                            onPressedChange={() => {
+                              if (t.id !== "command") {
+                                setTool(t.id as Tool);
+                              }
+                            }}
+                            aria-label={t.label}
+                          >
+                            {t.icon}
+                          </Toggle>
+                        )}
                       </span>
                     </TooltipTrigger>
                     <TooltipContent
@@ -1857,30 +1895,6 @@ export function Canvas() {
                     </TooltipContent>
                   </Tooltip>
                 ))}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        setCommandActive(true);
-                        setCommandInput("");
-                      }}
-                      aria-label="Open command bar"
-                      className="h-8 px-2 gap-1.5"
-                    >
-                      <Terminal className="size-4" />
-                      <Kbd className="text-xs">⌘K</Kbd>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent
-                    side="top"
-                    className="flex items-center gap-2"
-                  >
-                    <span>Command</span>
-                    <Kbd>⌘K</Kbd>
-                  </TooltipContent>
-                </Tooltip>
               </div>
 
               {/* Command Bar - slides up from toolbar */}
