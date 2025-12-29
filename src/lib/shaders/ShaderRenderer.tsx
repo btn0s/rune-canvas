@@ -51,14 +51,14 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 }
 
 /**
- * Process uniforms, converting string URLs to loaded images
+ * Process params, converting string URLs to loaded images before converting to uniforms
  * Uses paramDefinitions to identify which params are image URLs
  */
-async function processUniforms(
-  uniforms: ShaderRendererUniforms,
+async function processParams(
+  params: Record<string, unknown>,
   paramDefinitions?: import('./types').ParamDefinitions
-): Promise<ShaderRendererUniforms> {
-  const processed: ShaderRendererUniforms = {};
+): Promise<Record<string, unknown>> {
+  const processed: Record<string, unknown> = {};
   const imageLoadPromises: Promise<void>[] = [];
 
   const isValidUrl = (url: string): boolean => {
@@ -71,7 +71,7 @@ async function processUniforms(
     }
   };
 
-  for (const [key, value] of Object.entries(uniforms)) {
+  for (const [key, value] of Object.entries(params)) {
     if (typeof value === 'string' && value.trim() !== '') {
       // Check if this param is defined as an imageUrl type in paramDefinitions
       const isImageParam = paramDefinitions?.[key]?.control.type === 'imageUrl';
@@ -81,17 +81,17 @@ async function processUniforms(
           const imagePromise = loadImage(value).then((img) => {
             processed[key] = img;
           }).catch((error) => {
-            console.warn(`Failed to load image for uniform ${key}:`, error);
-            // Use empty pixel as fallback
-            processed[key] = undefined;
+            console.warn(`Failed to load image for param ${key}:`, error);
+            // Use empty string as fallback
+            processed[key] = '';
           });
           imageLoadPromises.push(imagePromise);
         } else {
-          console.warn(`Invalid URL for uniform ${key}: ${value}`);
-          processed[key] = undefined;
+          console.warn(`Invalid URL for param ${key}: ${value}`);
+          processed[key] = '';
         }
       } else {
-        // Not an image uniform, keep as string
+        // Not an image param, keep as-is
         processed[key] = value;
       }
     } else {
@@ -118,11 +118,12 @@ export function ShaderRendererComponent({
 
   // Load images from URLs
   useEffect(() => {
-    const uniforms = shader.paramsToUniforms(params) as ShaderRendererUniforms;
-    const preparedUniforms = prepareShaderUniforms(uniforms);
-
-    processUniforms(preparedUniforms, shader.paramDefinitions).then((processed) => {
-      setLoadedUniforms(processed);
+    // Process params first (convert image URLs to HTMLImageElements)
+    processParams(params, shader.paramDefinitions).then((processedParams) => {
+      // Then convert to uniforms
+      const uniforms = shader.paramsToUniforms(processedParams) as ShaderRendererUniforms;
+      const preparedUniforms = prepareShaderUniforms(uniforms);
+      setLoadedUniforms(preparedUniforms);
     });
   }, [shader, params]);
 
