@@ -1,4 +1,9 @@
-import type { ShaderDefinition, ShaderParams, ShaderUniforms } from "../types";
+import type {
+  ShaderDefinition,
+  ShaderParams,
+  ShaderUniforms,
+  ParamDefinitions,
+} from "../types";
 import { declarePI, proceduralNoise1D, colorBandingFix } from "../shader-utils";
 import { colorToVec4 } from "../types";
 
@@ -119,6 +124,34 @@ export const metaballsShader: ShaderDefinition = {
     size: 0.35,
     count: 6,
   },
+  paramDefinitions: {
+    colors: {
+      control: { type: "colorArray", label: "Colors" },
+      defaultValue: ["#8b5cf6", "#ec4899", "#06b6d4"],
+    },
+    colorBack: {
+      control: { type: "color", label: "Background" },
+      defaultValue: "#0f172a",
+    },
+    size: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.35,
+    },
+    count: {
+      control: {
+        type: "slider",
+        min: 1,
+        max: 20,
+        step: 1,
+      },
+      defaultValue: 6,
+    },
+  } as ParamDefinitions,
   presets: [
     {
       name: "Default",

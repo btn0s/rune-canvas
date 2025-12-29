@@ -1,4 +1,9 @@
-import type { ShaderDefinition, ShaderParams, ShaderUniforms } from "../types";
+import type {
+  ShaderDefinition,
+  ShaderParams,
+  ShaderUniforms,
+  ParamDefinitions,
+} from "../types";
 import { declarePI, simplexNoise, proceduralHash11, proceduralHash21, colorBandingFix } from "../shader-utils";
 import { colorToVec4 } from "../types";
 
@@ -240,6 +245,50 @@ export const ditheringShader: ShaderDefinition = {
     scale: 0.7,
     size: 3,
   },
+  paramDefinitions: {
+    colorBack: {
+      control: { type: "color", label: "Background" },
+      defaultValue: "#1e293b",
+    },
+    colorFront: {
+      control: { type: "color", label: "Foreground" },
+      defaultValue: "#60a5fa",
+    },
+    shape: {
+      control: {
+        type: "enum",
+        options: ["simplex", "warp", "dots", "wave", "ripple", "swirl", "sphere"],
+        label: "Shape",
+      },
+      defaultValue: "sphere",
+    },
+    type: {
+      control: {
+        type: "enum",
+        options: ["random", "2x2", "4x4", "8x8"],
+        label: "Type",
+      },
+      defaultValue: "4x4",
+    },
+    scale: {
+      control: {
+        type: "slider",
+        min: 0.1,
+        max: 2,
+        step: 0.01,
+      },
+      defaultValue: 0.7,
+    },
+    size: {
+      control: {
+        type: "slider",
+        min: 1,
+        max: 20,
+        step: 0.5,
+      },
+      defaultValue: 3,
+    },
+  } as ParamDefinitions,
   presets: [
     {
       name: "Default",

@@ -1,5 +1,9 @@
-import type { ShaderDefinition, ShaderParams, ShaderUniforms } from "../types";
-import { colorToVec4 } from "../types";
+import type {
+  ShaderDefinition,
+  ShaderParams,
+  ShaderUniforms,
+  ParamDefinitions,
+} from "../types";
 
 // Radial Blur shader - blur radiating from center
 // language=GLSL
@@ -91,6 +95,30 @@ export const radialBlurShader: ShaderDefinition = {
     center: [0.5, 0.5],
     samples: 10,
   },
+  paramDefinitions: {
+    image: {
+      control: { type: "imageUrl", label: "Image" },
+      defaultValue: "",
+    },
+    strength: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 0.5,
+        step: 0.01,
+      },
+      defaultValue: 0.08,
+    },
+    samples: {
+      control: {
+        type: "slider",
+        min: 2,
+        max: 16,
+        step: 1,
+      },
+      defaultValue: 10,
+    },
+  } as ParamDefinitions,
   presets: [
     {
       name: "Default",

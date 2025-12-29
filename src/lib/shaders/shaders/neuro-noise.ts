@@ -1,4 +1,9 @@
-import type { ShaderDefinition, ShaderParams, ShaderUniforms } from "../types";
+import type {
+  ShaderDefinition,
+  ShaderParams,
+  ShaderUniforms,
+  ParamDefinitions,
+} from "../types";
 import { rotation2 } from "../shader-utils";
 import { colorToVec4 } from "../types";
 
@@ -89,6 +94,38 @@ export const neuroNoiseShader: ShaderDefinition = {
     brightness: 0.08,
     contrast: 0.4,
   },
+  paramDefinitions: {
+    colorFront: {
+      control: { type: "color", label: "Foreground" },
+      defaultValue: "#ffffff",
+    },
+    colorMid: {
+      control: { type: "color", label: "Mid" },
+      defaultValue: "#8b5cf6",
+    },
+    colorBack: {
+      control: { type: "color", label: "Background" },
+      defaultValue: "#0f172a",
+    },
+    brightness: {
+      control: {
+        type: "slider",
+        min: -1,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.08,
+    },
+    contrast: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.4,
+    },
+  } as ParamDefinitions,
   presets: [
     {
       name: "Default",

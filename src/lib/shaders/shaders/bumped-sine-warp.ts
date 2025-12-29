@@ -1,5 +1,9 @@
-import type { ShaderDefinition, ShaderParams, ShaderUniforms } from "../types";
-import { colorToVec4 } from "../types";
+import type {
+  ShaderDefinition,
+  ShaderParams,
+  ShaderUniforms,
+  ParamDefinitions,
+} from "../types";
 
 // Bumped Sinusoidal Warp shader - creates 3D-like warped surface with bump mapping
 // Based on Shadertoy "Bumped Sinusoidal Warp" by Shane
@@ -161,6 +165,66 @@ export const bumpedSineWarpShader: ShaderDefinition = {
     specularPower: 14.0,
     reflectionStrength: 2.5,
   },
+  paramDefinitions: {
+    image: {
+      control: { type: "imageUrl", label: "Image" },
+      defaultValue: "",
+    },
+    bumpFactor: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 0.2,
+        step: 0.01,
+      },
+      defaultValue: 0.06,
+    },
+    lightSpeed: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 2,
+        step: 0.01,
+      },
+      defaultValue: 0.8,
+    },
+    warpSpeed: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 2,
+        step: 0.01,
+      },
+      defaultValue: 0.4,
+    },
+    warpIntensity: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 2,
+        step: 0.01,
+      },
+      defaultValue: 0.9,
+    },
+    specularPower: {
+      control: {
+        type: "slider",
+        min: 1,
+        max: 30,
+        step: 1,
+      },
+      defaultValue: 14.0,
+    },
+    reflectionStrength: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 10,
+        step: 0.1,
+      },
+      defaultValue: 2.5,
+    },
+  } as ParamDefinitions,
   presets: [
     {
       name: "Default",

@@ -1,4 +1,9 @@
-import type { ShaderDefinition, ShaderParams, ShaderUniforms } from "../types";
+import type {
+  ShaderDefinition,
+  ShaderParams,
+  ShaderUniforms,
+  ParamDefinitions,
+} from "../types";
 import { declarePI, simplexNoise, colorBandingFix } from "../shader-utils";
 import { colorToVec4 } from "../types";
 
@@ -106,6 +111,88 @@ export const spiralShader: ShaderDefinition = {
     noiseFrequency: 0.2,
     softness: 0.1,
   },
+  paramDefinitions: {
+    colorBack: {
+      control: { type: "color", label: "Background" },
+      defaultValue: "#0a0e27",
+    },
+    colorFront: {
+      control: { type: "color", label: "Foreground" },
+      defaultValue: "#60a5fa",
+    },
+    density: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.25,
+    },
+    distortion: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.15,
+    },
+    strokeWidth: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.6,
+    },
+    strokeTaper: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.1,
+    },
+    strokeCap: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.2,
+    },
+    noise: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.3,
+    },
+    noiseFrequency: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.2,
+    },
+    softness: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.1,
+    },
+  } as ParamDefinitions,
   presets: [
     {
       name: "Default",

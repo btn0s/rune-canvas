@@ -1,5 +1,9 @@
-import type { ShaderDefinition, ShaderParams, ShaderUniforms } from "../types";
-import { colorToVec4 } from "../types";
+import type {
+  ShaderDefinition,
+  ShaderParams,
+  ShaderUniforms,
+  ParamDefinitions,
+} from "../types";
 
 // Kaleidoscope shader - mirrors image in segments
 // language=GLSL
@@ -83,6 +87,39 @@ export const kaleidoscopeShader: ShaderDefinition = {
     rotation: 15,
     offset: 0,
   },
+  paramDefinitions: {
+    image: {
+      control: { type: "imageUrl", label: "Image" },
+      defaultValue: "",
+    },
+    segments: {
+      control: {
+        type: "slider",
+        min: 3,
+        max: 16,
+        step: 1,
+      },
+      defaultValue: 8,
+    },
+    rotation: {
+      control: {
+        type: "slider",
+        min: -180,
+        max: 180,
+        step: 1,
+      },
+      defaultValue: 15,
+    },
+    offset: {
+      control: {
+        type: "slider",
+        min: -180,
+        max: 180,
+        step: 1,
+      },
+      defaultValue: 0,
+    },
+  } as ParamDefinitions,
   presets: [
     {
       name: "Default",

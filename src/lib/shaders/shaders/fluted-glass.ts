@@ -1,4 +1,9 @@
-import type { ShaderDefinition, ShaderParams, ShaderUniforms } from "../types";
+import type {
+  ShaderDefinition,
+  ShaderParams,
+  ShaderUniforms,
+  ParamDefinitions,
+} from "../types";
 import { declarePI, rotation2, proceduralHash21 } from "../shader-utils";
 import { colorToVec4 } from "../types";
 
@@ -407,6 +412,148 @@ export const flutedGlassShader: ShaderDefinition = {
     grainMixer: 0,
     grainOverlay: 0,
   },
+  paramDefinitions: {
+    image: {
+      control: { type: "imageUrl", label: "Image" },
+      defaultValue: "",
+    },
+    colorBack: {
+      control: { type: "color", label: "Background" },
+      defaultValue: "#00000000",
+    },
+    colorShadow: {
+      control: { type: "color", label: "Shadow" },
+      defaultValue: "#000000",
+    },
+    colorHighlight: {
+      control: { type: "color", label: "Highlight" },
+      defaultValue: "#ffffff",
+    },
+    shadows: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.25,
+    },
+    size: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.5,
+    },
+    angle: {
+      control: {
+        type: "slider",
+        min: -180,
+        max: 180,
+        step: 1,
+      },
+      defaultValue: 0,
+    },
+    distortionShape: {
+      control: {
+        type: "enum",
+        options: ["prism", "lens", "contour", "cascade", "flat"],
+        label: "Distortion Shape",
+      },
+      defaultValue: "prism",
+    },
+    highlights: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.1,
+    },
+    shape: {
+      control: {
+        type: "enum",
+        options: ["lines", "linesIrregular", "wave", "zigzag", "pattern"],
+        label: "Shape",
+      },
+      defaultValue: "lines",
+    },
+    distortion: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.5,
+    },
+    shift: {
+      control: {
+        type: "slider",
+        min: -1,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0,
+    },
+    blur: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0,
+    },
+    edges: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.25,
+    },
+    margin: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 0.5,
+        step: 0.01,
+      },
+      defaultValue: 0,
+    },
+    stretch: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0,
+    },
+    grainMixer: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0,
+    },
+    grainOverlay: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0,
+    },
+  } as ParamDefinitions,
   presets: [
     {
       name: "Default",

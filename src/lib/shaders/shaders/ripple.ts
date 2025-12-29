@@ -1,5 +1,9 @@
-import type { ShaderDefinition, ShaderParams, ShaderUniforms } from "../types";
-import { colorToVec4 } from "../types";
+import type {
+  ShaderDefinition,
+  ShaderParams,
+  ShaderUniforms,
+  ParamDefinitions,
+} from "../types";
 
 // Ripple distortion shader - circular wave distortion
 // language=GLSL
@@ -88,6 +92,48 @@ export const rippleShader: ShaderDefinition = {
     center: [0.5, 0.5],
     waveCount: 2,
   },
+  paramDefinitions: {
+    image: {
+      control: { type: "imageUrl", label: "Image" },
+      defaultValue: "",
+    },
+    frequency: {
+      control: {
+        type: "slider",
+        min: 1,
+        max: 30,
+        step: 1,
+      },
+      defaultValue: 12,
+    },
+    amplitude: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 0.1,
+        step: 0.001,
+      },
+      defaultValue: 0.015,
+    },
+    speed: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 5,
+        step: 0.1,
+      },
+      defaultValue: 1.5,
+    },
+    waveCount: {
+      control: {
+        type: "slider",
+        min: 1,
+        max: 3,
+        step: 1,
+      },
+      defaultValue: 2,
+    },
+  } as ParamDefinitions,
   presets: [
     {
       name: "Default",

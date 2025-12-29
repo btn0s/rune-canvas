@@ -1,4 +1,9 @@
-import type { ShaderDefinition, ShaderParams, ShaderUniforms } from "../types";
+import type {
+  ShaderDefinition,
+  ShaderParams,
+  ShaderUniforms,
+  ParamDefinitions,
+} from "../types";
 import { proceduralHash21 } from "../shader-utils";
 import { colorToVec4 } from "../types";
 
@@ -183,6 +188,57 @@ export const imageDitheringShader: ShaderDefinition = {
     colorSteps: 2,
     originalColors: false,
   },
+  paramDefinitions: {
+    image: {
+      control: { type: "imageUrl", label: "Image" },
+      defaultValue: "",
+    },
+    colorFront: {
+      control: { type: "color", label: "Foreground" },
+      defaultValue: "#94ffaf",
+    },
+    colorBack: {
+      control: { type: "color", label: "Background" },
+      defaultValue: "#000c38",
+    },
+    colorHighlight: {
+      control: { type: "color", label: "Highlight" },
+      defaultValue: "#eaff94",
+    },
+    type: {
+      control: {
+        type: "enum",
+        options: ["random", "2x2", "4x4", "8x8"],
+        label: "Type",
+      },
+      defaultValue: "8x8",
+    },
+    size: {
+      control: {
+        type: "slider",
+        min: 1,
+        max: 10,
+        step: 0.5,
+      },
+      defaultValue: 2,
+    },
+    colorSteps: {
+      control: {
+        type: "slider",
+        min: 1,
+        max: 10,
+        step: 1,
+      },
+      defaultValue: 2,
+    },
+    originalColors: {
+      control: {
+        type: "boolean",
+        label: "Original Colors",
+      },
+      defaultValue: false,
+    },
+  } as ParamDefinitions,
   presets: [
     {
       name: "Default",

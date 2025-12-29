@@ -301,11 +301,11 @@ export class ShaderRenderer {
           this.program,
           uniformInfo.name
         );
-        
+
         // Store with the exact name from WebGL
         this.uniformLocations.set(uniformInfo.name, location);
         this.uniformTypes.set(uniformInfo.name, uniformInfo.type);
-        
+
         // Also store with base name if it's an array (for convenience)
         if (baseName !== uniformInfo.name) {
           this.uniformLocations.set(baseName, location);
@@ -453,6 +453,14 @@ export class ShaderRenderer {
           // Array of vec4s (for colors array)
           this.gl.uniform4fv(loc, new Float32Array(value as number[]));
         }
+      } else if (typeof value === "boolean") {
+        // WebGL doesn't have native boolean uniforms - convert to int (0 or 1)
+        const uniformType = this.uniformTypes.get(key);
+        if (uniformType === this.gl.INT || uniformType === this.gl.BOOL) {
+          this.gl.uniform1i(loc, value ? 1 : 0);
+        } else {
+          this.gl.uniform1f(loc, value ? 1.0 : 0.0);
+        }
       } else if (value instanceof HTMLImageElement) {
         this.setTextureUniform(key, value);
       }
@@ -584,7 +592,12 @@ export class ShaderRenderer {
    */
   renderFrame(): void {
     // Early return if renderer is invalid (but don't auto-stop - let component handle that)
-    if (!this.program || !this.framebuffer || !this.displayCtx || !this.positionBuffer) {
+    if (
+      !this.program ||
+      !this.framebuffer ||
+      !this.displayCtx ||
+      !this.positionBuffer
+    ) {
       return;
     }
 
@@ -620,10 +633,20 @@ export class ShaderRenderer {
 
     // Rebind position buffer and set up vertex attributes (shared context state may have changed)
     if (this.positionBuffer) {
-      const positionLocation = this.gl.getAttribLocation(this.program, "a_position");
+      const positionLocation = this.gl.getAttribLocation(
+        this.program,
+        "a_position"
+      );
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.positionBuffer);
       this.gl.enableVertexAttribArray(positionLocation);
-      this.gl.vertexAttribPointer(positionLocation, 2, this.gl.FLOAT, false, 0, 0);
+      this.gl.vertexAttribPointer(
+        positionLocation,
+        2,
+        this.gl.FLOAT,
+        false,
+        0,
+        0
+      );
     }
 
     // Apply uniforms (now that program is bound)

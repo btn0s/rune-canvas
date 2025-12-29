@@ -1,4 +1,9 @@
-import type { ShaderDefinition, ShaderParams, ShaderUniforms } from "../types";
+import type {
+  ShaderDefinition,
+  ShaderParams,
+  ShaderUniforms,
+  ParamDefinitions,
+} from "../types";
 import { simplexNoise } from "../shader-utils";
 import { colorToVec4 } from "../types";
 
@@ -83,6 +88,30 @@ export const simplexNoiseShader: ShaderDefinition = {
     stepsPerColor: 2,
     softness: 0.3,
   },
+  paramDefinitions: {
+    colors: {
+      control: { type: "colorArray", label: "Colors" },
+      defaultValue: ["#667eea", "#764ba2", "#f093fb"],
+    },
+    stepsPerColor: {
+      control: {
+        type: "slider",
+        min: 1,
+        max: 10,
+        step: 1,
+      },
+      defaultValue: 2,
+    },
+    softness: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.3,
+    },
+  } as ParamDefinitions,
   presets: [
     {
       name: "Default",

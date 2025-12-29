@@ -1,4 +1,9 @@
-import type { ShaderDefinition, ShaderParams, ShaderUniforms } from "../types";
+import type {
+  ShaderDefinition,
+  ShaderParams,
+  ShaderUniforms,
+  ParamDefinitions,
+} from "../types";
 import { declarePI, simplexNoise } from "../shader-utils";
 import { colorToVec4 } from "../types";
 
@@ -134,6 +139,82 @@ export const dotGridShader: ShaderDefinition = {
     opacityRange: 0.3,
     shape: "circle",
   },
+  paramDefinitions: {
+    colorBack: {
+      control: { type: "color", label: "Background" },
+      defaultValue: "#ffffff",
+    },
+    colorFill: {
+      control: { type: "color", label: "Fill" },
+      defaultValue: "#3b82f6",
+    },
+    colorStroke: {
+      control: { type: "color", label: "Stroke" },
+      defaultValue: "#1e40af",
+    },
+    dotSize: {
+      control: {
+        type: "slider",
+        min: 0.05,
+        max: 0.5,
+        step: 0.01,
+      },
+      defaultValue: 0.25,
+    },
+    gapX: {
+      control: {
+        type: "slider",
+        min: 0.01,
+        max: 0.3,
+        step: 0.01,
+      },
+      defaultValue: 0.08,
+    },
+    gapY: {
+      control: {
+        type: "slider",
+        min: 0.01,
+        max: 0.3,
+        step: 0.01,
+      },
+      defaultValue: 0.08,
+    },
+    strokeWidth: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 0.1,
+        step: 0.01,
+      },
+      defaultValue: 0.03,
+    },
+    sizeRange: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.2,
+    },
+    opacityRange: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.3,
+    },
+    shape: {
+      control: {
+        type: "enum",
+        options: ["circle", "diamond", "square", "triangle"],
+        label: "Shape",
+      },
+      defaultValue: "circle",
+    },
+  } as ParamDefinitions,
   presets: [
     {
       name: "Default",

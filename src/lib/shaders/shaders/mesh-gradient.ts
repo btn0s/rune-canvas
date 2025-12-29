@@ -1,4 +1,9 @@
-import type { ShaderDefinition, ShaderParams, ShaderUniforms } from "../types";
+import type {
+  ShaderDefinition,
+  ShaderParams,
+  ShaderUniforms,
+  ParamDefinitions,
+} from "../types";
 import { declarePI, rotation2, proceduralHash21 } from "../shader-utils";
 import { colorToVec4 } from "../types";
 
@@ -146,6 +151,48 @@ export const meshGradientShader: ShaderDefinition = {
     grainMixer: 0.05,
     grainOverlay: 0.02,
   },
+  paramDefinitions: {
+    colors: {
+      control: { type: "colorArray", label: "Colors" },
+      defaultValue: ["#667eea", "#764ba2", "#f093fb", "#4facfe"],
+    },
+    distortion: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 2,
+        step: 0.01,
+      },
+      defaultValue: 0.6,
+    },
+    swirl: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 2,
+        step: 0.01,
+      },
+      defaultValue: 0.15,
+    },
+    grainMixer: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.05,
+    },
+    grainOverlay: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.02,
+    },
+  } as ParamDefinitions,
   presets: [
     {
       name: "Default",

@@ -1,6 +1,10 @@
-import type { ShaderDefinition, ShaderParams, ShaderUniforms } from "../types";
+import type {
+  ShaderDefinition,
+  ShaderParams,
+  ShaderUniforms,
+  ParamDefinitions,
+} from "../types";
 import { proceduralHash21 } from "../shader-utils";
-import { colorToVec4 } from "../types";
 
 // VHS shader - retro VHS tape effects
 // language=GLSL
@@ -103,6 +107,57 @@ export const vhsShader: ShaderDefinition = {
     vignette: 1.1,
     jitter: 0.25,
   },
+  paramDefinitions: {
+    image: {
+      control: { type: "imageUrl", label: "Image" },
+      defaultValue: "",
+    },
+    scanlineIntensity: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.25,
+    },
+    noiseIntensity: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.08,
+    },
+    colorBleed: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.4,
+    },
+    vignette: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 2,
+        step: 0.01,
+      },
+      defaultValue: 1.1,
+    },
+    jitter: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.25,
+    },
+  } as ParamDefinitions,
   presets: [
     {
       name: "Default",

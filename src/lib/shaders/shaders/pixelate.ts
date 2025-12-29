@@ -1,5 +1,9 @@
-import type { ShaderDefinition, ShaderParams, ShaderUniforms } from "../types";
-import { colorToVec4 } from "../types";
+import type {
+  ShaderDefinition,
+  ShaderParams,
+  ShaderUniforms,
+  ParamDefinitions,
+} from "../types";
 
 // Pixelate shader - pixelation effect
 // language=GLSL
@@ -55,6 +59,21 @@ export const pixelateShader: ShaderDefinition = {
     image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",
     pixelSize: 6,
   },
+  paramDefinitions: {
+    image: {
+      control: { type: "imageUrl", label: "Image" },
+      defaultValue: "",
+    },
+    pixelSize: {
+      control: {
+        type: "slider",
+        min: 1,
+        max: 50,
+        step: 1,
+      },
+      defaultValue: 6,
+    },
+  } as ParamDefinitions,
   presets: [
     {
       name: "Default",

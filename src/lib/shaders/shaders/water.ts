@@ -1,4 +1,9 @@
-import type { ShaderDefinition, ShaderParams, ShaderUniforms } from "../types";
+import type {
+  ShaderDefinition,
+  ShaderParams,
+  ShaderUniforms,
+  ParamDefinitions,
+} from "../types";
 import { declarePI, rotation2, simplexNoise } from "../shader-utils";
 import { colorToVec4 } from "../types";
 
@@ -151,6 +156,74 @@ export const waterShader: ShaderDefinition = {
     caustic: 0.1,
     size: 1,
   },
+  paramDefinitions: {
+    image: {
+      control: { type: "imageUrl", label: "Image" },
+      defaultValue: "",
+    },
+    colorBack: {
+      control: { type: "color", label: "Background" },
+      defaultValue: "#909090",
+    },
+    colorHighlight: {
+      control: { type: "color", label: "Highlight" },
+      defaultValue: "#ffffff",
+    },
+    highlights: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.07,
+    },
+    layering: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.5,
+    },
+    edges: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.8,
+    },
+    waves: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.3,
+    },
+    caustic: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      defaultValue: 0.1,
+    },
+    size: {
+      control: {
+        type: "slider",
+        min: 0.1,
+        max: 2,
+        step: 0.01,
+      },
+      defaultValue: 1,
+    },
+  } as ParamDefinitions,
   presets: [
     {
       name: "Default",

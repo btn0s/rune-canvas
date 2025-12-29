@@ -12,6 +12,7 @@ import type {
   ImageFill,
 } from "../lib/types";
 import { getShader } from "@/lib/shaders/registry";
+import type { ParamControl } from "@/lib/shaders/types";
 import { createSolidFill, createShadow, createInnerShadow } from "../lib/types";
 import { useState, useRef, useMemo } from "react";
 import { SelectItem } from "./ui/select";
@@ -1656,7 +1657,250 @@ function ShaderProperties({
     return shader.shaderParams[key] ?? shaderDef?.defaultParams[key];
   };
 
-  const renderParamControl = (key: string, defaultValue: unknown) => {
+  // Helper to format parameter labels
+  const formatLabel = (paramKey: string, customLabel?: string): string => {
+    if (customLabel) return customLabel;
+    const lower = paramKey.toLowerCase();
+    if (lower.includes("back") || lower === "background") return "Background";
+    if (lower.includes("front") || lower === "foreground") return "Foreground";
+    return paramKey
+      .replace(/([A-Z])/g, " $1")
+      .replace(/^./, (str) => str.toUpperCase())
+      .trim();
+  };
+
+  // Render control based on declarative definition
+  const renderControlFromDefinition = (
+    key: string,
+    paramDef: { control: ParamControl; defaultValue: unknown },
+    value: unknown
+  ) => {
+    const control = paramDef.control;
+    const defaultValue = paramDef.defaultValue;
+    switch (control.type) {
+      case "color": {
+        const colorValue =
+          (typeof value === "string" && value.startsWith("#")
+            ? value
+            : typeof control === "object" && "defaultValue" in control
+            ? String(control.defaultValue)
+            : "#ffffff") || "#ffffff";
+        return (
+          <div key={key} className="flex flex-col gap-1.5">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+              {formatLabel(key, control.label)}
+            </span>
+            <ColorInput
+              color={colorValue}
+              onChange={(newColor) => updateShaderParam(key, newColor)}
+            />
+          </div>
+        );
+      }
+
+      case "colorArray": {
+        const colors = Array.isArray(value)
+          ? (value as string[]).filter(
+              (c) => typeof c === "string" && c.startsWith("#")
+            )
+          : Array.isArray(shaderDef?.defaultParams[key])
+          ? (shaderDef.defaultParams[key] as string[])
+          : [];
+        return (
+          <div key={key} className="flex flex-col gap-1.5">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+              {formatLabel(key, control.label)}
+            </span>
+            <div className="flex flex-col gap-1.5">
+              {colors.map((color, idx) => {
+                const colorValue =
+                  typeof color === "string" && color.startsWith("#")
+                    ? color
+                    : "#ffffff";
+                return (
+                  <div key={idx} className="flex items-center gap-1.5 min-w-0">
+                    <div className="flex-1 min-w-0">
+                      <ColorInput
+                        color={colorValue}
+                        onChange={(newColor) => {
+                          const newColors = [...colors];
+                          newColors[idx] = newColor;
+                          updateShaderParam(key, newColors);
+                        }}
+                      />
+                    </div>
+                    {colors.length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 shrink-0"
+                        onClick={() => {
+                          const newColors = colors.filter((_, i) => i !== idx);
+                          updateShaderParam(key, newColors);
+                        }}
+                      >
+                        <Minus className="size-3" />
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => {
+                  updateShaderParam(key, [...colors, "#ffffff"]);
+                }}
+              >
+                <Plus className="size-3 mr-1" />
+                Add Color
+              </Button>
+            </div>
+          </div>
+        );
+      }
+
+      case "slider": {
+        const numValue =
+          typeof value === "number" ? value : (defaultValue as number) ?? 0;
+        return (
+          <div key={key} className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+                {formatLabel(key, control.label)}
+              </span>
+              <div className="text-xs text-muted-foreground font-mono">
+                {control.showAsPercentage
+                  ? `${Math.round(numValue * 100)}%`
+                  : numValue.toFixed(2)}
+              </div>
+            </div>
+            <Slider
+              value={[numValue]}
+              onValueChange={([val]) => updateShaderParam(key, val)}
+              min={control.min}
+              max={control.max}
+              step={control.step ?? 0.01}
+              className="w-full"
+            />
+          </div>
+        );
+      }
+
+      case "enum": {
+        const currentValue =
+          typeof value === "string" ? value : String(defaultValue ?? "");
+        const options = control.options;
+        if (options.length >= 2 && options.length <= 4) {
+          return (
+            <div key={key} className="flex flex-col gap-1.5">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+                {formatLabel(key, control.label)}
+              </span>
+              <ToggleGroup
+                type="single"
+                value={currentValue}
+                onValueChange={(val) => {
+                  if (val) updateShaderParam(key, val);
+                }}
+                className="w-full"
+                variant="outline"
+                size="sm"
+                spacing={0}
+              >
+                {options.map((enumVal) => (
+                  <ToggleGroupItem
+                    key={enumVal}
+                    value={enumVal}
+                    className="flex-1 text-xs capitalize"
+                  >
+                    {enumVal}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </div>
+          );
+        }
+        return (
+          <div key={key} className="flex flex-col gap-1.5">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+              {formatLabel(key, control.label)}
+            </span>
+            <PropertySelect
+              value={currentValue}
+              onValueChange={(val) => updateShaderParam(key, val)}
+            >
+              {options.map((enumVal) => (
+                <SelectItem
+                  key={String(enumVal)}
+                  value={String(enumVal)}
+                  className="capitalize text-xs"
+                >
+                  {enumVal}
+                </SelectItem>
+              ))}
+            </PropertySelect>
+          </div>
+        );
+      }
+
+      case "imageUrl": {
+        const imageUrl = typeof value === "string" ? value : "";
+        return (
+          <div key={key} className="flex flex-col gap-1.5">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+              {formatLabel(key, control.label)}
+            </span>
+            <Input
+              value={imageUrl}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                updateShaderParam(key, e.target.value)
+              }
+              placeholder="Enter image URL..."
+              className="h-7 text-xs"
+            />
+          </div>
+        );
+      }
+
+      case "number": {
+        const numValue =
+          typeof value === "number" ? value : (defaultValue as number) ?? 0;
+        return (
+          <div key={key} className="flex flex-col gap-1.5">
+            <SectionLabel>{formatLabel(key, control.label)}</SectionLabel>
+            <NumberInput
+              value={numValue}
+              onChange={(v) => updateShaderParam(key, v)}
+            />
+          </div>
+        );
+      }
+
+      case "boolean": {
+        const boolValue =
+          typeof value === "boolean" ? value : (defaultValue as boolean) ?? false;
+        return (
+          <div key={key} className="flex items-center gap-2 cursor-pointer">
+            <Checkbox
+              checked={boolValue}
+              onCheckedChange={(checked) =>
+                updateShaderParam(key, checked === true)
+              }
+              className="w-3.5 h-3.5 rounded border-border bg-input/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground"
+            />
+            <span className="text-xs text-muted-foreground">
+              {formatLabel(key, control.label)}
+            </span>
+          </div>
+        );
+      }
+    }
+  };
+
+  // Fallback heuristic-based rendering (for backward compatibility)
+  const renderParamControlHeuristic = (key: string, defaultValue: unknown) => {
     const value = getParamValue(key);
     const displayValue = value ?? defaultValue;
 
@@ -1734,18 +1978,6 @@ function ShaderProperties({
           ? displayValue
           : defaultValue) || "#ffffff";
 
-      const formatLabel = (paramKey: string): string => {
-        const lower = paramKey.toLowerCase();
-        if (lower.includes("back") || lower === "background")
-          return "Background";
-        if (lower.includes("front") || lower === "foreground")
-          return "Foreground";
-        return paramKey
-          .replace(/([A-Z])/g, " $1")
-          .replace(/^./, (str) => str.toUpperCase())
-          .trim();
-      };
-
       return (
         <div key={key} className="flex flex-col gap-1.5">
           <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
@@ -1772,7 +2004,9 @@ function ShaderProperties({
           </span>
           <Input
             value={imageUrl}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateShaderParam(key, e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              updateShaderParam(key, e.target.value)
+            }
             placeholder="Enter image URL..."
             className="h-7 text-xs"
           />
@@ -1789,12 +2023,12 @@ function ShaderProperties({
           enumValues.add(presetValue);
         }
       });
-      
+
       const enumArray = Array.from(enumValues);
-      
+
       if (enumArray.length >= 2 && enumArray.length <= 4) {
         const currentValue = typeof displayValue === "string" ? displayValue : defaultValue;
-        
+
         return (
           <div key={key} className="flex flex-col gap-1.5">
             <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
@@ -1824,10 +2058,10 @@ function ShaderProperties({
           </div>
         );
       }
-      
+
       if (enumArray.length > 4) {
         const currentValue = typeof displayValue === "string" ? displayValue : defaultValue;
-        
+
         return (
           <div key={key} className="flex flex-col gap-1.5">
             <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
@@ -1838,7 +2072,11 @@ function ShaderProperties({
               onValueChange={(val) => updateShaderParam(key, val)}
             >
               {enumArray.map((enumVal) => (
-                <SelectItem key={String(enumVal)} value={String(enumVal)} className="capitalize text-xs">
+                <SelectItem
+                  key={String(enumVal)}
+                  value={String(enumVal)}
+                  className="capitalize text-xs"
+                >
                   {enumVal}
                 </SelectItem>
               ))}
@@ -1878,7 +2116,7 @@ function ShaderProperties({
               {key}
             </span>
             <div className="text-xs text-muted-foreground font-mono">
-              {showAsPercentage 
+              {showAsPercentage
                 ? `${Math.round(numValue * 100)}%`
                 : numValue.toFixed(2)}
             </div>
@@ -1903,6 +2141,20 @@ function ShaderProperties({
         </div>
       </div>
     );
+  };
+
+  // Main render function - uses declarative definitions if available, falls back to heuristics
+  const renderParamControl = (key: string, defaultValue: unknown) => {
+    const value = getParamValue(key);
+    
+    // Check if shader has declarative parameter definitions
+    if (shaderDef?.paramDefinitions?.[key]) {
+      const paramDef = shaderDef.paramDefinitions[key];
+      return renderControlFromDefinition(key, paramDef, value);
+    }
+    
+    // Fall back to heuristic-based rendering
+    return renderParamControlHeuristic(key, defaultValue);
   };
 
   if (!shaderDef) {

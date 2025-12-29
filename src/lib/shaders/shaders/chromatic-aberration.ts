@@ -1,5 +1,9 @@
-import type { ShaderDefinition, ShaderParams, ShaderUniforms } from "../types";
-import { colorToVec4 } from "../types";
+import type {
+  ShaderDefinition,
+  ShaderParams,
+  ShaderUniforms,
+  ParamDefinitions,
+} from "../types";
 
 // Chromatic Aberration shader - RGB channel separation
 // language=GLSL
@@ -80,6 +84,30 @@ export const chromaticAberrationShader: ShaderDefinition = {
     strength: 0.015,
     angle: 0,
   },
+  paramDefinitions: {
+    image: {
+      control: { type: "imageUrl", label: "Image" },
+      defaultValue: "",
+    },
+    strength: {
+      control: {
+        type: "slider",
+        min: 0,
+        max: 0.1,
+        step: 0.001,
+      },
+      defaultValue: 0.015,
+    },
+    angle: {
+      control: {
+        type: "slider",
+        min: -180,
+        max: 180,
+        step: 1,
+      },
+      defaultValue: 0,
+    },
+  } as ParamDefinitions,
   presets: [
     {
       name: "Default",
