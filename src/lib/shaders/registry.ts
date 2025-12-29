@@ -24,7 +24,6 @@ import { radialBlurShader } from "./shaders/radial-blur";
 import { vhsShader } from "./shaders/vhs";
 import { fractalTunnelShader } from "./shaders/fractal-tunnel";
 import { fractalKaleidoscopeShader } from "./shaders/fractal-kaleidoscope";
-import { oilPaintingShader } from "./shaders/oil-painting";
 import { bloomShader } from "./shaders/bloom";
 import { edgeDetectionShader } from "./shaders/edge-detection";
 import { tiltShiftShader } from "./shaders/tilt-shift";
@@ -50,7 +49,6 @@ export const SHADER_REGISTRY: Map<string, ShaderDefinition> = new Map([
   [vhsShader.id, vhsShader],
   [fractalTunnelShader.id, fractalTunnelShader],
   [fractalKaleidoscopeShader.id, fractalKaleidoscopeShader],
-  [oilPaintingShader.id, oilPaintingShader],
   [bloomShader.id, bloomShader],
   [edgeDetectionShader.id, edgeDetectionShader],
   [tiltShiftShader.id, tiltShiftShader],
