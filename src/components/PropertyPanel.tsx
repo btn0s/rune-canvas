@@ -1990,7 +1990,6 @@ export function PropertyPanel({
   onCanvasBackgroundChange,
 }: PropertyPanelProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
 
   // ==========================================================================
   // EMPTY STATE - Canvas properties when nothing selected
@@ -2015,7 +2014,7 @@ export function PropertyPanel({
     if (sidebarMode === "show") {
       return (
         <div
-          ref={panelRef}
+          data-sidebar="properties"
           className="absolute right-0 top-0 bottom-0 w-56 bg-card border-l border-border select-none flex flex-col"
           onMouseDown={(e) => e.stopPropagation()}
           onMouseUp={(e) => e.stopPropagation()}
@@ -2035,7 +2034,7 @@ export function PropertyPanel({
       <>
         {/* Hover trigger zone */}
         <div
-          ref={panelRef}
+          data-sidebar="properties"
           className="absolute right-4 top-1/2 -translate-y-1/2 select-none"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
@@ -2053,6 +2052,7 @@ export function PropertyPanel({
 
         {/* Panel */}
         <div
+          data-sidebar="properties"
           className="absolute right-4 top-4 bottom-4 bg-card border border-border rounded-md select-none transition-all duration-200 ease-out overflow-y-auto"
           style={{
             width: 220,
@@ -2151,7 +2151,7 @@ export function PropertyPanel({
   if (sidebarMode === "show") {
     return (
       <div
-        ref={panelRef}
+        data-sidebar="properties"
         className="absolute right-0 top-0 bottom-0 w-56 bg-card border-l border-border select-none flex flex-col"
         onMouseDown={(e) => e.stopPropagation()}
         onMouseUp={(e) => e.stopPropagation()}
@@ -2193,7 +2193,7 @@ export function PropertyPanel({
     <>
       {/* Hover trigger zone with collapsed indicator */}
       <div
-        ref={panelRef}
+        data-sidebar="properties"
         className="absolute right-4 top-1/2 -translate-y-1/2 select-none"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
@@ -2217,6 +2217,7 @@ export function PropertyPanel({
 
       {/* Panel - completely separate, slides in from right */}
       <div
+        data-sidebar="properties"
         className="absolute right-4 top-4 bottom-4 bg-card border border-border rounded-md select-none transition-all duration-200 ease-out overflow-y-auto"
         style={{
           width: 220,

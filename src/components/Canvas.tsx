@@ -474,6 +474,14 @@ export function Canvas() {
     number | null
   >(null);
 
+  // Helper to check if a point is within a sidebar using data attributes
+  const isOverSidebar = useCallback((clientX: number, clientY: number): boolean => {
+    // Use elementsFromPoint to check what element is at the mouse position
+    const elements = document.elementsFromPoint(clientX, clientY);
+    // Check if any element has the data-sidebar attribute
+    return elements.some((el) => el instanceof HTMLElement && el.dataset.sidebar !== undefined);
+  }, []);
+
   // Hovered object for visual feedback
   const [hoveredObjectId, setHoveredObjectId] = useState<string | null>(null);
 
@@ -885,11 +893,14 @@ export function Canvas() {
     const container = containerRef.current;
     if (!container) return;
     const onWheel = (e: WheelEvent) => {
-      handleWheel(e, container.getBoundingClientRect());
+      // Don't pan/zoom if mouse is over a sidebar
+      if (!isOverSidebar(e.clientX, e.clientY)) {
+        handleWheel(e, container.getBoundingClientRect());
+      }
     };
     container.addEventListener("wheel", onWheel, { passive: false });
     return () => container.removeEventListener("wheel", onWheel);
-  }, [handleWheel]);
+  }, [handleWheel, isOverSidebar]);
 
   const hitTestHandle = useCallback(
     (screenX: number, screenY: number): ResizeHandle | null => {
@@ -1092,7 +1103,10 @@ export function Canvas() {
 
     // Middle click, hand tool, or space held to pan
     if (e.button === 1 || (e.button === 0 && (tool === "hand" || spaceHeld))) {
-      startPan({ x: e.clientX, y: e.clientY });
+      // Don't pan if mouse is over a sidebar
+      if (!isOverSidebar(e.clientX, e.clientY)) {
+        startPan({ x: e.clientX, y: e.clientY });
+      }
       return;
     }
 
@@ -1168,7 +1182,10 @@ export function Canvas() {
     const canvasPoint = screenToCanvas(screenX, screenY);
 
     if (isPanning) {
-      updatePan({ x: e.clientX, y: e.clientY });
+      // Don't pan if mouse is over a sidebar
+      if (!isOverSidebar(e.clientX, e.clientY)) {
+        updatePan({ x: e.clientX, y: e.clientY });
+      }
       setHoveredObjectId(null);
     } else if (isCreating) {
       updateCreate(canvasPoint);
