@@ -1149,6 +1149,75 @@ export function useCanvas() {
     };
   };
 
+  // Replace image fill on shader with new image
+  const replaceShaderImageFill = useCallback(
+    async (shaderId: string, imageSrc: string) => {
+      pushHistory();
+      
+      // Load image dimensions
+      const dimensions = await loadImageDimensions(imageSrc);
+      
+      // Create new image fill
+      const fillId = `fill-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const newImageFill: ImageFill = {
+        id: fillId,
+        type: "image",
+        visible: true,
+        opacity: 1,
+        src: imageSrc,
+        naturalWidth: dimensions.width,
+        naturalHeight: dimensions.height,
+        fillMode: "fill",
+        cropX: 0,
+        cropY: 0,
+        cropWidth: dimensions.width,
+        cropHeight: dimensions.height,
+      };
+
+      // Update objects with functional update to get latest state
+      setObjects((currentObjects) => {
+        const shader = currentObjects.find(
+          (o) => o.id === shaderId && o.type === "shader"
+        ) as ShaderObject | undefined;
+        
+        if (!shader) {
+          return currentObjects;
+        }
+
+        // Find existing image fill index (check all image fills, not just visible ones)
+        const existingImageFillIndex = shader.fills.findIndex(
+          (fill) => fill.type === "image"
+        );
+
+        // Create new fills array - always put image fill first for consistency
+        const newFills = [...shader.fills];
+        if (existingImageFillIndex >= 0) {
+          // Remove old image fill and add new one at the beginning
+          newFills.splice(existingImageFillIndex, 1);
+          newFills.unshift(newImageFill);
+        } else {
+          // Add new image fill at the beginning
+          newFills.unshift(newImageFill);
+        }
+
+        // Update the shader and recalculate sizes
+        // Create a completely new shader object to ensure React detects the change
+        const updated = currentObjects.map((o) => {
+          if (o.id === shaderId && o.type === "shader") {
+            return {
+              ...o,
+              fills: newFills,
+            } as ShaderObject;
+          }
+          return o;
+        });
+        
+        return recalculateHugSizes(updated);
+      });
+    },
+    [pushHistory, loadImageDimensions]
+  );
+
   // Create shader object
   const createShader = useCallback(
     async (
@@ -1431,5 +1500,6 @@ export function useCanvas() {
     sendBackward,
     frameSelection,
     pasteAt,
+    replaceShaderImageFill,
   };
 }

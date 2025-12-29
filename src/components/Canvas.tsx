@@ -379,9 +379,13 @@ export function Canvas() {
     sendBackward,
     frameSelection,
     pasteAt,
+    replaceShaderImageFill,
   } = useCanvas();
 
   const { commandState, setCommandActive, setCommandInput } = useCanvasStore();
+  
+  // Cache for merged shader params to prevent recreating on every render
+  const paramsCacheRef = useRef(new Map<string, Record<string, unknown>>());
 
   const allTools = useMemo(
     () => [
@@ -1460,6 +1464,28 @@ export function Canvas() {
                     const img = new Image();
                     img.onload = () => {
                       if (!containerRef.current) return;
+
+                      // Check if exactly one shader is selected
+                      if (selectedIds.length === 1) {
+                        const selectedObject = objects.find((o) => o.id === selectedIds[0]);
+                        
+                        if (selectedObject?.type === "shader") {
+                          // Clear cache for this shader to ensure fresh params are computed
+                          const shaderId = selectedObject.id;
+                          for (const key of paramsCacheRef.current.keys()) {
+                            if (key.startsWith(`${shaderId}-`)) {
+                              paramsCacheRef.current.delete(key);
+                            }
+                          }
+                          
+                          replaceShaderImageFill(selectedObject.id, src).catch((error) => {
+                            console.error("Failed to replace shader image fill:", error);
+                          });
+                          return; // Exit early, shader image fill handled
+                        }
+                      }
+
+                      // Default behavior: Place image at center of viewport
                       const rect = containerRef.current.getBoundingClientRect();
                       const centerX = rect.width / 2;
                       const centerY = rect.height / 2;
@@ -1609,6 +1635,11 @@ export function Canvas() {
       setSidebarMode,
       undo,
       redo,
+      selectedIds,
+      objects,
+      replaceShaderImageFill,
+      screenToCanvas,
+      addImage,
     ]
   );
 
@@ -1693,7 +1724,17 @@ export function Canvas() {
     [screenToCanvas, addImage]
   );
 
-  // Paste image handler
+  // Paste image handler - use refs to access latest values without causing re-renders
+  const selectedIdsRef = useRef(selectedIds);
+  const objectsRef = useRef(objects);
+  const replaceShaderImageFillRef = useRef(replaceShaderImageFill);
+  
+  useEffect(() => {
+    selectedIdsRef.current = selectedIds;
+    objectsRef.current = objects;
+    replaceShaderImageFillRef.current = replaceShaderImageFill;
+  }, [selectedIds, objects, replaceShaderImageFill]);
+  
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
       // Don't handle paste if user is editing text or typing in an input
@@ -1719,7 +1760,31 @@ export function Canvas() {
           img.onload = () => {
             if (!containerRef.current) return;
 
-            // Place image at center of viewport
+            // Check if exactly one shader is selected (use refs for latest values)
+            const currentSelectedIds = selectedIdsRef.current;
+            const currentObjects = objectsRef.current;
+            
+            if (currentSelectedIds.length === 1) {
+              const selectedObject = currentObjects.find((o) => o.id === currentSelectedIds[0]);
+              
+              if (selectedObject?.type === "shader") {
+                // Clear cache for this shader to ensure fresh params are computed
+                // The cache key format is: `${shaderId}-${JSON.stringify(shaderParams)}-${imageFill?.src || 'none'}-${imageFill?.id || 'none'}`
+                const shaderId = selectedObject.id;
+                for (const key of paramsCacheRef.current.keys()) {
+                  if (key.startsWith(`${shaderId}-`)) {
+                    paramsCacheRef.current.delete(key);
+                  }
+                }
+                
+                replaceShaderImageFillRef.current(selectedObject.id, src).catch((error) => {
+                  console.error("Failed to replace shader image fill:", error);
+                });
+                return;
+              }
+            }
+
+            // Default behavior: Place image at center of viewport
             const rect = containerRef.current.getBoundingClientRect();
             const centerX = rect.width / 2;
             const centerY = rect.height / 2;
@@ -1876,6 +1941,16 @@ export function Canvas() {
                   shaderDef: ShaderDefinition,
                   shaderObj: ShaderObject
                 ): Record<string, unknown> => {
+                  // Create cache key from shader object's relevant properties
+                  const imageFill = shaderObj.fills.find(
+                    (fill): fill is ImageFill => fill.type === 'image' && fill.visible
+                  );
+                  const cacheKey = `${shaderObj.id}-${JSON.stringify(shaderObj.shaderParams)}-${imageFill?.src || 'none'}-${imageFill?.id || 'none'}`;
+                  
+                  if (paramsCacheRef.current.has(cacheKey)) {
+                    return paramsCacheRef.current.get(cacheKey)!;
+                  }
+                  
                   const params = { ...shaderObj.shaderParams };
                   
                   // Find imageUrl parameters in the shader definition
@@ -1885,12 +1960,6 @@ export function Canvas() {
                   
                   // If shader has image parameters, check for image fills
                   if (imageParamNames.length > 0) {
-                    // Find the first visible image fill
-                    const imageFill = shaderObj.fills.find(
-                      (fill): fill is ImageFill => 
-                        fill.type === 'image' && fill.visible
-                    );
-                    
                     // Use the image fill's src for all image parameters
                     if (imageFill) {
                       for (const paramName of imageParamNames) {
@@ -1898,6 +1967,15 @@ export function Canvas() {
                       }
                     }
                   }
+                  
+                  // Cache the result (limit cache size to prevent memory leaks)
+                  if (paramsCacheRef.current.size > 100) {
+                    const firstKey = paramsCacheRef.current.keys().next().value;
+                    if (firstKey !== undefined) {
+                      paramsCacheRef.current.delete(firstKey);
+                    }
+                  }
+                  paramsCacheRef.current.set(cacheKey, params);
                   
                   return params;
                 };
@@ -2098,7 +2176,7 @@ export function Canvas() {
 
                           const shaderStyles = computeShaderStyle(shaderObj);
                           
-                          // Merge image fills into shader params if applicable
+                          // Merge image fills into shader params if applicable (memoized)
                           const mergedParams = mergeImageFillIntoShaderParams(shaderDef, shaderObj);
                           
                           return (
