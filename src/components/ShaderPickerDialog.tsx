@@ -109,13 +109,15 @@ function ShaderPreview({
     >
       <div className="aspect-square bg-black/50 relative rounded-md overflow-hidden border border-border group-hover:border-primary transition-colors">
         <div className="absolute inset-0 flex items-center justify-center">
-          <ShaderRendererComponent
-            shader={shader}
-            params={shader.defaultParams}
-            width={200}
-            height={200}
-            speed={1}
-          />
+          <div className="w-full h-full flex items-center justify-center">
+            <ShaderRendererComponent
+              shader={shader}
+              params={shader.defaultParams}
+              width={200}
+              height={200}
+              speed={1}
+            />
+          </div>
         </div>
       </div>
       <div className="mt-2 text-center">

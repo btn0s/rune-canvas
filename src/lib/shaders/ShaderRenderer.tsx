@@ -154,8 +154,11 @@ export function ShaderRendererComponent({
       ref={canvasRef}
       style={{
         display: "block",
-        width: "100%",
-        height: "100%",
+        maxWidth: "100%",
+        maxHeight: "100%",
+        width: "auto",
+        height: "auto",
+        objectFit: "contain",
       }}
     />
   );
