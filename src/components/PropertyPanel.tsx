@@ -13,6 +13,8 @@ import type {
 } from "../lib/objects/types";
 import { getShader } from "@/lib/shaders/registry";
 import type { ParamControl } from "@/lib/shaders/types";
+import { toProcessedLiquidMetal } from "@/lib/shaders/shaders/liquid-metal";
+import { toProcessedHeatmap } from "@/lib/shaders/shaders/heatmap";
 import { createSolidFill, createShadow, createInnerShadow } from "../lib/objects/types";
 import { useState, useRef, useMemo } from "react";
 import { SelectItem } from "./ui/select";
@@ -1670,6 +1672,7 @@ function ShaderProperties({
 
   const shader = shaders[0];
   const shaderDef = getShader(shader.shaderType);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const updateShaderParam = (key: string, value: unknown) => {
     const newParams = { ...shader.shaderParams, [key]: value };
@@ -1678,6 +1681,47 @@ function ShaderProperties({
 
   const getParamValue = (key: string): unknown => {
     return shader.shaderParams[key] ?? shaderDef?.defaultParams[key];
+  };
+
+  const handleImageFileChange = async (file: File) => {
+    try {
+      let blob: Blob;
+      
+      // Process image based on shader type
+      if (shader.shaderType === "liquid-metal") {
+        const result = await toProcessedLiquidMetal(file);
+        blob = result.pngBlob;
+      } else if (shader.shaderType === "heatmap") {
+        const result = await toProcessedHeatmap(file);
+        blob = result.blob;
+      } else {
+        // For other shaders, just use the file directly
+        blob = file;
+      }
+
+      // Load the processed image as HTMLImageElement
+      const blobUrl = URL.createObjectURL(blob);
+      const img = document.createElement("img");
+      img.crossOrigin = "anonymous";
+      
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => {
+          // Don't revoke URL here - image element needs it
+          resolve(undefined);
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(blobUrl);
+          reject(new Error("Failed to load processed image"));
+        };
+        img.src = blobUrl;
+      });
+
+      // Clear shape when image is selected
+      const newParams = { ...shader.shaderParams, image: img, shape: undefined };
+      onUpdate({ shaderParams: newParams } as Partial<ShaderObject>);
+    } catch (error) {
+      console.error("Failed to process image:", error);
+    }
   };
 
   const formatLabel = (paramKey: string, customLabel?: string): string => {
@@ -1931,6 +1975,11 @@ function ShaderProperties({
     );
   }
 
+  // Check if this shader has shape + image params (for special Shape section)
+  const hasShapeParam = shaderDef.paramDefinitions?.shape?.control.type === "enum";
+  const hasImageParam = shaderDef.paramDefinitions?.image?.control.type === "imageUrl";
+  const showShapeSection = hasShapeParam && hasImageParam;
+
   // Group params by their group metadata from paramDefinitions
   const foregroundParams: string[] = [];
   const backgroundParams: string[] = [];
@@ -1943,8 +1992,13 @@ function ShaderProperties({
         return;
       }
       
-      // Skip imageUrl params completely - they're handled via fills now
+      // Skip imageUrl params - they're handled in Shape section if applicable
       if (paramDef.control.type === "imageUrl") {
+        return;
+      }
+      
+      // Skip shape param if it's being shown in Shape section
+      if (showShapeSection && key === "shape") {
         return;
       }
       
@@ -2163,6 +2217,82 @@ function ShaderProperties({
               </SelectItem>
             ))}
           </PropertySelect>
+        </div>
+      )}
+
+      {/* Shape Section - Special handling for shape + image params */}
+      {showShapeSection && (
+        <div className="flex flex-col gap-1.5">
+          <SectionLabel>Shape</SectionLabel>
+          {/* Shape dropdown */}
+          {(() => {
+            const shapeParamDef = shaderDef.paramDefinitions?.shape;
+            const shapeValue = getParamValue("shape");
+            const currentShape =
+              typeof shapeValue === "string" ? shapeValue : String(shapeParamDef?.defaultValue ?? "diamond");
+            const imageValue = getParamValue("image");
+            const hasImage = imageValue && imageValue !== "";
+
+            return (
+              <>
+                <PropertySelect
+                  value={currentShape}
+                  onValueChange={(val) => {
+                    // Clear image when shape is selected
+                    const newParams = { ...shader.shaderParams, shape: val, image: undefined };
+                    onUpdate({ shaderParams: newParams } as Partial<ShaderObject>);
+                  }}
+                >
+                  {shapeParamDef?.control.type === "enum" && shapeParamDef.control.options
+                    ? shapeParamDef.control.options.map((option: string) => (
+                        <SelectItem
+                          key={String(option)}
+                          value={String(option)}
+                          className="capitalize text-xs"
+                        >
+                          {option}
+                        </SelectItem>
+                      ))
+                    : null}
+                </PropertySelect>
+                {/* File upload button */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleImageFileChange(file);
+                    }
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full h-7 text-xs"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Image className="size-3 mr-1.5" />
+                  Choose file
+                </Button>
+                {hasImage && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs text-muted-foreground"
+                    onClick={() => {
+                      const newParams = { ...shader.shaderParams, image: undefined };
+                      onUpdate({ shaderParams: newParams } as Partial<ShaderObject>);
+                    }}
+                  >
+                    Remove image
+                  </Button>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 

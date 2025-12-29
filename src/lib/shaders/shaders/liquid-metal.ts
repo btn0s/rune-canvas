@@ -13,15 +13,20 @@ import {
 import { colorToVec4 } from "../types";
 
 // Liquid metal shader adapted from paper-design/shaders
-// Procedural shapes with animated metallic stripe patterns
+// Supports both custom images and procedural shapes
 // language=GLSL
 const fragmentShader = `#version 300 es
 precision mediump float;
 
-uniform float u_time;
+uniform sampler2D u_image;
+uniform float u_imageAspectRatio;
+
 uniform vec2 u_resolution;
+uniform float u_time;
+
 uniform vec4 u_colorBack;
 uniform vec4 u_colorTint;
+
 uniform float u_softness;
 uniform float u_repetition;
 uniform float u_shiftRed;
@@ -29,9 +34,12 @@ uniform float u_shiftBlue;
 uniform float u_distortion;
 uniform float u_contour;
 uniform float u_angle;
+
 uniform float u_shape;
+uniform bool u_isImage;
 
 in vec2 v_objectUV;
+in vec2 v_imageUV;
 out vec4 fragColor;
 
 ${declarePI}
@@ -44,7 +52,9 @@ float getColorChanges(float c1, float c2, float stripe_p, vec3 w, float blur, fl
   float border = w[0];
   ch = mix(ch, c2, smoothstep(border, border + 2. * blur, stripe_p));
 
-  bump = smoothstep(.2, .8, bump);
+  if (u_isImage == true) {
+    bump = smoothstep(.2, .8, bump);
+  }
   border = w[0] + .4 * (1. - bump) * w[1];
   ch = mix(ch, c1, smoothstep(border, border + 2. * blur, stripe_p));
 
@@ -63,6 +73,36 @@ float getColorChanges(float c1, float c2, float stripe_p, vec3 w, float blur, fl
   return ch;
 }
 
+float getImgFrame(vec2 uv, float th) {
+  float frame = 1.;
+  frame *= smoothstep(0., th, uv.y);
+  frame *= 1.0 - smoothstep(1. - th, 1., uv.y);
+  frame *= smoothstep(0., th, uv.x);
+  frame *= 1.0 - smoothstep(1. - th, 1., uv.x);
+  return frame;
+}
+
+float blurEdge3x3(sampler2D tex, vec2 uv, vec2 dudx, vec2 dudy, float radius, float centerSample) {
+  vec2 texel = 1.0 / vec2(textureSize(tex, 0));
+  vec2 r = radius * texel;
+
+  float w1 = 1.0, w2 = 2.0, w4 = 4.0;
+  float norm = 16.0;
+  float sum = w4 * centerSample;
+
+  sum += w2 * textureGrad(tex, uv + vec2(0.0, -r.y), dudx, dudy).r;
+  sum += w2 * textureGrad(tex, uv + vec2(0.0, r.y), dudx, dudy).r;
+  sum += w2 * textureGrad(tex, uv + vec2(-r.x, 0.0), dudx, dudy).r;
+  sum += w2 * textureGrad(tex, uv + vec2(r.x, 0.0), dudx, dudy).r;
+
+  sum += w1 * textureGrad(tex, uv + vec2(-r.x, -r.y), dudx, dudy).r;
+  sum += w1 * textureGrad(tex, uv + vec2(r.x, -r.y), dudx, dudy).r;
+  sum += w1 * textureGrad(tex, uv + vec2(-r.x, r.y), dudx, dudy).r;
+  sum += w1 * textureGrad(tex, uv + vec2(r.x, r.y), dudx, dudy).r;
+
+  return sum / norm;
+}
+
 float lst(float edge0, float edge1, float x) {
   return clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
 }
@@ -71,8 +111,20 @@ void main() {
   const float firstFrameOffset = 2.8;
   float t = .3 * (u_time + firstFrameOffset);
 
-  vec2 uv = v_objectUV + .5;
-  uv.y = 1. - uv.y;
+  vec2 uv;
+  vec2 dudx;
+  vec2 dudy;
+  vec4 img = vec4(0.);
+
+  if (u_isImage == true) {
+    uv = v_imageUV;
+    dudx = dFdx(v_imageUV);
+    dudy = dFdy(v_imageUV);
+    img = textureGrad(u_image, uv, dudx, dudy);
+  } else {
+    uv = v_objectUV + .5;
+    uv.y = 1. - uv.y;
+  }
 
   float cycleWidth = u_repetition;
   float edge = 0.;
@@ -87,89 +139,79 @@ void main() {
     rotatedUV.x * sinA + rotatedUV.y * cosA
   ) + vec2(.5);
 
-  // Procedural shapes
-  if (u_shape < 1.) {
-    // full-fill on canvas
-    vec2 borderUV = uv;
-    float ratio = u_resolution.x / u_resolution.y;
-    vec2 mask = min(borderUV, 1. - borderUV);
-    vec2 pixel_thickness = 250. / u_resolution;
-    float maskX = smoothstep(0.0, pixel_thickness.x, mask.x);
-    float maskY = smoothstep(0.0, pixel_thickness.y, mask.y);
-    maskX = pow(maskX, .25);
-    maskY = pow(maskY, .25);
-    edge = clamp(1. - maskX * maskY, 0., 1.);
+  if (u_isImage == true) {
+    float edgeRaw = img.r;
+    edge = blurEdge3x3(u_image, uv, dudx, dudy, 6., edgeRaw);
+    edge = pow(edge, 1.6);
+    edge *= mix(0.0, 1.0, smoothstep(0.0, 0.4, u_contour));
+  } else {
+    if (u_shape < 2.) {
+      // circle
+      vec2 shapeUV = uv - .5;
+      shapeUV *= .67;
+      edge = pow(clamp(3. * length(shapeUV), 0., 1.), 18.);
+    } else if (u_shape < 3.) {
+      // daisy
+      vec2 shapeUV = uv - .5;
+      shapeUV *= 1.68;
 
-    if (ratio > 1.) {
-      uv.y /= ratio;
-    } else {
-      uv.x *= ratio;
+      float r = length(shapeUV) * 2.;
+      float a = atan(shapeUV.y, shapeUV.x) + .2;
+      r *= (1. + .05 * sin(3. * a + 2. * t));
+      float f = abs(cos(a * 3.));
+      edge = smoothstep(f, f + .7, r);
+      edge *= edge;
+
+      uv *= .8;
+      cycleWidth *= 1.6;
+
+    } else if (u_shape < 4.) {
+      // diamond
+      vec2 shapeUV = uv - .5;
+      shapeUV = rotate(shapeUV, .25 * PI);
+      shapeUV *= 1.42;
+      shapeUV += .5;
+      vec2 mask = min(shapeUV, 1. - shapeUV);
+      vec2 pixel_thickness = vec2(.15);
+      float maskX = smoothstep(0.0, pixel_thickness.x, mask.x);
+      float maskY = smoothstep(0.0, pixel_thickness.y, mask.y);
+      maskX = pow(maskX, .25);
+      maskY = pow(maskY, .25);
+      edge = clamp(1. - maskX * maskY, 0., 1.);
+    } else if (u_shape < 5.) {
+      // metaballs
+      vec2 shapeUV = uv - .5;
+      shapeUV *= 1.3;
+      edge = 0.;
+      for (int i = 0; i < 5; i++) {
+        float fi = float(i);
+        float speed = 1.5 + 2./3. * sin(fi * 12.345);
+        float angle = -fi * 1.5;
+        vec2 dir1 = vec2(cos(angle), sin(angle));
+        vec2 dir2 = vec2(cos(angle + 1.57), sin(angle + 1.));
+        vec2 traj = .4 * (dir1 * sin(t * speed + fi * 1.23) + dir2 * cos(t * (speed * 0.7) + fi * 2.17));
+        float d = length(shapeUV + traj);
+        edge += pow(1.0 - clamp(d, 0.0, 1.0), 4.0);
+      }
+      edge = 1. - smoothstep(.65, .9, edge);
+      edge = pow(edge, 4.);
     }
-    uv += .5;
-    uv.y = 1. - uv.y;
 
-    cycleWidth *= 2.;
-    contOffset = 1.5;
-
-  } else if (u_shape < 2.) {
-    // circle
-    vec2 shapeUV = uv - .5;
-    shapeUV *= .67;
-    edge = pow(clamp(3. * length(shapeUV), 0., 1.), 18.);
-  } else if (u_shape < 3.) {
-    // daisy
-    vec2 shapeUV = uv - .5;
-    shapeUV *= 1.68;
-
-    float r = length(shapeUV) * 2.;
-    float a = atan(shapeUV.y, shapeUV.x) + .2;
-    r *= (1. + .05 * sin(3. * a + 2. * t));
-    float f = abs(cos(a * 3.));
-    edge = smoothstep(f, f + .7, r);
-    edge *= edge;
-
-    uv *= .8;
-    cycleWidth *= 1.6;
-
-  } else if (u_shape < 4.) {
-    // diamond
-    vec2 shapeUV = uv - .5;
-    shapeUV = rotate(shapeUV, .25 * PI);
-    shapeUV *= 1.42;
-    shapeUV += .5;
-    vec2 mask = min(shapeUV, 1. - shapeUV);
-    vec2 pixel_thickness = vec2(.15);
-    float maskX = smoothstep(0.0, pixel_thickness.x, mask.x);
-    float maskY = smoothstep(0.0, pixel_thickness.y, mask.y);
-    maskX = pow(maskX, .25);
-    maskY = pow(maskY, .25);
-    edge = clamp(1. - maskX * maskY, 0., 1.);
-  } else if (u_shape < 5.) {
-    // metaballs
-    vec2 shapeUV = uv - .5;
-    shapeUV *= 1.3;
-    edge = 0.;
-    for (int i = 0; i < 5; i++) {
-      float fi = float(i);
-      float speed = 1.5 + 2./3. * sin(fi * 12.345);
-      float angle = -fi * 1.5;
-      vec2 dir1 = vec2(cos(angle), sin(angle));
-      vec2 dir2 = vec2(cos(angle + 1.57), sin(angle + 1.));
-      vec2 traj = .4 * (dir1 * sin(t * speed + fi * 1.23) + dir2 * cos(t * (speed * 0.7) + fi * 2.17));
-      float d = length(shapeUV + traj);
-      edge += pow(1.0 - clamp(d, 0.0, 1.0), 4.0);
-    }
-    edge = 1. - smoothstep(.65, .9, edge);
-    edge = pow(edge, 4.);
+    edge = mix(smoothstep(.9 - 2. * fwidth(edge), .9, edge), edge, smoothstep(0.0, 0.4, u_contour));
   }
 
-  edge = mix(smoothstep(.9 - 2. * fwidth(edge), .9, edge), edge, smoothstep(0.0, 0.4, u_contour));
-
-  float opacity = 1. - smoothstep(.9 - 2. * fwidth(edge), .9, edge);
-  if (u_shape < 2.) {
-    edge = 1.2 * edge;
-  } else if (u_shape < 5.) {
-    edge = 1.8 * pow(edge, 1.5);
+  float opacity = 0.;
+  if (u_isImage == true) {
+    opacity = img.g;
+    float frame = getImgFrame(v_imageUV, 0.);
+    opacity *= frame;
+  } else {
+    opacity = 1. - smoothstep(.9 - 2. * fwidth(edge), .9, edge);
+    if (u_shape < 2.) {
+      edge = 1.2 * edge;
+    } else if (u_shape < 5.) {
+      edge = 1.8 * pow(edge, 1.5);
+    }
   }
 
   float diagBLtoTR = rotatedUV.x - rotatedUV.y;
@@ -233,14 +275,26 @@ void main() {
   dispersionRed *= (u_shiftRed / 20.);
   dispersionBlue *= (u_shiftBlue / 20.);
 
-  float blur = u_softness / 15. + .3 * contour;
+  float blur = 0.;
+  float rExtraBlur = 0.;
+  float gExtraBlur = 0.;
+  if (u_isImage == true) {
+    float softness = 0.05 * u_softness;
+    blur = softness + .5 * smoothstep(1., 10., u_repetition) * smoothstep(.0, 1., edge);
+    float smallCanvasT = 1.0 - smoothstep(100., 500., min(u_resolution.x, u_resolution.y));
+    blur += smallCanvasT * smoothstep(.0, 1., edge);
+    rExtraBlur = softness * (0.05 + .1 * (u_shiftRed / 20.) * bump);
+    gExtraBlur = softness * 0.05 / max(0.001, abs(1. - diagBLtoTR));
+  } else {
+    blur = u_softness / 15. + .3 * contour;
+  }
 
   vec3 w = vec3(thin_strip_1_width, thin_strip_2_width, wide_strip_ratio);
   w[1] -= .02 * smoothstep(.0, 1., edge + bump);
   float stripe_r = fract(direction + dispersionRed);
-  float r = getColorChanges(color1.r, color2.r, stripe_r, w, blur + fwidth(stripe_r), bump, u_colorTint.r);
+  float r = getColorChanges(color1.r, color2.r, stripe_r, w, blur + fwidth(stripe_r) + rExtraBlur, bump, u_colorTint.r);
   float stripe_g = fract(direction);
-  float g = getColorChanges(color1.g, color2.g, stripe_g, w, blur + fwidth(stripe_g), bump, u_colorTint.g);
+  float g = getColorChanges(color1.g, color2.g, stripe_g, w, blur + fwidth(stripe_g) + gExtraBlur, bump, u_colorTint.g);
   float stripe_b = fract(direction - dispersionBlue);
   float b = getColorChanges(color1.b, color2.b, stripe_b, w, blur + fwidth(stripe_b), bump, u_colorTint.b);
 
@@ -257,8 +311,361 @@ void main() {
 }
 `;
 
+// Configuration for Poisson solver
+const POISSON_CONFIG_OPTIMIZED = {
+  measurePerformance: false,
+  workingSize: 512,
+  iterations: 40,
+};
+
+// Precomputed pixel data for sparse processing
+interface SparsePixelData {
+  interiorPixels: Uint32Array;
+  boundaryPixels: Uint32Array;
+  pixelCount: number;
+  neighborIndices: Int32Array;
+}
+
+export function toProcessedLiquidMetal(
+  file: File | string
+): Promise<{ imageData: ImageData; pngBlob: Blob }> {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  const isBlob = typeof file === "string" && file.startsWith("blob:");
+
+  return new Promise((resolve, reject) => {
+    if (!file || !ctx) {
+      reject(new Error("Invalid file or canvas context"));
+      return;
+    }
+
+    const blobContentTypePromise =
+      isBlob && fetch(file).then((res) => res.headers.get("Content-Type"));
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    const totalStartTime = performance.now();
+
+    img.onload = async () => {
+      let isSVG;
+
+      const blobContentType = await blobContentTypePromise;
+
+      if (blobContentType) {
+        isSVG = blobContentType === "image/svg+xml";
+      } else if (typeof file === "string") {
+        isSVG = file.endsWith(".svg") || file.startsWith("data:image/svg+xml");
+      } else {
+        isSVG = file.type === "image/svg+xml";
+      }
+
+      let originalWidth = img.width || img.naturalWidth;
+      let originalHeight = img.height || img.naturalHeight;
+
+      if (isSVG) {
+        const svgMaxSize = 4096;
+        const aspectRatio = originalWidth / originalHeight;
+
+        if (originalWidth > originalHeight) {
+          originalWidth = svgMaxSize;
+          originalHeight = svgMaxSize / aspectRatio;
+        } else {
+          originalHeight = svgMaxSize;
+          originalWidth = svgMaxSize * aspectRatio;
+        }
+
+        img.width = originalWidth;
+        img.height = originalHeight;
+      }
+
+      const minDimension = Math.min(originalWidth, originalHeight);
+      const targetSize = POISSON_CONFIG_OPTIMIZED.workingSize;
+
+      const scaleFactor = targetSize / minDimension;
+      const width = Math.round(originalWidth * scaleFactor);
+      const height = Math.round(originalHeight * scaleFactor);
+
+      canvas.width = originalWidth;
+      canvas.height = originalHeight;
+
+      const shapeCanvas = document.createElement("canvas");
+      shapeCanvas.width = width;
+      shapeCanvas.height = height;
+
+      const shapeCtx = shapeCanvas.getContext("2d")!;
+      shapeCtx.drawImage(img, 0, 0, width, height);
+
+      const startMask = performance.now();
+
+      const shapeImageData = shapeCtx.getImageData(0, 0, width, height);
+      const data = shapeImageData.data;
+
+      const shapeMask = new Uint8Array(width * height);
+      const boundaryMask = new Uint8Array(width * height);
+
+      let shapePixelCount = 0;
+      for (let i = 0, idx = 0; i < data.length; i += 4, idx++) {
+        const a = data[i + 3];
+        const isShape = a === 0 ? 0 : 1;
+        shapeMask[idx] = isShape;
+        shapePixelCount += isShape;
+      }
+
+      const boundaryIndices: number[] = [];
+      const interiorIndices: number[] = [];
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = y * width + x;
+          if (!shapeMask[idx]) continue;
+
+          let isBoundary = false;
+
+          if (x === 0 || x === width - 1 || y === 0 || y === height - 1) {
+            isBoundary = true;
+          } else {
+            isBoundary =
+              !shapeMask[idx - 1] ||
+              !shapeMask[idx + 1] ||
+              !shapeMask[idx - width] ||
+              !shapeMask[idx + width] ||
+              !shapeMask[idx - width - 1] ||
+              !shapeMask[idx - width + 1] ||
+              !shapeMask[idx + width - 1] ||
+              !shapeMask[idx + width + 1];
+          }
+
+          if (isBoundary) {
+            boundaryMask[idx] = 1;
+            boundaryIndices.push(idx);
+          } else {
+            interiorIndices.push(idx);
+          }
+        }
+      }
+
+      const sparseData = buildSparseData(
+        shapeMask,
+        boundaryMask,
+        new Uint32Array(interiorIndices),
+        new Uint32Array(boundaryIndices),
+        width,
+        height
+      );
+
+      const startSolve = performance.now();
+      const u = solvePoissonSparse(
+        sparseData,
+        shapeMask,
+        boundaryMask,
+        width,
+        height
+      );
+
+      let maxVal = 0;
+      let finalImageData: ImageData;
+
+      for (let i = 0; i < interiorIndices.length; i++) {
+        const idx = interiorIndices[i]!;
+        if (u[idx]! > maxVal) maxVal = u[idx]!;
+      }
+
+      const tempCanvas = document.createElement("canvas");
+      tempCanvas.width = width;
+      tempCanvas.height = height;
+      const tempCtx = tempCanvas.getContext("2d")!;
+
+      const tempImg = tempCtx.createImageData(width, height);
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = y * width + x;
+          const px = idx * 4;
+
+          if (!shapeMask[idx]) {
+            tempImg.data[px] = 255;
+            tempImg.data[px + 1] = 255;
+            tempImg.data[px + 2] = 255;
+            tempImg.data[px + 3] = 0;
+          } else {
+            const poissonRatio = u[idx]! / maxVal;
+            const gray = 255 * (1 - poissonRatio);
+            tempImg.data[px] = gray;
+            tempImg.data[px + 1] = gray;
+            tempImg.data[px + 2] = gray;
+            tempImg.data[px + 3] = 255;
+          }
+        }
+      }
+      tempCtx.putImageData(tempImg, 0, 0);
+
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(
+        tempCanvas,
+        0,
+        0,
+        width,
+        height,
+        0,
+        0,
+        originalWidth,
+        originalHeight
+      );
+
+      const outImg = ctx.getImageData(0, 0, originalWidth, originalHeight);
+
+      const originalCanvas = document.createElement("canvas");
+      originalCanvas.width = originalWidth;
+      originalCanvas.height = originalHeight;
+      const originalCtx = originalCanvas.getContext("2d")!;
+      originalCtx.drawImage(img, 0, 0, originalWidth, originalHeight);
+      const originalData = originalCtx.getImageData(
+        0,
+        0,
+        originalWidth,
+        originalHeight
+      );
+
+      for (let i = 0; i < outImg.data.length; i += 4) {
+        const a = originalData.data[i + 3]!;
+        const upscaledAlpha = outImg.data[i + 3]!;
+        if (a === 0) {
+          outImg.data[i] = 255;
+          outImg.data[i + 1] = 0;
+        } else {
+          outImg.data[i] = upscaledAlpha === 0 ? 0 : outImg.data[i]!;
+          outImg.data[i + 1] = a;
+        }
+
+        outImg.data[i + 2] = 255;
+        outImg.data[i + 3] = 255;
+      }
+
+      ctx.putImageData(outImg, 0, 0);
+      finalImageData = outImg;
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error("Failed to create PNG blob"));
+          return;
+        }
+
+        resolve({
+          imageData: finalImageData,
+          pngBlob: blob,
+        });
+      }, "image/png");
+    };
+
+    img.onerror = () => reject(new Error("Failed to load image"));
+    img.src = typeof file === "string" ? file : URL.createObjectURL(file);
+  });
+}
+
+function buildSparseData(
+  shapeMask: Uint8Array,
+  boundaryMask: Uint8Array,
+  interiorPixels: Uint32Array,
+  boundaryPixels: Uint32Array,
+  width: number,
+  height: number
+): SparsePixelData {
+  const pixelCount = interiorPixels.length;
+
+  const neighborIndices = new Int32Array(pixelCount * 4);
+
+  for (let i = 0; i < pixelCount; i++) {
+    const idx = interiorPixels[i]!;
+    const x = idx % width;
+    const y = Math.floor(idx / width);
+
+    neighborIndices[i * 4 + 0] =
+      x < width - 1 && shapeMask[idx + 1] ? idx + 1 : -1;
+    neighborIndices[i * 4 + 1] = x > 0 && shapeMask[idx - 1] ? idx - 1 : -1;
+    neighborIndices[i * 4 + 2] =
+      y > 0 && shapeMask[idx - width] ? idx - width : -1;
+    neighborIndices[i * 4 + 3] =
+      y < height - 1 && shapeMask[idx + width] ? idx + width : -1;
+  }
+
+  return {
+    interiorPixels,
+    boundaryPixels,
+    pixelCount,
+    neighborIndices,
+  };
+}
+
+function solvePoissonSparse(
+  sparseData: SparsePixelData,
+  shapeMask: Uint8Array,
+  boundaryMask: Uint8Array,
+  width: number,
+  height: number
+): Float32Array {
+  const ITERATIONS = POISSON_CONFIG_OPTIMIZED.iterations;
+  const C = 0.01;
+
+  const u = new Float32Array(width * height);
+  const { interiorPixels, neighborIndices, pixelCount } = sparseData;
+
+  const omega = 1.9;
+
+  const redPixels: number[] = [];
+  const blackPixels: number[] = [];
+
+  for (let i = 0; i < pixelCount; i++) {
+    const idx = interiorPixels[i]!;
+    const x = idx % width;
+    const y = Math.floor(idx / width);
+
+    if ((x + y) % 2 === 0) {
+      redPixels.push(i);
+    } else {
+      blackPixels.push(i);
+    }
+  }
+
+  for (let iter = 0; iter < ITERATIONS; iter++) {
+    for (const i of redPixels) {
+      const idx = interiorPixels[i]!;
+
+      const eastIdx = neighborIndices[i * 4 + 0]!;
+      const westIdx = neighborIndices[i * 4 + 1]!;
+      const northIdx = neighborIndices[i * 4 + 2]!;
+      const southIdx = neighborIndices[i * 4 + 3]!;
+
+      let sumN = 0;
+      if (eastIdx >= 0) sumN += u[eastIdx]!;
+      if (westIdx >= 0) sumN += u[westIdx]!;
+      if (northIdx >= 0) sumN += u[northIdx]!;
+      if (southIdx >= 0) sumN += u[southIdx]!;
+
+      const newValue = (C + sumN) / 4;
+      u[idx] = omega * newValue + (1 - omega) * u[idx]!;
+    }
+
+    for (const i of blackPixels) {
+      const idx = interiorPixels[i]!;
+
+      const eastIdx = neighborIndices[i * 4 + 0]!;
+      const westIdx = neighborIndices[i * 4 + 1]!;
+      const northIdx = neighborIndices[i * 4 + 2]!;
+      const southIdx = neighborIndices[i * 4 + 3]!;
+
+      let sumN = 0;
+      if (eastIdx >= 0) sumN += u[eastIdx]!;
+      if (westIdx >= 0) sumN += u[westIdx]!;
+      if (northIdx >= 0) sumN += u[northIdx]!;
+      if (southIdx >= 0) sumN += u[southIdx]!;
+
+      const newValue = (C + sumN) / 4;
+      u[idx] = omega * newValue + (1 - omega) * u[idx]!;
+    }
+  }
+
+  return u;
+}
+
 const SHAPE_VALUES = {
-  none: 0,
   circle: 1,
   daisy: 2,
   diamond: 3,
@@ -268,10 +675,19 @@ const SHAPE_VALUES = {
 type ShapeType = keyof typeof SHAPE_VALUES;
 
 function paramsToUniforms(params: ShaderParams): ShaderUniforms {
+  const image = params.image as HTMLImageElement | string | undefined;
+  let imageAspectRatio = 1;
+  if (image instanceof HTMLImageElement) {
+    imageAspectRatio = image.naturalWidth / image.naturalHeight;
+  }
+
+  const isImage = image !== undefined && image !== "";
   const shape = (params.shape as ShapeType) || "diamond";
   const shapeValue = SHAPE_VALUES[shape] ?? SHAPE_VALUES.diamond;
 
   return {
+    u_image: image,
+    u_imageAspectRatio: imageAspectRatio,
     u_colorBack: colorToVec4((params.colorBack as string) || "#808080"),
     u_colorTint: colorToVec4((params.colorTint as string) || "#ffffff"),
     u_repetition: (params.repetition as number) ?? 3.0,
@@ -282,13 +698,15 @@ function paramsToUniforms(params: ShaderParams): ShaderUniforms {
     u_contour: (params.contour as number) ?? 0.5,
     u_angle: (params.angle as number) ?? 0,
     u_shape: shapeValue,
+    u_isImage: isImage,
   };
 }
 
 export const liquidMetalShader: ShaderDefinition = {
   id: "liquid-metal",
   name: "Liquid Metal",
-  description: "Futuristic liquid metal material with animated stripe patterns",
+  description:
+    "Futuristic liquid metal material with animated stripe patterns. Supports custom images or procedural shapes.",
   category: "Logo animations",
   fragmentShader,
   defaultParams: {
@@ -304,6 +722,11 @@ export const liquidMetalShader: ShaderDefinition = {
     angle: 0,
   },
   paramDefinitions: {
+    image: {
+      control: { type: "imageUrl", label: "Image" },
+      defaultValue: "",
+      stickyOnPresetApply: true,
+    },
     colorBack: {
       control: { type: "color", label: "Background" },
       defaultValue: "#808080",
@@ -316,7 +739,7 @@ export const liquidMetalShader: ShaderDefinition = {
     shape: {
       control: {
         type: "enum",
-        options: ["none", "circle", "daisy", "diamond", "metaballs"],
+        options: ["circle", "daisy", "diamond", "metaballs"],
         label: "Shape",
       },
       defaultValue: "diamond",

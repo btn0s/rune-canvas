@@ -556,7 +556,7 @@ export function Canvas() {
   const [spaceHeld, setSpaceHeld] = useState(false);
 
   // Sidebar visibility mode: "show" = full sidebars, "hide" = hover-based
-  const [sidebarMode, setSidebarMode] = useState<SidebarMode>("hide");
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>("show");
 
   // Hovered resize handle for cursor
   const [hoveredHandle, setHoveredHandle] = useState<ResizeHandle | null>(null);
