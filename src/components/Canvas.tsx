@@ -406,7 +406,6 @@ export function Canvas() {
       (obj) => obj.type === "frame" || obj.type === "shader"
     );
     if (!exportableObject) {
-      // Show a toast or message - for now just console.warn
       console.warn("Please select a frame or shader to export");
       return;
     }
@@ -421,25 +420,19 @@ export function Canvas() {
       return;
     }
 
-    // Find the content element (the styled div, not the wrapper with label)
-    // The label is positioned absolutely above, so we want the first child div
-    // that's not the label (which has bottom: "100%" positioning)
     let contentElement: HTMLElement | null = null;
     
     for (const child of Array.from(wrapperElement.children)) {
       if (child instanceof HTMLElement) {
         const style = window.getComputedStyle(child);
-        // Skip the label (it's positioned absolutely above with bottom: "100%")
         if (style.position === "absolute" && style.bottom !== "auto") {
           continue;
         }
-        // This should be the content div (frame or shader styled div)
         contentElement = child;
         break;
       }
     }
 
-    // Fallback to wrapper if we can't find content element
     const elementToExport = contentElement || wrapperElement;
 
     try {
@@ -1535,53 +1528,22 @@ export function Canvas() {
     ]
   );
 
-  console.log('[DEBUG] Canvas: useKeyboardShortcuts called', {shortcutsCount:shortcuts.length,editingTextId,enabled:!editingTextId,undoInShortcuts:shortcuts.some(s => s.key === 'z' && s.modifiers?.meta)});
-  
-  // Add a global test listener to verify events are firing
-  useEffect(() => {
-    const globalTestListener = (e: KeyboardEvent) => {
-      if (e.key === "z" && (e.metaKey || e.ctrlKey)) {
-        console.log('[DEBUG] GLOBAL TEST: cmd+z detected', {key:e.key,metaKey:e.metaKey,ctrlKey:e.ctrlKey,shiftKey:e.shiftKey,target:(e.target as HTMLElement)?.tagName,defaultPrevented:e.defaultPrevented});
-      }
-    };
-    window.addEventListener("keydown", globalTestListener, { capture: true });
-    return () => window.removeEventListener("keydown", globalTestListener, { capture: true });
-  }, []);
-  
   useKeyboardShortcuts(shortcuts, {
     enabled: !editingTextId,
     onKeyDown: (e) => {
-      // #region agent log
-      if (e.key === "z" && (e.metaKey || e.ctrlKey)) {
-        console.log('[DEBUG] Canvas onKeyDown - cmd+z detected', {editingTextId,enabled:!editingTextId,targetTagName:(e.target as HTMLElement)?.tagName,isContentEditable:(e.target as HTMLElement)?.isContentEditable});
-        fetch('http://127.0.0.1:7250/ingest/489067f9-1dbe-4235-9816-21c1c421f1e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Canvas.tsx:1540',message:'onKeyDown - cmd+z detected',data:{editingTextId,enabled:!editingTextId,targetTagName:(e.target as HTMLElement)?.tagName,isContentEditable:(e.target as HTMLElement)?.isContentEditable},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      }
-      // #endregion
-      // Prevent browser default undo/redo early (before contentEditable check)
       if (e.key === "z" && (e.metaKey || e.ctrlKey)) {
         const target = e.target as HTMLElement;
-        // Only prevent if not in an actual input/textarea
         if (
           target.tagName !== "INPUT" &&
           target.tagName !== "TEXTAREA" &&
           !target.isContentEditable
         ) {
-          // #region agent log
-          console.log('[DEBUG] preventDefault called');
-          fetch('http://127.0.0.1:7250/ingest/489067f9-1dbe-4235-9816-21c1c421f1e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Canvas.tsx:1550',message:'preventDefault called',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-          // #endregion
           e.preventDefault();
         }
       }
       
       const target = e.target as HTMLElement;
       if (target?.isContentEditable) {
-        // #region agent log
-        if (e.key === "z" && (e.metaKey || e.ctrlKey)) {
-          console.log('[DEBUG] early return - contentEditable');
-          fetch('http://127.0.0.1:7250/ingest/489067f9-1dbe-4235-9816-21c1c421f1e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Canvas.tsx:1555',message:'early return - contentEditable',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-        }
-        // #endregion
         return;
       }
       
