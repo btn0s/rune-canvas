@@ -194,10 +194,8 @@ void main() {
 
   if (u_isImage == true) {
     // Image-based mode
+    // v_imageUV is already properly centered and scaled by the vertex shader
     vec2 imgUV = v_imageUV;
-    imgUV -= .5;
-    imgUV *= 0.5714285714285714;
-    imgUV += .5;
     imgSoftFrame = getImgFrame(imgUV, .03);
 
     vec4 img = texture(u_image, imgUV);
@@ -232,9 +230,12 @@ void main() {
     
     // Calculate edge distance for glow effects
     float edgeDist = 1. - shape;
+    
+    // Anti-alias the edge using fwidth for smoother transitions
+    float edgeAA = fwidth(edgeDist);
     outerBlur = pow(edgeDist, .8);
     innerBlur = pow(shape, 1.2);
-    contour = smoothstep(.9, 1., edgeDist);
+    contour = smoothstep(.9 - edgeAA, .9 + edgeAA, edgeDist);
 
     animationUV = uv - vec2(.5);
     float angle = -u_angle * PI / 180.;
@@ -317,22 +318,52 @@ export function toProcessedHeatmap(
 ): Promise<{ blob: Blob }> {
   const canvas = document.createElement("canvas");
   const canvasSize = 1000;
+  const isBlob = typeof file === "string" && file.startsWith("blob:");
 
   return new Promise((resolve, reject) => {
+    const blobContentTypePromise =
+      isBlob && fetch(file).then((res) => res.headers.get("Content-Type"));
     const image = new Image();
     image.crossOrigin = "anonymous";
 
-    image.addEventListener("load", () => {
-      if (
-        typeof file === "string"
-          ? file.endsWith(".svg")
-          : file.type === "image/svg+xml"
-      ) {
-        image.width = canvasSize;
-        image.height = canvasSize;
+    image.addEventListener("load", async () => {
+      let isSVG;
+
+      const blobContentType = await blobContentTypePromise;
+
+      if (blobContentType) {
+        isSVG = blobContentType === "image/svg+xml";
+      } else if (typeof file === "string") {
+        isSVG = file.endsWith(".svg") || file.startsWith("data:image/svg+xml");
+      } else {
+        isSVG = file.type === "image/svg+xml";
       }
 
-      const ratio = image.naturalWidth / image.naturalHeight;
+      let ratio = image.naturalWidth / image.naturalHeight;
+      
+      if (isSVG) {
+        // Force SVG to load at high fidelity size
+        // Handle SVGs without explicit dimensions
+        if (image.naturalWidth === 0 || image.naturalHeight === 0 || !isFinite(ratio)) {
+          image.width = canvasSize;
+          image.height = canvasSize;
+          ratio = 1;
+        } else {
+          // Preserve aspect ratio for SVG
+          if (ratio > 1) {
+            image.width = canvasSize;
+            image.height = canvasSize / ratio;
+          } else {
+            image.width = canvasSize * ratio;
+            image.height = canvasSize;
+          }
+        }
+      }
+
+      // Use set dimensions if natural dimensions are unavailable
+      if (!isFinite(ratio) || ratio === 0) {
+        ratio = (image.width || canvasSize) / (image.height || canvasSize);
+      }
 
       const maxBlur = Math.floor(canvasSize * 0.15);
       const padding = Math.ceil(maxBlur * 2.5);

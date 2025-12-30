@@ -2224,38 +2224,41 @@ function ShaderProperties({
       {showShapeSection && (
         <div className="flex flex-col gap-1.5">
           <SectionLabel>Shape</SectionLabel>
-          {/* Shape dropdown */}
           {(() => {
             const shapeParamDef = shaderDef.paramDefinitions?.shape;
             const shapeValue = getParamValue("shape");
             const currentShape =
               typeof shapeValue === "string" ? shapeValue : String(shapeParamDef?.defaultValue ?? "diamond");
             const imageValue = getParamValue("image");
-            const hasImage = imageValue && imageValue !== "";
+            const hasImage = imageValue instanceof HTMLImageElement;
 
             return (
               <>
-                <PropertySelect
-                  value={currentShape}
-                  onValueChange={(val) => {
-                    // Clear image when shape is selected
-                    const newParams = { ...shader.shaderParams, shape: val, image: undefined };
-                    onUpdate({ shaderParams: newParams } as Partial<ShaderObject>);
-                  }}
-                >
-                  {shapeParamDef?.control.type === "enum" && shapeParamDef.control.options
-                    ? shapeParamDef.control.options.map((option: string) => (
-                        <SelectItem
-                          key={String(option)}
-                          value={String(option)}
-                          className="capitalize text-xs"
-                        >
-                          {option}
-                        </SelectItem>
-                      ))
-                    : null}
-                </PropertySelect>
-                {/* File upload button */}
+                {/* Shape dropdown - only show when no image */}
+                {!hasImage && (
+                  <PropertySelect
+                    value={currentShape}
+                    onValueChange={(val) => {
+                      // Clear image when shape is selected
+                      const newParams = { ...shader.shaderParams, shape: val, image: undefined };
+                      onUpdate({ shaderParams: newParams } as Partial<ShaderObject>);
+                    }}
+                  >
+                    {shapeParamDef?.control.type === "enum" && shapeParamDef.control.options
+                      ? shapeParamDef.control.options.map((option: string) => (
+                          <SelectItem
+                            key={String(option)}
+                            value={String(option)}
+                            className="capitalize text-xs"
+                          >
+                            {option}
+                          </SelectItem>
+                        ))
+                      : null}
+                  </PropertySelect>
+                )}
+
+                {/* File input */}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -2268,26 +2271,48 @@ function ShaderProperties({
                     }
                   }}
                 />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full h-7 text-xs"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Image className="size-3 mr-1.5" />
-                  Choose file
-                </Button>
-                {hasImage && (
+
+                {/* Image preview and replace UI */}
+                {hasImage && imageValue instanceof HTMLImageElement ? (
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="size-8 rounded bg-cover bg-center border border-border"
+                      style={{ backgroundImage: `url(${imageValue.src})` }}
+                    />
+                    <div className="flex-1 flex flex-col">
+                      <span className="text-xs text-muted-foreground">
+                        {imageValue.naturalWidth} × {imageValue.naturalHeight}
+                      </span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      Replace
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
+                      onClick={() => {
+                        const newParams = { ...shader.shaderParams, image: undefined };
+                        onUpdate({ shaderParams: newParams } as Partial<ShaderObject>);
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ) : (
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    className="h-6 px-2 text-xs text-muted-foreground"
-                    onClick={() => {
-                      const newParams = { ...shader.shaderParams, image: undefined };
-                      onUpdate({ shaderParams: newParams } as Partial<ShaderObject>);
-                    }}
+                    className="w-full h-7 text-xs"
+                    onClick={() => fileInputRef.current?.click()}
                   >
-                    Remove image
+                    <Image className="size-3 mr-1.5" />
+                    Choose file
                   </Button>
                 )}
               </>

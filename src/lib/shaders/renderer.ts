@@ -18,6 +18,9 @@ precision mediump float;
 
 layout(location = 0) in vec4 a_position;
 
+uniform vec2 u_resolution;
+uniform float u_imageAspectRatio;
+
 out vec2 v_objectUV;
 out vec2 v_patternUV;
 out vec2 v_imageUV;
@@ -36,8 +39,39 @@ void main() {
   objectUV.y = -objectUV.y; // Flip Y (top becomes 0.5, bottom becomes -0.5)
   v_objectUV = objectUV;
   
-  // Image UV is [0, 1] range for sampling textures
-  v_imageUV = patternUV;
+  // Image UV: center and scale to fit without stretching (contain mode)
+  // Default to 1.0 if aspect ratio uniform is not set
+  float aspectRatio = u_imageAspectRatio > 0.0 ? u_imageAspectRatio : 1.0;
+  
+  // Calculate image box size using contain fit (same as Paper shader)
+  // This ensures the image fits within the canvas without stretching
+  vec2 imageBoxSize;
+  imageBoxSize.x = min(u_resolution.x / aspectRatio, u_resolution.y) * aspectRatio;
+  imageBoxSize.y = imageBoxSize.x / aspectRatio;
+  
+  // Calculate scale to map canvas UV to image UV
+  vec2 imageBoxScale = u_resolution.xy / imageBoxSize;
+  
+  // Start with pattern UV (which is [0, 1] in canvas space)
+  vec2 imageUV = patternUV;
+  
+  // Scale to image box space
+  imageUV *= imageBoxScale;
+  
+  // Center: when imageBoxScale > 1.0, the image is smaller than canvas in that dimension
+  // We need to offset to center it. The offset is half the excess scale.
+  // Using boxOrigin-like centering: vec2(0.5) * (imageBoxScale - 1.0)
+  // But we subtract it to center (like Paper shader's boxOrigin calculation)
+  vec2 centerOffset = vec2(0.5) * (imageBoxScale - 1.0);
+  imageUV -= centerOffset;
+  
+  // Scale X by aspect ratio to account for image's actual aspect ratio
+  // This ensures we sample the image correctly
+  imageUV -= vec2(0.5);
+  imageUV.x *= aspectRatio;
+  imageUV += vec2(0.5);
+  
+  v_imageUV = imageUV;
 }
 `;
 
@@ -332,6 +366,15 @@ export class ShaderRenderer {
     }
 
     // Also check for aspect ratio uniforms (e.g., u_imageAspectRatio for u_image)
+    // This needs to be available in vertex shader too
+    const imageAspectRatioLoc = this.gl.getUniformLocation(
+      this.program,
+      "u_imageAspectRatio"
+    );
+    if (imageAspectRatioLoc !== null) {
+      this.uniformLocations.set("u_imageAspectRatio", imageAspectRatioLoc);
+    }
+
     Object.keys(this.uniforms).forEach((key) => {
       if (this.uniforms[key] instanceof HTMLImageElement) {
         const aspectRatioKey = `${key}AspectRatio`;
@@ -375,6 +418,18 @@ export class ShaderRenderer {
     const pixelRatioLoc = this.uniformLocations.get("u_pixelRatio");
     if (pixelRatioLoc !== null && pixelRatioLoc !== undefined) {
       this.gl.uniform1f(pixelRatioLoc, window.devicePixelRatio || 1);
+    }
+
+    // Set u_imageAspectRatio if it exists in uniforms (needed for vertex shader)
+    const imageAspectRatioLoc = this.uniformLocations.get("u_imageAspectRatio");
+    if (imageAspectRatioLoc !== null && imageAspectRatioLoc !== undefined) {
+      const aspectRatio = this.uniforms.u_imageAspectRatio as number | undefined;
+      if (aspectRatio !== undefined) {
+        this.gl.uniform1f(imageAspectRatioLoc, aspectRatio);
+      } else {
+        // Default to 1.0 if not set
+        this.gl.uniform1f(imageAspectRatioLoc, 1.0);
+      }
     }
 
     Object.entries(this.uniforms).forEach(([key, value]) => {

@@ -149,7 +149,11 @@ void main() {
       // circle
       vec2 shapeUV = uv - .5;
       shapeUV *= .67;
-      edge = pow(clamp(3. * length(shapeUV), 0., 1.), 18.);
+      float dist = 3. * length(shapeUV);
+      // Anti-alias circle edge
+      float aa = fwidth(dist);
+      edge = pow(clamp(dist, 0., 1.), 18.);
+      edge = smoothstep(1.0 - aa, 1.0 + aa, edge);
     } else if (u_shape < 3.) {
       // daisy
       vec2 shapeUV = uv - .5;
@@ -159,7 +163,9 @@ void main() {
       float a = atan(shapeUV.y, shapeUV.x) + .2;
       r *= (1. + .05 * sin(3. * a + 2. * t));
       float f = abs(cos(a * 3.));
-      edge = smoothstep(f, f + .7, r);
+      // Anti-alias daisy edge
+      float aa = fwidth(r);
+      edge = smoothstep(f - aa, f + .7 + aa, r);
       edge *= edge;
 
       uv *= .8;
@@ -173,8 +179,10 @@ void main() {
       shapeUV += .5;
       vec2 mask = min(shapeUV, 1. - shapeUV);
       vec2 pixel_thickness = vec2(.15);
-      float maskX = smoothstep(0.0, pixel_thickness.x, mask.x);
-      float maskY = smoothstep(0.0, pixel_thickness.y, mask.y);
+      // Anti-alias diamond edges
+      vec2 aa = fwidth(mask);
+      float maskX = smoothstep(0.0 - aa.x, pixel_thickness.x + aa.x, mask.x);
+      float maskY = smoothstep(0.0 - aa.y, pixel_thickness.y + aa.y, mask.y);
       maskX = pow(maskX, .25);
       maskY = pow(maskY, .25);
       edge = clamp(1. - maskX * maskY, 0., 1.);
@@ -193,20 +201,27 @@ void main() {
         float d = length(shapeUV + traj);
         edge += pow(1.0 - clamp(d, 0.0, 1.0), 4.0);
       }
-      edge = 1. - smoothstep(.65, .9, edge);
+      // Anti-alias metaballs edge
+      float aa = fwidth(edge);
+      edge = 1. - smoothstep(.65 - aa, .9 + aa, edge);
       edge = pow(edge, 4.);
     }
 
-    edge = mix(smoothstep(.9 - 2. * fwidth(edge), .9, edge), edge, smoothstep(0.0, 0.4, u_contour));
+    // Apply anti-aliasing to final edge with contour control
+    float edgeAA = fwidth(edge);
+    edge = mix(smoothstep(.9 - 2. * edgeAA, .9 + 2. * edgeAA, edge), edge, smoothstep(0.0, 0.4, u_contour));
   }
 
   float opacity = 0.;
   if (u_isImage == true) {
     opacity = img.g;
+    // Anti-alias image frame edges
     float frame = getImgFrame(v_imageUV, 0.);
     opacity *= frame;
   } else {
-    opacity = 1. - smoothstep(.9 - 2. * fwidth(edge), .9, edge);
+    // Improved anti-aliasing for procedural shapes
+    float opacityAA = fwidth(edge);
+    opacity = 1. - smoothstep(.9 - 2. * opacityAA, .9 + 2. * opacityAA, edge);
     if (u_shape < 2.) {
       edge = 1.2 * edge;
     } else if (u_shape < 5.) {
@@ -363,14 +378,20 @@ export function toProcessedLiquidMetal(
 
       if (isSVG) {
         const svgMaxSize = 4096;
-        const aspectRatio = originalWidth / originalHeight;
-
-        if (originalWidth > originalHeight) {
+        // Handle SVGs without explicit dimensions (default to square if dimensions are 0)
+        if (originalWidth === 0 || originalHeight === 0) {
           originalWidth = svgMaxSize;
-          originalHeight = svgMaxSize / aspectRatio;
-        } else {
           originalHeight = svgMaxSize;
-          originalWidth = svgMaxSize * aspectRatio;
+        } else {
+          const aspectRatio = originalWidth / originalHeight;
+
+          if (originalWidth > originalHeight) {
+            originalWidth = svgMaxSize;
+            originalHeight = svgMaxSize / aspectRatio;
+          } else {
+            originalHeight = svgMaxSize;
+            originalWidth = svgMaxSize * aspectRatio;
+          }
         }
 
         img.width = originalWidth;
