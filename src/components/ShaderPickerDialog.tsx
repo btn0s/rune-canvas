@@ -51,27 +51,27 @@ export function ShaderPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto p-0">
+      <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden p-0 flex flex-col">
         <DialogTitle className="sr-only">Select a shader</DialogTitle>
         <DialogDescription className="sr-only">
           Choose from a collection of WebGL shaders to add to your canvas
         </DialogDescription>
-        <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Shaders</h2>
+        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border px-4 py-3">
+          <h2 className="text-sm font-semibold text-foreground">Shaders</h2>
         </div>
         
-        <div className="px-6 py-6 space-y-8">
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
           {(["Image filters", "Logo animations", "Effects"] as ShaderCategory[]).map((category) => {
             const categoryShaders = shadersByCategory[category];
             if (categoryShaders.length === 0) return null;
             
             return (
-              <div key={category} className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <h3 className="text-sm font-medium text-foreground">{category}</h3>
+              <div key={category} className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{category}</h3>
                   <div className="flex-1 h-px bg-border" />
                 </div>
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-3 gap-3">
                   {categoryShaders.map((shader) => (
                     <ShaderPreview
                       key={shader.id}
@@ -128,15 +128,12 @@ function ShaderPreview({
   }, []);
   
   return (
-    <div
-      className={`
-        relative cursor-pointer group
-        transition-all duration-200
-      `}
+    <button
+      className="relative group text-left w-full transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-md"
       onMouseEnter={onHover}
       onClick={onSelect}
     >
-      <div className="aspect-square bg-black/50 relative rounded-md overflow-hidden border border-border group-hover:border-primary transition-colors">
+      <div className="aspect-square bg-muted/50 relative rounded-md overflow-hidden border border-border group-hover:border-primary/50 group-hover:shadow-sm transition-all">
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="w-full h-full flex items-center justify-center">
             <ShaderRendererComponent
@@ -151,9 +148,9 @@ function ShaderPreview({
           </div>
         </div>
       </div>
-      <div className="mt-2 text-center">
-        <h3 className="text-xs font-medium">{shader.name}</h3>
+      <div className="mt-1.5 px-0.5">
+        <h3 className="text-xs font-medium text-foreground leading-tight">{shader.name}</h3>
       </div>
-    </div>
+    </button>
   );
 }
