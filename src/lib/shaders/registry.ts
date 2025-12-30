@@ -15,19 +15,6 @@ import { spiralShader } from "./shaders/spiral";
 import { waterShader } from "./shaders/water";
 import { flutedGlassShader } from "./shaders/fluted-glass";
 import { imageDitheringShader } from "./shaders/image-dithering";
-import { bumpedSineWarpShader } from "./shaders/bumped-sine-warp";
-import { kaleidoscopeShader } from "./shaders/kaleidoscope";
-import { chromaticAberrationShader } from "./shaders/chromatic-aberration";
-import { rippleShader } from "./shaders/ripple";
-import { pixelateShader } from "./shaders/pixelate";
-import { radialBlurShader } from "./shaders/radial-blur";
-import { vhsShader } from "./shaders/vhs";
-import { fractalTunnelShader } from "./shaders/fractal-tunnel";
-import { fractalKaleidoscopeShader } from "./shaders/fractal-kaleidoscope";
-import { bloomShader } from "./shaders/bloom";
-import { edgeDetectionShader } from "./shaders/edge-detection";
-import { tiltShiftShader } from "./shaders/tilt-shift";
-import { fisheyeShader } from "./shaders/fisheye";
 import { cellularLoopShader } from "./shaders/cellular-loop";
 import { heatmapShader } from "./shaders/heatmap";
 import { liquidMetalShader } from "./shaders/liquid-metal";
@@ -43,19 +30,6 @@ export const SHADER_REGISTRY: Map<string, ShaderDefinition> = new Map([
   [waterShader.id, waterShader],
   [flutedGlassShader.id, flutedGlassShader],
   [imageDitheringShader.id, imageDitheringShader],
-  [bumpedSineWarpShader.id, bumpedSineWarpShader],
-  [kaleidoscopeShader.id, kaleidoscopeShader],
-  [chromaticAberrationShader.id, chromaticAberrationShader],
-  [rippleShader.id, rippleShader],
-  [pixelateShader.id, pixelateShader],
-  [radialBlurShader.id, radialBlurShader],
-  [vhsShader.id, vhsShader],
-  [fractalTunnelShader.id, fractalTunnelShader],
-  [fractalKaleidoscopeShader.id, fractalKaleidoscopeShader],
-  [bloomShader.id, bloomShader],
-  [edgeDetectionShader.id, edgeDetectionShader],
-  [tiltShiftShader.id, tiltShiftShader],
-  [fisheyeShader.id, fisheyeShader],
   [cellularLoopShader.id, cellularLoopShader],
   [heatmapShader.id, heatmapShader],
   [liquidMetalShader.id, liquidMetalShader],
