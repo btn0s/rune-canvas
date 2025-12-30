@@ -358,7 +358,6 @@ export function toProcessedLiquidMetal(
       isBlob && fetch(file).then((res) => res.headers.get("Content-Type"));
     const img = new Image();
     img.crossOrigin = "anonymous";
-    const totalStartTime = performance.now();
 
     img.onload = async () => {
       let isSVG;
@@ -415,8 +414,6 @@ export function toProcessedLiquidMetal(
       const shapeCtx = shapeCanvas.getContext("2d")!;
       shapeCtx.drawImage(img, 0, 0, width, height);
 
-      const startMask = performance.now();
-
       const shapeImageData = shapeCtx.getImageData(0, 0, width, height);
       const data = shapeImageData.data;
 
@@ -466,18 +463,14 @@ export function toProcessedLiquidMetal(
 
       const sparseData = buildSparseData(
         shapeMask,
-        boundaryMask,
         new Uint32Array(interiorIndices),
         new Uint32Array(boundaryIndices),
         width,
         height
       );
 
-      const startSolve = performance.now();
       const u = solvePoissonSparse(
         sparseData,
-        shapeMask,
-        boundaryMask,
         width,
         height
       );
@@ -583,7 +576,6 @@ export function toProcessedLiquidMetal(
 
 function buildSparseData(
   shapeMask: Uint8Array,
-  boundaryMask: Uint8Array,
   interiorPixels: Uint32Array,
   boundaryPixels: Uint32Array,
   width: number,
@@ -617,8 +609,6 @@ function buildSparseData(
 
 function solvePoissonSparse(
   sparseData: SparsePixelData,
-  shapeMask: Uint8Array,
-  boundaryMask: Uint8Array,
   width: number,
   height: number
 ): Float32Array {

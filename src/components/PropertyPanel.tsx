@@ -1706,7 +1706,8 @@ function ShaderProperties({
       
       await new Promise<void>((resolve, reject) => {
         img.onload = () => {
-          // Don't revoke URL here - image element needs it
+          // Image is loaded and stored, safe to revoke the blob URL
+          URL.revokeObjectURL(blobUrl);
           resolve(undefined);
         };
         img.onerror = () => {

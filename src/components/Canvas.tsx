@@ -1152,11 +1152,14 @@ export function Canvas() {
     (canvasX: number, canvasY: number): string | null => {
       if (!containerRef.current) return null;
 
-      let bestMatch: { id: string; area: number } | null = null;
       const containerRect = containerRef.current.getBoundingClientRect();
 
-      for (const obj of objects) {
+      // Iterate in reverse order (topmost last) to respect z-order
+      // First hit wins, so objects on top are selected
+      for (let i = objects.length - 1; i >= 0; i--) {
+        const obj = objects[i]!;
         if (obj.locked) continue;
+        if (!obj.visible) continue;
 
         // Get actual DOM position for accurate hit testing
         const el = containerRef.current.querySelector(
@@ -1164,6 +1167,8 @@ export function Canvas() {
         ) as HTMLElement;
 
         let canvasPos: { x: number; y: number };
+        let objWidth: number;
+        let objHeight: number;
 
         if (el) {
           // Use DOM position (most accurate, especially for flex children)
@@ -1174,17 +1179,22 @@ export function Canvas() {
               transform.scale,
             y: (elRect.top - containerRect.top - transform.y) / transform.scale,
           };
+          // Use DOM rect dimensions (accounts for rotation)
+          objWidth = elRect.width / transform.scale;
+          objHeight = elRect.height / transform.scale;
         } else {
-          // Fallback to stored position
+          // Fallback to stored position and model dimensions
           canvasPos = getCanvasPosition(obj, objects);
+          objWidth = obj.width;
+          objHeight = obj.height;
         }
 
         // Check object bounds
         const inObject =
           canvasX >= canvasPos.x &&
-          canvasX <= canvasPos.x + obj.width &&
+          canvasX <= canvasPos.x + objWidth &&
           canvasY >= canvasPos.y &&
-          canvasY <= canvasPos.y + obj.height;
+          canvasY <= canvasPos.y + objHeight;
 
         // Check label bounds (only for root objects - those without a parent)
         // Label is above the object with margin. Use generous bounds.
@@ -1199,20 +1209,20 @@ export function Canvas() {
           canvasY <= canvasPos.y;
 
         if (inObject || inLabel) {
-          const area = obj.width * obj.height;
-          // Prefer smaller objects (more nested/specific)
-          if (!bestMatch || area < bestMatch.area) {
-            bestMatch = { id: obj.id, area };
-          }
+          // Return first hit (topmost object) - respects z-order
+          return obj.id;
         }
       }
 
-      return bestMatch?.id ?? null;
+      return null;
     },
     [objects, transform]
   );
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    // Don't handle interactions when command bar is active
+    if (commandState.isActive) return;
+
     const rect = containerRef.current!.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;

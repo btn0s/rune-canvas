@@ -120,13 +120,22 @@ function ShaderRendererComponentImpl({
 
   // Load images from URLs
   useEffect(() => {
+    let cancelled = false;
+    
     // Process params first (convert image URLs to HTMLImageElements)
     processParams(params, shader.paramDefinitions).then((processedParams) => {
+      // Guard against unmount or params changing mid-flight
+      if (cancelled) return;
+      
       // Then convert to uniforms
       const uniforms = shader.paramsToUniforms(processedParams) as ShaderRendererUniforms;
       const preparedUniforms = prepareShaderUniforms(uniforms);
       setLoadedUniforms(preparedUniforms);
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [shader, params]);
 
   useEffect(() => {

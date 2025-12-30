@@ -21,7 +21,6 @@ import type {
 } from "./objects/types";
 import { createSolidFill, type ImageFill } from "./objects/types";
 import { getShader } from "./shaders/registry";
-import type { ShaderDefinition } from "./shaders/types";
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 4;
@@ -1114,7 +1113,7 @@ export function useCanvas() {
 
   // Helper: Load image and get dimensions
   const loadImageDimensions = (src: string): Promise<{ width: number; height: number }> => {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
         resolve({ width: img.naturalWidth, height: img.naturalHeight });

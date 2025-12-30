@@ -320,13 +320,17 @@ export function LayersPanel({
     if (newIds.length > 0) {
       setAnimatedIds((prev) => new Set([...prev, ...newIds]));
 
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         setAnimatedIds((prev) => {
           const next = new Set(prev);
           newIds.forEach((id) => next.delete(id));
           return next;
         });
       }, 300);
+
+      return () => {
+        clearTimeout(timeoutId);
+      };
     }
 
     prevItemIds.current = currentIds;

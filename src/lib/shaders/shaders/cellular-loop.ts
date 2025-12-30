@@ -5,7 +5,6 @@ import type {
   ParamDefinitions,
 } from "../types";
 import { declarePI, proceduralHash21, colorBandingFix } from "../shader-utils";
-import { colorToVec4 } from "../types";
 
 // Cellular loop shader - animated cellular/voronoi-like pattern
 // language=GLSL
