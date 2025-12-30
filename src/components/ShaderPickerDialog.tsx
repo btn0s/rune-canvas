@@ -35,6 +35,7 @@ export function ShaderPickerDialog({
       "Image filters": [],
       "Logo animations": [],
       "Effects": [],
+      "Interactive": [],
     };
     
     shaders.forEach((shader) => {
@@ -61,7 +62,7 @@ export function ShaderPickerDialog({
         </div>
         
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
-          {(["Image filters", "Logo animations", "Effects"] as ShaderCategory[]).map((category) => {
+          {(["Image filters", "Interactive", "Logo animations", "Effects"] as ShaderCategory[]).map((category) => {
             const categoryShaders = shadersByCategory[category];
             if (categoryShaders.length === 0) return null;
             

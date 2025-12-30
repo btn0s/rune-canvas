@@ -25,6 +25,7 @@ uniform float u_layering;
 uniform float u_edges;
 uniform float u_caustic;
 uniform float u_waves;
+uniform vec2 u_mouse;
 
 in vec2 v_imageUV;
 out vec4 fragColor;
@@ -71,6 +72,26 @@ void main() {
   patternUV /= (.01 + .09 * u_size);
 
   float t = u_time;
+
+  // Interactive ripple effect from mouse position
+  // Only create ripples if mouse is not at default center position (0.5, 0.5)
+  float ripple = 0.0;
+  float mouseDistFromCenter = distance(u_mouse, vec2(0.5));
+  if (mouseDistFromCenter > 0.01) {
+    vec2 mouseUV = (u_mouse - vec2(0.5)) * vec2(u_imageAspectRatio, 1.0);
+    mouseUV /= (.01 + .09 * u_size);
+    vec2 mouseDist = patternUV - mouseUV;
+    float mouseDistLen = length(mouseDist);
+    
+    // Create ripple effect that fades over time
+    if (mouseDistLen < 2.0) {
+      // Ripple effect: sin wave that expands outward
+      float ripplePhase = mouseDistLen * 3.0 - t * 2.0;
+      ripple = sin(ripplePhase) * exp(-mouseDistLen * 0.5) * 0.3;
+      // Add distortion based on ripple
+      patternUV += normalize(mouseDist) * ripple * 0.5;
+    }
+  }
 
   float wavesNoise = snoise((.3 + .1 * sin(t)) * .1 * patternUV + vec2(0., .4 * t));
 
@@ -142,8 +163,8 @@ function paramsToUniforms(params: ShaderParams): ShaderUniforms {
 export const waterShader: ShaderDefinition = {
   id: "water",
   name: "Water",
-  description: "Water distortion effect with caustics and waves",
-  category: "Image filters",
+  description: "Water distortion effect with caustics and waves - interactive ripples on mouse hover",
+  category: "Interactive",
   fragmentShader,
   defaultParams: {
     image: "https://pbs.twimg.com/profile_images/1945653061814218752/dFO6qg7z_400x400.jpg",

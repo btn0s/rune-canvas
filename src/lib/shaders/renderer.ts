@@ -138,6 +138,7 @@ export class ShaderRenderer {
   private speed = 1;
   private uniforms: ShaderRendererUniforms = {};
   private fragmentShaderSource: string;
+  private mousePosition: [number, number] | null = null; // Mouse position in normalized coordinates [0-1, 0-1]
   private textures: Map<string, WebGLTexture> = new Map();
   private textureUnitMap: Map<string, number> = new Map();
   private nextTextureUnit = 0;
@@ -420,6 +421,17 @@ export class ShaderRenderer {
       this.gl.uniform1f(pixelRatioLoc, window.devicePixelRatio || 1);
     }
 
+    // Set u_mouse if it exists (mouse position in normalized coordinates [0-1, 0-1])
+    const mouseLoc = this.uniformLocations.get("u_mouse");
+    if (mouseLoc !== null && mouseLoc !== undefined) {
+      if (this.mousePosition) {
+        this.gl.uniform2f(mouseLoc, this.mousePosition[0], this.mousePosition[1]);
+      } else {
+        // Default to center if mouse position not set
+        this.gl.uniform2f(mouseLoc, 0.5, 0.5);
+      }
+    }
+
     // Set u_imageAspectRatio if it exists in uniforms (needed for vertex shader)
     const imageAspectRatioLoc = this.uniformLocations.get("u_imageAspectRatio");
     if (imageAspectRatioLoc !== null && imageAspectRatioLoc !== undefined) {
@@ -529,6 +541,12 @@ export class ShaderRenderer {
 
   isPaused(): boolean {
     return this.paused;
+  }
+
+  setMousePosition(x: number, y: number) {
+    // Normalize mouse position to [0-1, 0-1] range
+    // x and y should be in canvas-relative coordinates
+    this.mousePosition = [x, y];
   }
 
   resize(width: number, height: number) {

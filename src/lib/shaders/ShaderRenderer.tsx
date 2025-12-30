@@ -20,6 +20,7 @@ export interface ShaderRendererProps {
   speed?: number;
   targetFps?: number;
   paused?: boolean;
+  mousePosition?: [number, number] | null; // Mouse position in normalized coordinates [0-1, 0-1]
 }
 
 /**
@@ -111,6 +112,7 @@ function ShaderRendererComponentImpl({
   speed = 1,
   targetFps,
   paused = false,
+  mousePosition = null,
 }: ShaderRendererProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<ShaderRenderer | null>(null);
@@ -203,6 +205,13 @@ function ShaderRendererComponentImpl({
     }
   }, [paused]);
 
+  // Update mouse position when it changes
+  useEffect(() => {
+    if (rendererRef.current && mousePosition) {
+      rendererRef.current.setMousePosition(mousePosition[0], mousePosition[1]);
+    }
+  }, [mousePosition]);
+
   // IntersectionObserver: auto-pause when offscreen
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -253,6 +262,10 @@ export const ShaderRendererComponent = memo(ShaderRendererComponentImpl, (prevPr
     prevProps.speed === nextProps.speed &&
     prevProps.targetFps === nextProps.targetFps &&
     prevProps.paused === nextProps.paused &&
+    // Compare mouse position
+    (prevProps.mousePosition === nextProps.mousePosition ||
+      (prevProps.mousePosition?.[0] === nextProps.mousePosition?.[0] &&
+       prevProps.mousePosition?.[1] === nextProps.mousePosition?.[1])) &&
     // Deep compare params object
     JSON.stringify(prevProps.params) === JSON.stringify(nextProps.params)
   );

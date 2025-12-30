@@ -99,7 +99,7 @@ export interface ParamDefinitions {
   [key: string]: ParamDefinition;
 }
 
-export type ShaderCategory = "Image filters" | "Logo animations" | "Effects";
+export type ShaderCategory = "Image filters" | "Logo animations" | "Effects" | "Interactive";
 
 export interface ShaderDefinition {
   /** Unique identifier for this shader */

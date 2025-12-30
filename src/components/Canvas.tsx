@@ -576,6 +576,9 @@ export function Canvas() {
   // Context menu position (canvas space)
   const [contextMenuPoint, setContextMenuPoint] = useState<Point | null>(null);
 
+  // Mouse position in canvas coordinates (for interactive shaders)
+  const [mouseCanvasPosition, setMouseCanvasPosition] = useState<Point | null>(null);
+
   // Crop mode state (meta key held during resize of an image)
   const [isCropMode, setIsCropMode] = useState(false);
 
@@ -1291,6 +1294,9 @@ export function Canvas() {
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
     const canvasPoint = screenToCanvas(screenX, screenY);
+    
+    // Update mouse position for interactive shaders
+    setMouseCanvasPosition(canvasPoint);
 
     if (isPanning) {
       if (!isOverSidebar(e.clientX, e.clientY)) {
@@ -1354,6 +1360,29 @@ export function Canvas() {
     }
     if (isMarqueeSelecting) endMarquee();
   };
+
+  // Calculate normalized mouse position [0-1, 0-1] relative to a shader object
+  const getShaderMousePosition = useCallback((shaderObj: ShaderObject): [number, number] | null => {
+    if (!mouseCanvasPosition) return null;
+    
+    const canvasPos = getCanvasPosition(shaderObj, objects);
+    
+    // Check if mouse is within shader bounds
+    if (
+      mouseCanvasPosition.x < canvasPos.x ||
+      mouseCanvasPosition.x > canvasPos.x + shaderObj.width ||
+      mouseCanvasPosition.y < canvasPos.y ||
+      mouseCanvasPosition.y > canvasPos.y + shaderObj.height
+    ) {
+      return null;
+    }
+    
+    // Calculate normalized position [0-1, 0-1]
+    const normalizedX = (mouseCanvasPosition.x - canvasPos.x) / shaderObj.width;
+    const normalizedY = (mouseCanvasPosition.y - canvasPos.y) / shaderObj.height;
+    
+    return [normalizedX, normalizedY];
+  }, [mouseCanvasPosition, objects]);
 
   // Toggle flex layout on selected frame, or wrap selection in flex frame
   const toggleFlex = useCallback(() => {
@@ -2199,6 +2228,9 @@ export function Canvas() {
                           // Merge image fills into shader params if applicable (memoized)
                           const mergedParams = mergeImageFillIntoShaderParams(shaderDef, shaderObj);
                           
+                          // Get mouse position relative to this shader
+                          const shaderMousePos = getShaderMousePosition(shaderObj);
+                          
                           return (
                             <div style={shaderStyles}>
                               <ShaderRendererComponent
@@ -2207,6 +2239,7 @@ export function Canvas() {
                                 width={obj.width}
                                 height={obj.height}
                                 speed={1}
+                                mousePosition={shaderMousePos}
                               />
                             </div>
                           );
