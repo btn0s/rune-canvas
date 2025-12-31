@@ -1,4 +1,4 @@
-import type { CanvasObject, FrameObject } from "./types";
+import type { CanvasObject, FrameObject } from "./objects/types";
 import {
   getCanvasPosition,
   getRotatedBoundingBox,

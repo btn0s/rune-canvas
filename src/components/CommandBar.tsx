@@ -5,7 +5,7 @@ import type {
   CommandContext,
   IndexedPropertyItem,
 } from "../lib/commands/types";
-import type { FrameObject } from "../lib/types";
+import type { FrameObject } from "../lib/objects/types";
 import { cn } from "@/lib/utils";
 import { Terminal } from "lucide-react";
 
@@ -247,12 +247,6 @@ export function CommandBar({ context }: CommandBarProps) {
     selectedIndex,
     Math.max(0, (pendingIndexItems?.length ?? availableSuggestions.length) - 1)
   );
-
-  const getPromptText = () => {
-    if (pendingIndexItems) return `${pendingCommand?.name} - Select:`;
-    if (pendingCommand) return `${pendingCommand.name}:`;
-    return ">";
-  };
 
   return (
     <div className="bg-popover border border-border rounded-lg shadow-lg overflow-hidden w-full max-w-2xl">

@@ -1,17 +1,22 @@
+import type { SidebarMode } from "../lib/types";
 import type {
   CanvasObject,
   FrameObject,
   TextObject,
   ImageObject,
+  ShaderObject,
   BlendMode,
-  SidebarMode,
   Fill,
   SolidFill,
   GradientFill,
   ImageFill,
-} from "../lib/types";
-import { createSolidFill, createShadow, createInnerShadow } from "../lib/types";
-import { useState, useRef } from "react";
+} from "../lib/objects/types";
+import { getShader } from "@/lib/shaders/registry";
+import type { ParamControl } from "@/lib/shaders/types";
+import { toProcessedLiquidMetal } from "@/lib/shaders/shaders/liquid-metal";
+import { toProcessedHeatmap } from "@/lib/shaders/shaders/heatmap";
+import { createSolidFill, createShadow, createInnerShadow } from "../lib/objects/types";
+import { useState, useRef, useMemo } from "react";
 import { SelectItem } from "./ui/select";
 import {
   ArrowRight,
@@ -53,6 +58,7 @@ import {
   ChevronDown,
   CaseSensitive,
   CaseUpper,
+  Download,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Slider } from "./ui/slider";
@@ -73,6 +79,7 @@ import {
   isMixed,
   MIXED,
 } from "./property-panel-components";
+import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 
 // ============================================================================
 // TYPES
@@ -85,6 +92,8 @@ interface PropertyPanelProps {
   sidebarMode: SidebarMode;
   canvasBackground: string;
   onCanvasBackgroundChange: (color: string) => void;
+  containerRef: React.RefObject<HTMLDivElement>;
+  exportPng: () => Promise<void>;
 }
 
 /** Props for type-specific property components - supports single or multiple objects */
@@ -94,6 +103,7 @@ interface ObjectPropertiesProps<T extends CanvasObject> {
   onUpdate: (updates: Partial<T>) => void;
   /** Apply per-object updates (for merging with existing nested values) */
   onUpdateEach: (getUpdates: (obj: T, index: number) => Partial<T>) => void;
+  exportPng?: () => Promise<void>;
 }
 
 // ============================================================================
@@ -142,6 +152,21 @@ function LayoutSection({ objects, onUpdate }: CommonPropertiesProps) {
           suffix="°"
         />
       </div>
+    </div>
+  );
+}
+
+/** Export section - for frames and shaders */
+function ExportSection({ exportPng }: { exportPng?: () => Promise<void> }) {
+  if (!exportPng) return null;
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <SectionLabel>Export</SectionLabel>
+      <PropertyButton onClick={exportPng} className="flex items-center justify-center gap-1.5">
+        <Download className="size-3.5" />
+        Export PNG
+      </PropertyButton>
     </div>
   );
 }
@@ -734,6 +759,7 @@ function FrameProperties({
   objects: frames,
   onUpdate,
   onUpdateEach,
+  exportPng,
 }: ObjectPropertiesProps<FrameObject>) {
   // Use first frame for conditional UI (e.g., flex direction icons)
   const firstFrame = frames[0];
@@ -1345,6 +1371,9 @@ function FrameProperties({
           });
         }}
       />
+
+      {/* Export Section - only show for single selection */}
+      {frames.length === 1 && <ExportSection exportPng={exportPng} />}
     </>
   );
 }
@@ -1620,6 +1649,939 @@ function TextProperties({
 }
 
 // ============================================================================
+// SHADER PROPERTIES
+// ============================================================================
+
+function ShaderProperties({
+  objects: shaders,
+  onUpdate,
+  onUpdateEach,
+  exportPng,
+}: ObjectPropertiesProps<ShaderObject>) {
+  const commonUpdate = onUpdate as (updates: Partial<CanvasObject>) => void;
+  const isSingle = shaders.length === 1;
+
+  if (!isSingle) {
+    return (
+      <>
+        <LayoutSection objects={shaders} onUpdate={commonUpdate} />
+        <OpacityInput objects={shaders} onUpdate={commonUpdate} />
+      </>
+    );
+  }
+
+  const shader = shaders[0];
+  const shaderDef = getShader(shader.shaderType);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const updateShaderParam = (key: string, value: unknown) => {
+    const newParams = { ...shader.shaderParams, [key]: value };
+    onUpdate({ shaderParams: newParams } as Partial<ShaderObject>);
+  };
+
+  const getParamValue = (key: string): unknown => {
+    return shader.shaderParams[key] ?? shaderDef?.defaultParams[key];
+  };
+
+  const handleImageFileChange = async (file: File) => {
+    try {
+      let blob: Blob;
+      
+      // Process image based on shader type
+      if (shader.shaderType === "liquid-metal") {
+        const result = await toProcessedLiquidMetal(file);
+        blob = result.pngBlob;
+      } else if (shader.shaderType === "heatmap") {
+        const result = await toProcessedHeatmap(file);
+        blob = result.blob;
+      } else {
+        // For other shaders, just use the file directly
+        blob = file;
+      }
+
+      // Load the processed image as HTMLImageElement
+      const blobUrl = URL.createObjectURL(blob);
+      const img = document.createElement("img");
+      img.crossOrigin = "anonymous";
+      
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => {
+          // Image is loaded and stored, safe to revoke the blob URL
+          URL.revokeObjectURL(blobUrl);
+          resolve(undefined);
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(blobUrl);
+          reject(new Error("Failed to load processed image"));
+        };
+        img.src = blobUrl;
+      });
+
+      // Clear shape when image is selected
+      const newParams = { ...shader.shaderParams, image: img, shape: undefined };
+      onUpdate({ shaderParams: newParams } as Partial<ShaderObject>);
+    } catch (error) {
+      console.error("Failed to process image:", error);
+    }
+  };
+
+  const formatLabel = (paramKey: string, customLabel?: string): string => {
+    if (customLabel) return customLabel;
+    const lower = paramKey.toLowerCase();
+    if (lower.includes("back") || lower === "background") return "Background";
+    if (lower.includes("front") || lower === "foreground") return "Foreground";
+    return paramKey
+      .replace(/([A-Z])/g, " $1")
+      .replace(/^./, (str) => str.toUpperCase())
+      .trim();
+  };
+
+  const renderControlFromDefinition = (
+    key: string,
+    paramDef: { control: ParamControl; defaultValue: unknown },
+    value: unknown
+  ) => {
+    const control = paramDef.control;
+    const defaultValue = paramDef.defaultValue;
+    switch (control.type) {
+      case "color": {
+        const colorValue =
+          (typeof value === "string" && value.startsWith("#")
+            ? value
+            : typeof defaultValue === "string" && defaultValue.startsWith("#")
+            ? defaultValue
+            : "#ffffff") || "#ffffff";
+        return (
+          <div key={key} className="flex flex-col gap-1.5">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+              {formatLabel(key, control.label)}
+            </span>
+            <ColorInput
+              color={colorValue}
+              onChange={(newColor) => updateShaderParam(key, newColor)}
+            />
+          </div>
+        );
+      }
+
+      case "colorArray": {
+        const colors = Array.isArray(value)
+          ? (value as string[]).filter(
+              (c) => typeof c === "string" && c.startsWith("#")
+            )
+          : Array.isArray(shaderDef?.defaultParams[key])
+          ? (shaderDef.defaultParams[key] as string[])
+          : [];
+        return (
+          <div key={key} className="flex flex-col gap-1.5">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+              {formatLabel(key, control.label)}
+            </span>
+            <div className="flex flex-col gap-1.5">
+              {colors.map((color, idx) => {
+                const colorValue =
+                  typeof color === "string" && color.startsWith("#")
+                    ? color
+                    : "#ffffff";
+                return (
+                  <div key={idx} className="flex items-center gap-1.5 min-w-0">
+                    <div className="flex-1 min-w-0">
+                      <ColorInput
+                        color={colorValue}
+                        onChange={(newColor) => {
+                          const newColors = [...colors];
+                          newColors[idx] = newColor;
+                          updateShaderParam(key, newColors);
+                        }}
+                      />
+                    </div>
+                    {colors.length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 shrink-0"
+                        onClick={() => {
+                          const newColors = colors.filter((_, i) => i !== idx);
+                          updateShaderParam(key, newColors);
+                        }}
+                      >
+                        <Minus className="size-3" />
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => {
+                  updateShaderParam(key, [...colors, "#ffffff"]);
+                }}
+              >
+                <Plus className="size-3 mr-1" />
+                Add Color
+              </Button>
+            </div>
+          </div>
+        );
+      }
+
+      case "slider": {
+        const numValue =
+          typeof value === "number" ? value : (defaultValue as number) ?? 0;
+        return (
+          <div key={key} className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+                {formatLabel(key, control.label)}
+              </span>
+              <div className="text-xs text-muted-foreground font-mono">
+                {control.showAsPercentage
+                  ? `${Math.round(numValue * 100)}%`
+                  : numValue.toFixed(2)}
+              </div>
+            </div>
+            <Slider
+              value={[numValue]}
+              onValueChange={([val]) => updateShaderParam(key, val)}
+              min={control.min}
+              max={control.max}
+              step={control.step ?? 0.01}
+              className="w-full"
+            />
+          </div>
+        );
+      }
+
+      case "enum": {
+        const currentValue =
+          typeof value === "string" ? value : String(defaultValue ?? "");
+        const options = control.options;
+        if (options.length >= 2 && options.length <= 4) {
+          return (
+            <div key={key} className="flex flex-col gap-1.5">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+                {formatLabel(key, control.label)}
+              </span>
+              <ToggleGroup
+                type="single"
+                value={currentValue}
+                onValueChange={(val) => {
+                  if (val) updateShaderParam(key, val);
+                }}
+                className="w-full"
+                variant="outline"
+                size="sm"
+                spacing={0}
+              >
+                {options.map((enumVal) => (
+                  <ToggleGroupItem
+                    key={enumVal}
+                    value={enumVal}
+                    className="flex-1 text-xs capitalize"
+                  >
+                    {enumVal}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </div>
+          );
+        }
+        return (
+          <div key={key} className="flex flex-col gap-1.5">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+              {formatLabel(key, control.label)}
+            </span>
+            <PropertySelect
+              value={currentValue}
+              onValueChange={(val) => updateShaderParam(key, val)}
+            >
+              {options.map((enumVal) => (
+                <SelectItem
+                  key={String(enumVal)}
+                  value={String(enumVal)}
+                  className="capitalize text-xs"
+                >
+                  {enumVal}
+                </SelectItem>
+              ))}
+            </PropertySelect>
+          </div>
+        );
+      }
+
+      case "imageUrl": {
+        // ImageUrl parameters are no longer editable - they're handled via fills
+        return null;
+      }
+
+      case "number": {
+        const numValue =
+          typeof value === "number" ? value : (defaultValue as number) ?? 0;
+        return (
+          <div key={key} className="flex flex-col gap-1.5">
+            <SectionLabel>{formatLabel(key, control.label)}</SectionLabel>
+            <NumberInput
+              value={numValue}
+              onChange={(v) => updateShaderParam(key, v)}
+            />
+          </div>
+        );
+      }
+
+      case "boolean": {
+        const boolValue =
+          typeof value === "boolean" ? value : (defaultValue as boolean) ?? false;
+        return (
+          <div key={key} className="flex items-center gap-2 cursor-pointer">
+            <Checkbox
+              checked={boolValue}
+              onCheckedChange={(checked) =>
+                updateShaderParam(key, checked === true)
+              }
+              className="w-3.5 h-3.5 rounded border-border bg-input/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground"
+            />
+            <span className="text-xs text-muted-foreground">
+              {formatLabel(key, control.label)}
+            </span>
+          </div>
+        );
+      }
+    }
+  };
+
+
+  const renderParamControl = (key: string) => {
+    const value = getParamValue(key);
+    const paramDef = shaderDef?.paramDefinitions?.[key];
+    
+    if (!paramDef) {
+      // Fallback: if no definition, don't render
+      return null;
+    }
+    
+    return renderControlFromDefinition(key, paramDef, value);
+  };
+
+  if (!shaderDef) {
+    return (
+      <>
+        <LayoutSection objects={shaders} onUpdate={commonUpdate} />
+        <OpacityInput objects={shaders} onUpdate={commonUpdate} />
+        <div className="text-sm text-muted-foreground">
+          Unknown shader: {shader.shaderType}
+        </div>
+      </>
+    );
+  }
+
+  // Check if this shader has shape + image params (for special Shape section)
+  const hasShapeParam = shaderDef.paramDefinitions?.shape?.control.type === "enum";
+  const hasImageParam = shaderDef.paramDefinitions?.image?.control.type === "imageUrl";
+  const showShapeSection = hasShapeParam && hasImageParam;
+
+  // Group params by their group metadata from paramDefinitions
+  const foregroundParams: string[] = [];
+  const backgroundParams: string[] = [];
+  const otherParams: string[] = [];
+
+  if (shaderDef.paramDefinitions) {
+    Object.entries(shaderDef.paramDefinitions).forEach(([key, paramDef]) => {
+      // Skip hidden params
+      if (paramDef.hidden) {
+        return;
+      }
+      
+      // Skip imageUrl params - they're handled in Shape section if applicable
+      if (paramDef.control.type === "imageUrl") {
+        return;
+      }
+      
+      // Skip shape param if it's being shown in Shape section
+      if (showShapeSection && key === "shape") {
+        return;
+      }
+      
+      // Group by metadata
+      const group = paramDef.group || "other";
+      if (group === "foreground") {
+        foregroundParams.push(key);
+      } else if (group === "background") {
+        backgroundParams.push(key);
+      } else {
+        otherParams.push(key);
+      }
+    });
+  }
+
+  // Check if fills are the same across all shaders
+  const fillsAreSame = useMemo(() => {
+    if (shaders.length <= 1) return true;
+    const firstFills = shaders[0].fills;
+    return shaders.every(
+      (s) =>
+        s.fills.length === firstFills.length &&
+        s.fills.every(
+          (fill, idx) =>
+            fill.id === firstFills[idx]?.id &&
+            fill.type === firstFills[idx]?.type
+        )
+    );
+  }, [shaders]);
+
+  return (
+    <>
+      {/* Layout Section with Clip content */}
+      <div className="flex flex-col gap-1.5">
+        <SectionLabel>Layout</SectionLabel>
+        <div className="grid grid-cols-2 gap-1.5">
+          <NumberInput
+            label="X"
+            value={getMixedValue(shaders, "x")}
+            onChange={(v) => onUpdate({ x: v })}
+          />
+          <NumberInput
+            label="Y"
+            value={getMixedValue(shaders, "y")}
+            onChange={(v) => onUpdate({ y: v })}
+          />
+          <NumberInput
+            label="W"
+            value={getMixedValue(shaders, "width")}
+            onChange={(v) => onUpdate({ width: v })}
+          />
+          <NumberInput
+            label="H"
+            value={getMixedValue(shaders, "height")}
+            onChange={(v) => onUpdate({ height: v })}
+          />
+          <NumberInput
+            label="↻"
+            value={getMixedValue(shaders, "rotation")}
+            onChange={(v) => onUpdate({ rotation: v })}
+            suffix="°"
+          />
+        </div>
+        {/* Clip content toggle */}
+        <label className="flex items-center gap-2 cursor-pointer">
+          <Checkbox
+            checked={
+              isMixed(getMixedValue(shaders, "clipContent"))
+                ? ("indeterminate" as const)
+                : (getMixedValue(shaders, "clipContent") as boolean)
+            }
+            onCheckedChange={(checked) =>
+              onUpdate({ clipContent: checked === true })
+            }
+            className="w-3.5 h-3.5 rounded border-border bg-input/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground"
+          />
+          <span className="text-xs text-muted-foreground">Clip content</span>
+          <span className="text-xs text-muted-foreground ml-auto">⌥ C</span>
+        </label>
+      </div>
+
+      {/* Radius Section */}
+      <div className="flex flex-col gap-1.5">
+        <SectionLabel>Radius</SectionLabel>
+        <div className="grid grid-cols-[3fr_1fr] gap-1.5 items-center">
+          <div className="w-full [&_[data-slot=slider]]:w-full [&_[data-slot=slider-track]]:bg-input [&_[data-slot=slider-track]]:h-1.5 [&_[data-slot=slider-thumb]]:bg-foreground [&_[data-slot=slider-thumb]]:border-foreground [&_[data-slot=slider-thumb]]:size-3 [&_[data-slot=slider-thumb]]:border-0 [&_[data-slot=slider-thumb]]:shadow-none">
+            <Slider
+              min={0}
+              max={100}
+              value={[
+                isMixed(getMixedValue(shaders, "radius"))
+                  ? 0
+                  : (getMixedValue(shaders, "radius") as number),
+              ]}
+              onValueChange={(values) => onUpdate({ radius: values[0] })}
+              className="h-1.5 w-full"
+            />
+          </div>
+          <NumberInput
+            value={getMixedValue(shaders, "radius")}
+            onChange={(v) => onUpdate({ radius: Math.max(0, v) })}
+            min={0}
+          />
+        </div>
+      </div>
+
+      {/* Blending Section */}
+      <div className="flex flex-col gap-1.5">
+        <SectionLabel>Blending</SectionLabel>
+        <div className="grid grid-cols-2 gap-1.5">
+          {(() => {
+            const opacity = getMixedValue(shaders, "opacity");
+            return (
+              <NumberInput
+                value={isMixed(opacity) ? MIXED : Math.round(opacity * 100)}
+                onChange={(v) =>
+                  onUpdate({ opacity: Math.min(100, Math.max(0, v)) / 100 })
+                }
+                suffix="%"
+                min={0}
+              />
+            );
+          })()}
+          <PropertySelect
+            value={(() => {
+              const blendMode = getMixedValue(shaders, "blendMode");
+              return isMixed(blendMode) ? "normal" : blendMode || "normal";
+            })()}
+            onValueChange={(value) =>
+              onUpdate({ blendMode: value as BlendMode })
+            }
+          >
+            {(
+              [
+                "normal",
+                "multiply",
+                "screen",
+                "overlay",
+                "darken",
+                "lighten",
+              ] as BlendMode[]
+            ).map((mode) => (
+              <SelectItem
+                key={mode}
+                value={mode}
+                className="capitalize text-xs"
+              >
+                {mode}
+              </SelectItem>
+            ))}
+          </PropertySelect>
+        </div>
+      </div>
+
+      {/* Shader-specific properties grouped together */}
+      <div className="flex flex-col gap-1.5">
+        <SectionLabel>Shader</SectionLabel>
+        <div className="text-sm font-medium">{shaderDef.name}</div>
+        {shaderDef.description && (
+          <div className="text-xs text-muted-foreground">
+            {shaderDef.description}
+          </div>
+        )}
+      </div>
+
+      {/* Preset Selection */}
+      {shaderDef.presets && shaderDef.presets.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <SectionLabel>Preset</SectionLabel>
+          <PropertySelect
+            value={(() => {
+              // Find which preset matches current params (if any)
+              const currentParams = shader.shaderParams;
+              const matchingPreset = shaderDef.presets.find((preset) => {
+                // Check if all preset params match current params
+                return Object.keys(preset.params).every((key) => {
+                  const presetValue = preset.params[key];
+                  const currentValue = currentParams[key] ?? shaderDef.defaultParams[key];
+                  
+                  // Deep equality check for arrays
+                  if (Array.isArray(presetValue) && Array.isArray(currentValue)) {
+                    return (
+                      presetValue.length === currentValue.length &&
+                      presetValue.every((val, idx) => val === currentValue[idx])
+                    );
+                  }
+                  
+                  return presetValue === currentValue;
+                });
+              });
+              
+              return matchingPreset?.name || shaderDef.presets[0]?.name || "";
+            })()}
+            onValueChange={(presetName) => {
+              const preset = shaderDef.presets.find((p) => p.name === presetName);
+              if (preset) {
+                // Preserve params marked as stickyOnPresetApply
+                const newParams = { ...preset.params };
+                if (shaderDef.paramDefinitions) {
+                  Object.entries(shaderDef.paramDefinitions).forEach(([key, paramDef]) => {
+                    if (paramDef.stickyOnPresetApply) {
+                      const currentValue = shader.shaderParams[key];
+                      if (currentValue !== undefined && currentValue !== "") {
+                        newParams[key] = currentValue;
+                      }
+                    }
+                  });
+                }
+                onUpdate({ shaderParams: newParams } as Partial<ShaderObject>);
+              }
+            }}
+          >
+            {shaderDef.presets.map((preset) => (
+              <SelectItem key={preset.name} value={preset.name} className="capitalize text-xs">
+                {preset.name}
+              </SelectItem>
+            ))}
+          </PropertySelect>
+        </div>
+      )}
+
+      {/* Shape Section - Special handling for shape + image params */}
+      {showShapeSection && (
+        <div className="flex flex-col gap-1.5">
+          <SectionLabel>Shape</SectionLabel>
+          {(() => {
+            const shapeParamDef = shaderDef.paramDefinitions?.shape;
+            const shapeValue = getParamValue("shape");
+            const currentShape =
+              typeof shapeValue === "string" ? shapeValue : String(shapeParamDef?.defaultValue ?? "diamond");
+            const imageValue = getParamValue("image");
+            const hasImage = imageValue instanceof HTMLImageElement;
+
+            return (
+              <>
+                {/* Shape dropdown - only show when no image */}
+                {!hasImage && (
+                  <PropertySelect
+                    value={currentShape}
+                    onValueChange={(val) => {
+                      // Clear image when shape is selected
+                      const newParams = { ...shader.shaderParams, shape: val, image: undefined };
+                      onUpdate({ shaderParams: newParams } as Partial<ShaderObject>);
+                    }}
+                  >
+                    {shapeParamDef?.control.type === "enum" && shapeParamDef.control.options
+                      ? shapeParamDef.control.options.map((option: string) => (
+                          <SelectItem
+                            key={String(option)}
+                            value={String(option)}
+                            className="capitalize text-xs"
+                          >
+                            {option}
+                          </SelectItem>
+                        ))
+                      : null}
+                  </PropertySelect>
+                )}
+
+                {/* File input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleImageFileChange(file);
+                    }
+                  }}
+                />
+
+                {/* Image preview and replace UI */}
+                {hasImage && imageValue instanceof HTMLImageElement ? (
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="size-8 rounded bg-cover bg-center border border-border"
+                      style={{ backgroundImage: `url(${imageValue.src})` }}
+                    />
+                    <div className="flex-1 flex flex-col">
+                      <span className="text-xs text-muted-foreground">
+                        {imageValue.naturalWidth} × {imageValue.naturalHeight}
+                      </span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      Replace
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
+                      onClick={() => {
+                        const newParams = { ...shader.shaderParams, image: undefined };
+                        onUpdate({ shaderParams: newParams } as Partial<ShaderObject>);
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full h-7 text-xs"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Image className="size-3 mr-1.5" />
+                    Choose file
+                  </Button>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Foreground Parameters */}
+      {foregroundParams.length > 0 && (
+        <div className="flex flex-col gap-3 pt-1">
+          <div className="flex flex-col gap-3">
+            {foregroundParams.map((key) => renderParamControl(key)).filter(Boolean)}
+          </div>
+        </div>
+      )}
+
+      {/* Background Parameters */}
+      {backgroundParams.length > 0 && (
+        <div className="flex flex-col gap-3 pt-1">
+          <div className="flex flex-col gap-3">
+            {backgroundParams.map((key) => renderParamControl(key)).filter(Boolean)}
+          </div>
+        </div>
+      )}
+
+      {/* Other Parameters */}
+      {otherParams.length > 0 && (
+        <div className="flex flex-col gap-3 pt-1">
+          <SectionLabel>Parameters</SectionLabel>
+          <div className="flex flex-col gap-3">
+            {otherParams.map((key) => renderParamControl(key)).filter(Boolean)}
+          </div>
+        </div>
+      )}
+
+      {/* Fill Section */}
+      {(() => {
+        const isMixedFills = !fillsAreSame;
+        const hasFills = shaders[0].fills.length > 0;
+
+        // Collapsed state - no fills
+        if (!hasFills && !isMixedFills) {
+          return (
+            <div className="flex items-center justify-between">
+              <SectionLabel>Fill</SectionLabel>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="size-5 p-0 text-muted-foreground hover:text-foreground"
+                onClick={() =>
+                  onUpdate({
+                    fills: [createSolidFill("#DDDDDD")],
+                  } as Partial<ShaderObject>)
+                }
+              >
+                <Plus className="size-3" />
+              </Button>
+            </div>
+          );
+        }
+
+        return (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <SectionLabel>Fill</SectionLabel>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="size-5 p-0 text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  if (isMixedFills) {
+                    // Mixed: replace all with a single new fill
+                    onUpdate({
+                      fills: [createSolidFill("#DDDDDD")],
+                    } as Partial<ShaderObject>);
+                  } else {
+                    // Same: add a new fill to all
+                    onUpdateEach((shader) => ({
+                      fills: [...shader.fills, createSolidFill("#DDDDDD")],
+                    }));
+                  }
+                }}
+              >
+                <Plus className="size-3" />
+              </Button>
+            </div>
+
+            {isMixedFills ? (
+              <span className="text-xs text-muted-foreground">Mixed</span>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {[...shaders[0].fills].reverse().map((fill, reversedIndex) => {
+                  const fillIndex = shaders[0].fills.length - 1 - reversedIndex;
+                  return (
+                    <FillRow
+                      key={fill.id}
+                      fill={fill}
+                      onUpdate={(updates) => {
+                        onUpdateEach((shader) => {
+                          if (fillIndex >= shader.fills.length) return {};
+                          const newFills = [...shader.fills];
+                          newFills[fillIndex] = {
+                            ...newFills[fillIndex],
+                            ...updates,
+                          } as Fill;
+                          return { fills: newFills };
+                        });
+                      }}
+                      onChangeFill={(newFill) => {
+                        onUpdateEach((shader) => {
+                          if (fillIndex >= shader.fills.length) return {};
+                          const newFills = [...shader.fills];
+                          newFills[fillIndex] = newFill;
+                          return { fills: newFills };
+                        });
+                      }}
+                      onRemove={() => {
+                        onUpdateEach((shader) => {
+                          if (fillIndex >= shader.fills.length) return {};
+                          return {
+                            fills: shader.fills.filter(
+                              (_, i) => i !== fillIndex
+                            ),
+                          };
+                        });
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Layer properties below shader-specific properties */}
+      {/* Outline Section */}
+      <StrokeSection
+        label="Outline"
+        strokes={shaders.map((s) => ({
+          color: s.outline,
+          width: s.outlineWidth,
+          opacity: s.outlineOpacity,
+        }))}
+        onChange={(updates) => {
+          const mapped: Partial<ShaderObject> = {};
+          if (updates.color !== undefined) mapped.outline = updates.color;
+          if (updates.width !== undefined) mapped.outlineWidth = updates.width;
+          if (updates.opacity !== undefined)
+            mapped.outlineOpacity = updates.opacity;
+          onUpdate(mapped);
+        }}
+        onAdd={() =>
+          onUpdate({
+            outline: "#000000",
+            outlineWidth: 1,
+            outlineOpacity: 1,
+            outlineStyle: "solid",
+            outlineOffset: 0,
+          } as Partial<ShaderObject>)
+        }
+        onRemove={() =>
+          onUpdate({
+            outline: undefined,
+            outlineWidth: undefined,
+            outlineOpacity: undefined,
+            outlineStyle: undefined,
+            outlineOffset: undefined,
+          } as Partial<ShaderObject>)
+        }
+      >
+        <NumberInput
+          label="Off"
+          value={getMixedValue(shaders, "outlineOffset") ?? 0}
+          onChange={(v) => onUpdate({ outlineOffset: v })}
+        />
+      </StrokeSection>
+
+      {/* Border Section */}
+      <StrokeSection
+        label="Border"
+        strokes={shaders.map((s) => ({
+          color: s.border,
+          width: s.borderWidth,
+          opacity: s.borderOpacity,
+        }))}
+        onChange={(updates) => {
+          const mapped: Partial<ShaderObject> = {};
+          if (updates.color !== undefined) mapped.border = updates.color;
+          if (updates.width !== undefined) mapped.borderWidth = updates.width;
+          if (updates.opacity !== undefined)
+            mapped.borderOpacity = updates.opacity;
+          onUpdate(mapped);
+        }}
+        onAdd={() =>
+          onUpdate({
+            border: "#000000",
+            borderWidth: 1,
+            borderOpacity: 1,
+            borderStyle: "solid",
+            borderSide: "all",
+          } as Partial<ShaderObject>)
+        }
+        onRemove={() =>
+          onUpdate({
+            border: undefined,
+            borderWidth: undefined,
+            borderOpacity: undefined,
+            borderStyle: undefined,
+            borderSide: undefined,
+          } as Partial<ShaderObject>)
+        }
+      >
+        <BorderSideSelect
+          value={getMixedValue(shaders, "borderSide") ?? "all"}
+          onChange={(side) => onUpdate({ borderSide: side })}
+        />
+      </StrokeSection>
+
+      {/* Shadow Section */}
+      <ShadowSection
+        label="Shadow"
+        shadowArrays={shaders.map((s) => s.shadows)}
+        onAdd={() =>
+          onUpdateEach((shader) => ({
+            shadows: [...shader.shadows, createShadow()],
+          }))
+        }
+        onRemove={() => onUpdate({ shadows: [] })}
+        onUpdate={(updates) => {
+          onUpdateEach((shader) => {
+            if (shader.shadows.length === 0) return {};
+            const newShadows = [...shader.shadows];
+            newShadows[0] = { ...newShadows[0], ...updates };
+            return { shadows: newShadows };
+          });
+        }}
+      />
+
+      {/* Inner Shadow Section */}
+      <ShadowSection
+        label="Inner shadow"
+        shadowArrays={shaders.map((s) => s.innerShadows)}
+        isInner
+        onAdd={() =>
+          onUpdateEach((shader) => ({
+            innerShadows: [...shader.innerShadows, createInnerShadow()],
+          }))
+        }
+        onRemove={() => onUpdate({ innerShadows: [] })}
+        onUpdate={(updates) => {
+          onUpdateEach((shader) => {
+            if (shader.innerShadows.length === 0) return {};
+            const newShadows = [...shader.innerShadows];
+            newShadows[0] = { ...newShadows[0], ...updates };
+            return { innerShadows: newShadows };
+          });
+        }}
+      />
+
+      {/* Export Section - only show for single selection */}
+      {shaders.length === 1 && <ExportSection exportPng={exportPng} />}
+    </>
+  );
+}
+
+// ============================================================================
 // IMAGE PROPERTIES
 // ============================================================================
 
@@ -1774,9 +2736,10 @@ export function PropertyPanel({
   sidebarMode,
   canvasBackground,
   onCanvasBackgroundChange,
+  containerRef: _containerRef,
+  exportPng,
 }: PropertyPanelProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
 
   // ==========================================================================
   // EMPTY STATE - Canvas properties when nothing selected
@@ -1801,7 +2764,7 @@ export function PropertyPanel({
     if (sidebarMode === "show") {
       return (
         <div
-          ref={panelRef}
+          data-sidebar="properties"
           className="absolute right-0 top-0 bottom-0 w-56 bg-card border-l border-border select-none flex flex-col"
           onMouseDown={(e) => e.stopPropagation()}
           onMouseUp={(e) => e.stopPropagation()}
@@ -1821,7 +2784,7 @@ export function PropertyPanel({
       <>
         {/* Hover trigger zone */}
         <div
-          ref={panelRef}
+          data-sidebar="properties"
           className="absolute right-4 top-1/2 -translate-y-1/2 select-none"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
@@ -1839,6 +2802,7 @@ export function PropertyPanel({
 
         {/* Panel */}
         <div
+          data-sidebar="properties"
           className="absolute right-4 top-4 bottom-4 bg-card border border-border rounded-md select-none transition-all duration-200 ease-out overflow-y-auto"
           style={{
             width: 220,
@@ -1900,6 +2864,7 @@ export function PropertyPanel({
             objects={selectedObjects as FrameObject[]}
             onUpdate={handleUpdateAll}
             onUpdateEach={handleUpdateEach}
+            exportPng={exportPng}
           />
         );
       case "text":
@@ -1918,6 +2883,15 @@ export function PropertyPanel({
             onUpdateEach={handleUpdateEach}
           />
         );
+      case "shader":
+        return (
+          <ShaderProperties
+            objects={selectedObjects as ShaderObject[]}
+            onUpdate={handleUpdateAll}
+            onUpdateEach={handleUpdateEach}
+            exportPng={exportPng}
+          />
+        );
       default:
         return null;
     }
@@ -1929,7 +2903,7 @@ export function PropertyPanel({
   if (sidebarMode === "show") {
     return (
       <div
-        ref={panelRef}
+        data-sidebar="properties"
         className="absolute right-0 top-0 bottom-0 w-56 bg-card border-l border-border select-none flex flex-col"
         onMouseDown={(e) => e.stopPropagation()}
         onMouseUp={(e) => e.stopPropagation()}
@@ -1960,6 +2934,8 @@ export function PropertyPanel({
         return [20, 14, 18, 12];
       case "image":
         return [20, 16, 12];
+      case "shader":
+        return [20, 16, 12];
       default:
         return [20, 16, 12];
     }
@@ -1969,7 +2945,7 @@ export function PropertyPanel({
     <>
       {/* Hover trigger zone with collapsed indicator */}
       <div
-        ref={panelRef}
+        data-sidebar="properties"
         className="absolute right-4 top-1/2 -translate-y-1/2 select-none"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
@@ -1993,6 +2969,7 @@ export function PropertyPanel({
 
       {/* Panel - completely separate, slides in from right */}
       <div
+        data-sidebar="properties"
         className="absolute right-4 top-4 bottom-4 bg-card border border-border rounded-md select-none transition-all duration-200 ease-out overflow-y-auto"
         style={{
           width: 220,

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { ChevronRight, Frame, Type, Image, Eye, EyeOff, Lock, Unlock } from "lucide-react";
+import { ChevronRight, Frame, Type, Image, Sparkles, Eye, EyeOff, Lock, Unlock } from "lucide-react";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import type { SidebarMode } from "@/lib/types";
 
@@ -7,7 +7,7 @@ interface LayerItem {
   id: string;
   name: string;
   parentId: string | null;
-  type: "frame" | "text" | "image";
+  type: "frame" | "text" | "image" | "shader";
   visible: boolean;
   locked: boolean;
 }
@@ -28,6 +28,8 @@ function LayerTypeIcon({
       return <Type className={iconClass} />;
     case "image":
       return <Image className={iconClass} />;
+    case "shader":
+      return <Sparkles className={iconClass} />;
     default:
       return null;
   }
@@ -318,13 +320,17 @@ export function LayersPanel({
     if (newIds.length > 0) {
       setAnimatedIds((prev) => new Set([...prev, ...newIds]));
 
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         setAnimatedIds((prev) => {
           const next = new Set(prev);
           newIds.forEach((id) => next.delete(id));
           return next;
         });
       }, 300);
+
+      return () => {
+        clearTimeout(timeoutId);
+      };
     }
 
     prevItemIds.current = currentIds;
@@ -348,10 +354,10 @@ export function LayersPanel({
   if (sidebarMode === "show") {
     return (
       <div
+        data-sidebar="layers"
         className="absolute left-0 top-0 bottom-0 w-56 bg-card border-r border-border select-none flex flex-col"
         onMouseDown={(e) => e.stopPropagation()}
         onMouseUp={(e) => e.stopPropagation()}
-        onMouseMove={(e) => e.stopPropagation()}
         onMouseLeave={() => onHoverLayer?.(null)}
       >
         <div className="p-3 border-b border-border">
@@ -397,12 +403,12 @@ export function LayersPanel({
     <>
       {/* Hover trigger zone with collapsed indicator */}
       <div
+        data-sidebar="layers"
         className="absolute left-4 top-1/2 -translate-y-1/2 select-none"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         onMouseDown={(e) => e.stopPropagation()}
         onMouseUp={(e) => e.stopPropagation()}
-        onMouseMove={(e) => e.stopPropagation()}
       >
         {/* Collapsed indicator - layer bars (will be replaced with icon) */}
         <div
@@ -427,6 +433,7 @@ export function LayersPanel({
 
       {/* Panel - completely separate, slides in from left */}
       <div
+        data-sidebar="layers"
         className="absolute left-4 top-1/2 -translate-y-1/2 bg-card border border-border rounded-md p-3 select-none transition-all duration-200 ease-out"
         style={{
           opacity: isHovered ? 1 : 0,
@@ -441,7 +448,6 @@ export function LayersPanel({
         }}
         onMouseDown={(e) => e.stopPropagation()}
         onMouseUp={(e) => e.stopPropagation()}
-        onMouseMove={(e) => e.stopPropagation()}
       >
         {isEmpty ? (
           emptyContent

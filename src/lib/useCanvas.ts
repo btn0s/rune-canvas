@@ -11,15 +11,16 @@ import {
 import { useDrag } from "./interactions/useDrag";
 import { useResize } from "./interactions/useResize";
 import { useRotation } from "./interactions/useRotation";
-import {
-  createSolidFill,
-  type CanvasObject,
-  type FrameObject,
-  type ImageObject,
-  type TextObject,
-  type Guide,
-  type Point,
-} from "./types";
+import type { Guide, Point } from "./types";
+import type {
+  CanvasObject,
+  FrameObject,
+  ImageObject,
+  TextObject,
+  ShaderObject,
+} from "./objects/types";
+import { createSolidFill, type ImageFill } from "./objects/types";
+import { getShader } from "./shaders/registry";
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 4;
@@ -1110,6 +1111,188 @@ export function useCanvas() {
     return brightness < 128;
   }, []);
 
+  // Helper: Load image and get dimensions
+  const loadImageDimensions = (src: string): Promise<{ width: number; height: number }> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      };
+      img.onerror = () => {
+        // Fallback dimensions if image fails to load
+        resolve({ width: 400, height: 400 });
+      };
+      img.src = src;
+    });
+  };
+
+  // Helper: Create image fill from URL
+  const createImageFillFromUrl = async (
+    src: string,
+    fillId: string
+  ): Promise<ImageFill> => {
+    const dimensions = await loadImageDimensions(src);
+    return {
+      id: fillId,
+      type: "image",
+      visible: true,
+      opacity: 1,
+      src,
+      naturalWidth: dimensions.width,
+      naturalHeight: dimensions.height,
+      fillMode: "fill",
+      cropX: 0,
+      cropY: 0,
+      cropWidth: dimensions.width,
+      cropHeight: dimensions.height,
+    };
+  };
+
+  // Replace image fill on shader with new image
+  const replaceShaderImageFill = useCallback(
+    async (shaderId: string, imageSrc: string) => {
+      pushHistory();
+      
+      // Load image dimensions
+      const dimensions = await loadImageDimensions(imageSrc);
+      
+      // Create new image fill
+      const fillId = `fill-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const newImageFill: ImageFill = {
+        id: fillId,
+        type: "image",
+        visible: true,
+        opacity: 1,
+        src: imageSrc,
+        naturalWidth: dimensions.width,
+        naturalHeight: dimensions.height,
+        fillMode: "fill",
+        cropX: 0,
+        cropY: 0,
+        cropWidth: dimensions.width,
+        cropHeight: dimensions.height,
+      };
+
+      // Update objects with functional update to get latest state
+      setObjects((currentObjects) => {
+        const shader = currentObjects.find(
+          (o) => o.id === shaderId && o.type === "shader"
+        ) as ShaderObject | undefined;
+        
+        if (!shader) {
+          return currentObjects;
+        }
+
+        // Find existing image fill index (check all image fills, not just visible ones)
+        const existingImageFillIndex = shader.fills.findIndex(
+          (fill) => fill.type === "image"
+        );
+
+        // Create new fills array - always put image fill first for consistency
+        const newFills = [...shader.fills];
+        if (existingImageFillIndex >= 0) {
+          // Remove old image fill and add new one at the beginning
+          newFills.splice(existingImageFillIndex, 1);
+          newFills.unshift(newImageFill);
+        } else {
+          // Add new image fill at the beginning
+          newFills.unshift(newImageFill);
+        }
+
+        // Update the shader and recalculate sizes
+        // Create a completely new shader object to ensure React detects the change
+        const updated = currentObjects.map((o) => {
+          if (o.id === shaderId && o.type === "shader") {
+            return {
+              ...o,
+              fills: newFills,
+            } as ShaderObject;
+          }
+          return o;
+        });
+        
+        return recalculateHugSizes(updated);
+      });
+    },
+    [pushHistory, loadImageDimensions]
+  );
+
+  // Create shader object
+  const createShader = useCallback(
+    async (
+      shaderType: string,
+      shaderParams: Record<string, unknown>,
+      position: Point,
+      parentId: string | null = null,
+      shaderName?: string
+    ) => {
+      pushHistory();
+      const id = `shader-${Date.now()}`;
+      const baseName = shaderName || "Shader";
+      const name = `${baseName} ${objectCounter.current++}`;
+      const presetWidth = 400;
+      const presetHeight = 400;
+
+      // Get shader definition to check for imageUrl parameters
+      const shaderDef = getShader(shaderType);
+      const fills: ImageFill[] = [];
+      const finalShaderParams = { ...shaderParams };
+
+      // Check if shader has imageUrl parameters and create image fills
+      if (shaderDef?.paramDefinitions) {
+        for (const [paramName, paramDef] of Object.entries(shaderDef.paramDefinitions)) {
+          if (paramDef.control.type === "imageUrl") {
+            // Get image URL from params or defaultParams
+            const imageUrl = 
+              (shaderParams[paramName] as string) || 
+              (shaderDef.defaultParams[paramName] as string) || 
+              "";
+            
+            if (imageUrl && typeof imageUrl === "string") {
+              // Create image fill
+              const fillId = `fill-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+              try {
+                const imageFill = await createImageFillFromUrl(imageUrl, fillId);
+                fills.push(imageFill);
+              } catch (error) {
+                console.warn(`Failed to create image fill for ${paramName}:`, error);
+              }
+            }
+            
+            // Remove image parameter from shaderParams
+            delete finalShaderParams[paramName];
+          }
+        }
+      }
+
+      const newShader: ShaderObject = {
+        id,
+        name,
+        type: "shader",
+        parentId,
+        x: position.x - presetWidth / 2,
+        y: position.y - presetHeight / 2,
+        width: presetWidth,
+        height: presetHeight,
+        opacity: 1,
+        rotation: 0,
+        visible: true,
+        locked: false,
+        shaderType,
+        shaderParams: finalShaderParams,
+        fills,
+        radius: 0,
+        clipContent: false,
+        shadows: [],
+        innerShadows: [],
+      };
+
+      setObjects((prev) => [...prev, newShader]);
+      setSelectedIds([id]);
+    },
+    [pushHistory]
+  );
+
   // Create text object (separate from frame/rectangle creation)
   const createText = useCallback(
     (canvasPoint: Point) => {
@@ -1308,6 +1491,7 @@ export function useCanvas() {
     updateObject,
     updateTextContent,
     createText,
+    createShader,
     setParent,
     bringToFront,
     sendToBack,
@@ -1315,5 +1499,6 @@ export function useCanvas() {
     sendBackward,
     frameSelection,
     pasteAt,
+    replaceShaderImageFill,
   };
 }

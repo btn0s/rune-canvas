@@ -307,7 +307,7 @@ export function ColorInput({
   };
 
   return (
-    <div className="flex items-center h-7 w-full bg-input/30 border border-border rounded-md overflow-hidden">
+    <div className="flex items-center h-7 w-full min-w-0 bg-input/30 border border-border rounded-md overflow-hidden">
       {/* Color swatch - opens popover */}
       <Popover>
         <PopoverTrigger asChild>
@@ -513,7 +513,7 @@ export function PropertyButton({
 // These support multi-selection by accepting arrays and computing mixed values
 // ============================================================================
 
-import type { ShadowProps, BorderSide } from "@/lib/types";
+import type { ShadowProps, BorderSide } from "@/lib/objects/types";
 import { SelectItem } from "./ui/select";
 
 /**

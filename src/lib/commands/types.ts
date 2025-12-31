@@ -13,7 +13,8 @@ export type CommandCategory =
   | "layout" // toggleFlex, frameSelection
   | "property" // gap, opacity, radius
   | "history" // undo, redo
-  | "view"; // toggleSidebar, zoom
+  | "view" // toggleSidebar, zoom
+  | "export"; // exportPng
 
 export type CommandArgType = "number" | "color" | "enum" | "string";
 
@@ -45,7 +46,7 @@ export interface Command {
   minSelection?: number;
 
   /** Required object type(s) for this command */
-  requiresType?: ("frame" | "text" | "image")[];
+  requiresType?: ("frame" | "text" | "image" | "shader")[];
 
   /** The action to execute - index is provided for indexed property commands */
   execute: (ctx: CommandContext, args?: string, index?: number) => void;
@@ -73,10 +74,10 @@ export interface Command {
 export interface CommandContext {
   // Selection state
   selectedIds: string[];
-  selectedObjects: import("../types").CanvasObject[];
+  selectedObjects: import("../objects/types").CanvasObject[];
 
   // All objects
-  objects: import("../types").CanvasObject[];
+  objects: import("../objects/types").CanvasObject[];
 
   // Actions from useCanvas
   setTool: (tool: import("../types").Tool) => void;
@@ -114,11 +115,14 @@ export interface CommandContext {
   // Object updates
   updateObject: (
     id: string,
-    updates: Partial<import("../types").CanvasObject>
+    updates: Partial<import("../objects/types").CanvasObject>
   ) => void;
 
   // Store actions
   setSelectedIds: (ids: string[]) => void;
+
+  // Export
+  exportPng: () => Promise<void>;
 }
 
 export interface IndexedPropertyItem {

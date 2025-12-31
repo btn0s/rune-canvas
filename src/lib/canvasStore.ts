@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import type { CanvasObject, Tool, Transform } from "./types";
+import type { Tool, Transform } from "./types";
+import type { CanvasObject } from "./objects/types";
 import type { Command, CommandState } from "./commands/types";
 import { initialCommandState } from "./commands/types";
 import { searchCommands, getCommandById } from "./commands/registry";
@@ -226,7 +227,7 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
       const previous = state.history.past[state.history.past.length - 1];
       const newPast = state.history.past.slice(0, -1);
       const currentSnapshot = cloneScene(getScene(state));
-      return {
+      const result = {
         ...state,
         ...cloneScene(previous),
         history: {
@@ -237,6 +238,7 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
           ),
         },
       };
+      return result;
     }),
   redo: () =>
     set((state) => {

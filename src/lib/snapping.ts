@@ -1,4 +1,5 @@
-import type { CanvasObject, Guide, ResizeHandle, FrameObject } from "./types";
+import type { Guide, ResizeHandle } from "./types";
+import type { CanvasObject, FrameObject } from "./objects/types";
 import { getCanvasPosition, type Rect } from "./geometry";
 
 // Re-export for consumers

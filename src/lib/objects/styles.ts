@@ -11,9 +11,11 @@ import type {
   FrameObject,
   TextObject,
   ImageObject,
+  ShaderObject,
   Fill,
   SolidFill,
   GradientFill,
+  ImageFill,
 } from "./types";
 import { isInLayoutContainer, isRootObject } from "./context";
 
@@ -95,6 +97,13 @@ export function computeWrapperStyle(ctx: StyleContext): CSSProperties {
         break;
       }
 
+      case "shader": {
+        // Shaders always have fixed size
+        style.width = object.width;
+        style.height = object.height;
+        break;
+      }
+
       case "frame": {
         const frameObj = object as FrameObject;
         // Frames handle their own sizing based on widthMode/heightMode
@@ -158,6 +167,15 @@ export function computeFrameStyle(frame: FrameObject): CSSProperties {
   const fillStyles = computeFillStyles(frame.fills);
   if (fillStyles.background) {
     style.background = fillStyles.background;
+  }
+  if (fillStyles.backgroundSize) {
+    style.backgroundSize = fillStyles.backgroundSize;
+  }
+  if (fillStyles.backgroundPosition) {
+    style.backgroundPosition = fillStyles.backgroundPosition;
+  }
+  if (fillStyles.backgroundRepeat) {
+    style.backgroundRepeat = fillStyles.backgroundRepeat;
   }
 
   // Blend mode
@@ -386,7 +404,12 @@ function hexToRgba(hex: string, opacity: number): string {
  * Fills are rendered bottom-to-top (first in array = bottom layer).
  * CSS backgrounds are rendered top-to-bottom, so we reverse.
  */
-function computeFillStyles(fills: Fill[] | undefined): { background?: string } {
+export function computeFillStyles(fills: Fill[] | undefined): {
+  background?: string;
+  backgroundSize?: string;
+  backgroundPosition?: string;
+  backgroundRepeat?: string;
+} {
   if (!fills || fills.length === 0) {
     return {};
   }
@@ -399,6 +422,9 @@ function computeFillStyles(fills: Fill[] | undefined): { background?: string } {
   }
 
   const backgrounds: string[] = [];
+  const backgroundSizes: string[] = [];
+  const backgroundPositions: string[] = [];
+  const backgroundRepeats: string[] = [];
 
   for (const fill of visibleFills) {
     switch (fill.type) {
@@ -407,6 +433,9 @@ function computeFillStyles(fills: Fill[] | undefined): { background?: string } {
         const color = hexToRgba(solidFill.color, solidFill.opacity);
         // Use linear-gradient as a hack to create solid color layer
         backgrounds.push(`linear-gradient(${color}, ${color})`);
+        backgroundSizes.push("auto");
+        backgroundPositions.push("center");
+        backgroundRepeats.push("no-repeat");
         break;
       }
       case "gradient": {
@@ -421,11 +450,66 @@ function computeFillStyles(fills: Fill[] | undefined): { background?: string } {
         } else {
           backgrounds.push(`radial-gradient(circle, ${stops})`);
         }
+        backgroundSizes.push("auto");
+        backgroundPositions.push("center");
+        backgroundRepeats.push("no-repeat");
         break;
       }
       case "image": {
-        // Image fills will be handled separately with actual img elements
-        // For now, skip - we'll implement this later
+        const imageFill = fill as ImageFill;
+        const fillMode = imageFill.fillMode || "fill";
+        
+        // Add image URL with opacity handling
+        // Note: CSS background-image doesn't support opacity directly,
+        // so we'll use a workaround with a pseudo-element or handle it via the fill's opacity
+        // For now, we'll add the image and handle opacity via the overall element opacity
+        backgrounds.push(`url(${imageFill.src})`);
+        
+        // Handle fill mode
+        switch (fillMode) {
+          case "fill":
+            // Cover: scale to fill, crop as needed
+            backgroundSizes.push("cover");
+            backgroundPositions.push("center");
+            backgroundRepeats.push("no-repeat");
+            break;
+          case "fit":
+            // Contain: scale to fit, letterbox as needed
+            backgroundSizes.push("contain");
+            backgroundPositions.push("center");
+            backgroundRepeats.push("no-repeat");
+            break;
+          case "crop": {
+            // Manual crop: calculate size and position
+            if (imageFill.cropWidth && imageFill.cropHeight && imageFill.cropWidth > 0 && imageFill.cropHeight > 0) {
+              // Scale the image so that cropWidth/cropHeight fills 100% of the container
+              // background-size percentage is relative to the background positioning area
+              // We want: cropWidth pixels of the image = 100% of container width
+              // So: background-size = (naturalWidth / cropWidth) * 100%
+              const sizeX = (imageFill.naturalWidth / imageFill.cropWidth) * 100;
+              const sizeY = (imageFill.naturalHeight / imageFill.cropHeight) * 100;
+              
+              backgroundSizes.push(`${sizeX}% ${sizeY}%`);
+              
+              // Position: offset by crop position
+              // background-position percentage: 0% = left/top edge of image aligns with left/top of container
+              // We want cropX to align with left edge, so: position = -cropX / cropWidth * 100%
+              const posX = (-imageFill.cropX / imageFill.cropWidth) * 100;
+              const posY = (-imageFill.cropY / imageFill.cropHeight) * 100;
+              backgroundPositions.push(`${posX}% ${posY}%`);
+            } else {
+              // Fallback to cover if no crop data
+              backgroundSizes.push("cover");
+              backgroundPositions.push("center");
+            }
+            backgroundRepeats.push("no-repeat");
+            break;
+          }
+          default:
+            backgroundSizes.push("cover");
+            backgroundPositions.push("center");
+            backgroundRepeats.push("no-repeat");
+        }
         break;
       }
     }
@@ -435,27 +519,48 @@ function computeFillStyles(fills: Fill[] | undefined): { background?: string } {
     return {};
   }
 
-  return { background: backgrounds.join(", ") };
-}
+  const result: {
+    background?: string;
+    backgroundSize?: string;
+    backgroundPosition?: string;
+    backgroundRepeat?: string;
+  } = {
+    background: backgrounds.join(", "),
+  };
 
-function computeBorderRadius(frame: FrameObject): string | number {
-  if (
-    frame.radiusTL !== undefined ||
-    frame.radiusTR !== undefined ||
-    frame.radiusBR !== undefined ||
-    frame.radiusBL !== undefined
-  ) {
-    return `${frame.radiusTL ?? frame.radius}px ${frame.radiusTR ?? frame.radius}px ${
-      frame.radiusBR ?? frame.radius}px ${frame.radiusBL ?? frame.radius}px`;
+  // Only add these if we have image fills (they differ from defaults)
+  const hasImageFills = visibleFills.some((f) => f.type === "image");
+  if (hasImageFills) {
+    result.backgroundSize = backgroundSizes.join(", ");
+    result.backgroundPosition = backgroundPositions.join(", ");
+    result.backgroundRepeat = backgroundRepeats.join(", ");
   }
-  return frame.radius;
+
+  return result;
 }
 
-function computeBoxShadow(frame: FrameObject): string | undefined {
+function computeBorderRadius(
+  obj: FrameObject | ShaderObject
+): string | number {
+  if (
+    obj.radiusTL !== undefined ||
+    obj.radiusTR !== undefined ||
+    obj.radiusBR !== undefined ||
+    obj.radiusBL !== undefined
+  ) {
+    return `${obj.radiusTL ?? obj.radius}px ${obj.radiusTR ?? obj.radius}px ${
+      obj.radiusBR ?? obj.radius}px ${obj.radiusBL ?? obj.radius}px`;
+  }
+  return obj.radius;
+}
+
+function computeBoxShadow(
+  obj: FrameObject | ShaderObject
+): string | undefined {
   const shadowStrings: string[] = [];
 
-  if (frame.shadows) {
-    for (const s of frame.shadows) {
+  if (obj.shadows) {
+    for (const s of obj.shadows) {
       if (s.visible) {
         shadowStrings.push(
           `${s.x}px ${s.y}px ${s.blur}px ${s.spread}px ${hexToRgba(s.color, s.opacity)}`
@@ -464,8 +569,8 @@ function computeBoxShadow(frame: FrameObject): string | undefined {
     }
   }
 
-  if (frame.innerShadows) {
-    for (const s of frame.innerShadows) {
+  if (obj.innerShadows) {
+    for (const s of obj.innerShadows) {
       if (s.visible) {
         shadowStrings.push(
           `inset ${s.x}px ${s.y}px ${s.blur}px ${s.spread}px ${hexToRgba(s.color, s.opacity)}`
@@ -475,4 +580,76 @@ function computeBoxShadow(frame: FrameObject): string | undefined {
   }
 
   return shadowStrings.length > 0 ? shadowStrings.join(", ") : undefined;
+}
+
+// ============================================================================
+// Shader Content Styles
+// ============================================================================
+
+/**
+ * Compute styles for shader content (the inner div of a shader object).
+ */
+export function computeShaderStyle(shader: ShaderObject): CSSProperties {
+  const style: CSSProperties = {
+    boxSizing: "border-box",
+    position: "relative",
+    width: shader.width,
+    height: shader.height,
+  };
+
+  // Fills (stacked, bottom to top)
+  const fillStyles = computeFillStyles(shader.fills);
+  if (fillStyles.background) {
+    style.background = fillStyles.background;
+  }
+  if (fillStyles.backgroundSize) {
+    style.backgroundSize = fillStyles.backgroundSize;
+  }
+  if (fillStyles.backgroundPosition) {
+    style.backgroundPosition = fillStyles.backgroundPosition;
+  }
+  if (fillStyles.backgroundRepeat) {
+    style.backgroundRepeat = fillStyles.backgroundRepeat;
+  }
+
+  // Blend mode
+  if (shader.blendMode) {
+    style.mixBlendMode = shader.blendMode;
+  }
+
+  // Border radius
+  style.borderRadius = computeBorderRadius(shader);
+
+  // Border
+  if (shader.border) {
+    const borderColor = hexToRgba(shader.border, shader.borderOpacity ?? 1);
+    const borderStyle = shader.borderStyle || "solid";
+    const borderWidth = shader.borderWidth || 1;
+
+    if (shader.borderSide && shader.borderSide !== "all") {
+      const side =
+        shader.borderSide.charAt(0).toUpperCase() + shader.borderSide.slice(1);
+      (style as Record<string, string>)[
+        `border${side}`
+      ] = `${borderWidth}px ${borderStyle} ${borderColor}`;
+    } else {
+      style.border = `${borderWidth}px ${borderStyle} ${borderColor}`;
+    }
+  }
+
+  // Outline
+  if (shader.outline) {
+    style.outline = `${shader.outlineWidth || 1}px ${
+      shader.outlineStyle || "solid"
+    } ${hexToRgba(shader.outline, shader.outlineOpacity ?? 1)}`;
+    style.outlineOffset = shader.outlineOffset ?? 0;
+  }
+
+  // Shadows
+  style.boxShadow = computeBoxShadow(shader);
+
+  // Clip content
+  style.overflow = shader.clipContent ? "hidden" : "visible";
+
+  return style;
 }

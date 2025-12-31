@@ -45,7 +45,9 @@ function matchesShortcut(e: KeyboardEvent, shortcut: Shortcut): boolean {
 
   // Must match at least one of key or code
   if (!shortcut.key && !shortcut.code) return false;
-  if (shortcut.key && !keyMatches) return false;
+  if (shortcut.key && !keyMatches) {
+    return false;
+  }
   if (shortcut.code && !codeMatches) return false;
 
   // Check modifiers
@@ -54,7 +56,9 @@ function matchesShortcut(e: KeyboardEvent, shortcut: Shortcut): boolean {
   // meta: true means Cmd on Mac, Ctrl on Windows
   const metaRequired = mods.meta || false;
   const metaPressed = e.metaKey || e.ctrlKey;
-  if (metaRequired !== metaPressed) return false;
+  if (metaRequired !== metaPressed) {
+    return false;
+  }
 
   // Explicit ctrl (rarely needed, meta handles cross-platform)
   if (mods.ctrl !== undefined && mods.ctrl !== e.ctrlKey) return false;
@@ -65,10 +69,14 @@ function matchesShortcut(e: KeyboardEvent, shortcut: Shortcut): boolean {
 
   // Shift key
   const shiftRequired = mods.shift || false;
-  if (shiftRequired !== e.shiftKey) return false;
+  if (shiftRequired !== e.shiftKey) {
+    return false;
+  }
 
   // Check optional condition
-  if (shortcut.when && !shortcut.when()) return false;
+  if (shortcut.when && !shortcut.when()) {
+    return false;
+  }
 
   return true;
 }
@@ -95,13 +103,12 @@ export function useKeyboardShortcuts(
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      // Run custom handler first
       onKeyDown?.(e);
 
-      // Skip if disabled
-      if (!enabled) return;
+      if (!enabled) {
+        return;
+      }
 
-      // Skip if focus is on an input element (forms, contenteditable, etc.)
       const target = e.target as HTMLElement;
       if (
         target.tagName === "INPUT" ||
@@ -112,10 +119,9 @@ export function useKeyboardShortcuts(
         return;
       }
 
-      // Find and execute matching shortcut
-      for (const shortcut of shortcuts) {
+      for (let i = 0; i < shortcuts.length; i++) {
+        const shortcut = shortcuts[i];
         if (matchesShortcut(e, shortcut)) {
-          // Default to preventDefault: true
           if (shortcut.preventDefault !== false) {
             e.preventDefault();
           }
@@ -123,7 +129,7 @@ export function useKeyboardShortcuts(
             e.stopPropagation();
           }
           shortcut.action();
-          return; // Only execute first matching shortcut
+          return;
         }
       }
     },

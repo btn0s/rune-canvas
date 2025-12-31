@@ -25,8 +25,10 @@ import {
   type FrameObject,
   type ImageObject,
   type TextObject,
+  type ShaderObject,
   computeWrapperStyle,
   computeFrameStyle,
+  computeShaderStyle,
   computeTextStyle,
   computeImageStyle,
   computeImageWrapperStyle,
@@ -54,9 +56,15 @@ import {
 import { LayersPanel } from "./LayersPanel";
 import { PropertyPanel } from "./PropertyPanel";
 import { CommandBar } from "./CommandBar";
+import { ShaderPickerDialog } from "./ShaderPickerDialog";
+import { ShaderRendererComponent } from "@/lib/shaders/ShaderRenderer";
+import { getShader } from "@/lib/shaders/registry";
+import type { ShaderDefinition } from "@/lib/shaders/types";
+import type { ImageFill } from "@/lib/objects/types";
 import { cn } from "@/lib/utils";
 import type { Point, Tool } from "../lib/types";
 import type { CommandContext } from "../lib/commands/types";
+import { exportNodeToPng, copyNodeToPng } from "../lib/export/exportPng";
 import "../lib/commands/definitions";
 
 const HANDLE_SIZE = 8;
@@ -358,6 +366,7 @@ export function Canvas() {
     addImage,
     updateTextContent,
     createText,
+    createShader,
     updateObject,
     pushHistory,
     undo,
@@ -370,9 +379,13 @@ export function Canvas() {
     sendBackward,
     frameSelection,
     pasteAt,
+    replaceShaderImageFill,
   } = useCanvas();
 
   const { commandState, setCommandActive, setCommandInput } = useCanvasStore();
+  
+  // Cache for merged shader params to prevent recreating on every render
+  const paramsCacheRef = useRef(new Map<string, Record<string, unknown>>());
 
   const allTools = useMemo(
     () => [
@@ -390,6 +403,89 @@ export function Canvas() {
     ],
     [setCommandActive, setCommandInput]
   );
+
+  // Helper to get exportable element from selected object
+  const getExportableElement = useCallback((obj: CanvasObject): HTMLElement | null => {
+    if (!containerRef.current) return null;
+    if (obj.type !== "frame" && obj.type !== "shader") return null;
+
+    // Find the object's wrapper DOM element
+    const wrapperElement = containerRef.current.querySelector(
+      `[data-object-id="${obj.id}"]`
+    ) as HTMLElement;
+    
+    if (!wrapperElement) return null;
+
+    let contentElement: HTMLElement | null = null;
+    
+    for (const child of Array.from(wrapperElement.children)) {
+      if (child instanceof HTMLElement) {
+        const style = window.getComputedStyle(child);
+        if (style.position === "absolute" && style.bottom !== "auto") {
+          continue;
+        }
+        contentElement = child;
+        break;
+      }
+    }
+
+    return contentElement || wrapperElement;
+  }, []);
+
+  const exportPng = useCallback(async () => {
+    // Find the selected object (frame or shader)
+    const exportableObject = selectedObjects.find(
+      (obj) => obj.type === "frame" || obj.type === "shader"
+    );
+    if (!exportableObject) {
+      console.warn("Please select a frame or shader to export");
+      return;
+    }
+
+    const elementToExport = getExportableElement(exportableObject);
+    if (!elementToExport) {
+      console.error("Object element not found");
+      return;
+    }
+
+    try {
+      await exportNodeToPng(elementToExport, {
+        fileName: exportableObject.name,
+        pixelRatio: 3, // 3x scale for high-quality exports
+        width: exportableObject.width,
+        height: exportableObject.height,
+      });
+    } catch (error) {
+      console.error("Failed to export PNG:", error);
+    }
+  }, [selectedObjects, getExportableElement]);
+
+  const copyAsPng = useCallback(async () => {
+    // Find the selected object (frame or shader)
+    const exportableObject = selectedObjects.find(
+      (obj) => obj.type === "frame" || obj.type === "shader"
+    );
+    if (!exportableObject) {
+      console.warn("Please select a frame or shader to copy");
+      return;
+    }
+
+    const elementToExport = getExportableElement(exportableObject);
+    if (!elementToExport) {
+      console.error("Object element not found");
+      return;
+    }
+
+    try {
+      await copyNodeToPng(elementToExport, {
+        pixelRatio: 3, // 3x scale for high-quality exports
+        width: exportableObject.width,
+        height: exportableObject.height,
+      });
+    } catch (error) {
+      console.error("Failed to copy PNG:", error);
+    }
+  }, [selectedObjects, getExportableElement]);
 
   const commandContext: CommandContext = useMemo(
     () => ({
@@ -421,6 +517,7 @@ export function Canvas() {
       canRedo,
       updateObject,
       setSelectedIds: select,
+      exportPng,
     }),
     [
       selectedIds,
@@ -451,6 +548,7 @@ export function Canvas() {
       canRedo,
       updateObject,
       select,
+      exportPng,
     ]
   );
 
@@ -458,7 +556,7 @@ export function Canvas() {
   const [spaceHeld, setSpaceHeld] = useState(false);
 
   // Sidebar visibility mode: "show" = full sidebars, "hide" = hover-based
-  const [sidebarMode, setSidebarMode] = useState<SidebarMode>("hide");
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>("show");
 
   // Hovered resize handle for cursor
   const [hoveredHandle, setHoveredHandle] = useState<ResizeHandle | null>(null);
@@ -467,14 +565,55 @@ export function Canvas() {
     number | null
   >(null);
 
+  const isOverSidebar = useCallback((clientX: number, clientY: number): boolean => {
+    const elements = document.elementsFromPoint(clientX, clientY);
+    return elements.some((el) => el instanceof HTMLElement && el.dataset.sidebar !== undefined);
+  }, []);
+
   // Hovered object for visual feedback
   const [hoveredObjectId, setHoveredObjectId] = useState<string | null>(null);
 
   // Context menu position (canvas space)
   const [contextMenuPoint, setContextMenuPoint] = useState<Point | null>(null);
 
+  // Mouse position in canvas coordinates (for interactive shaders)
+  const [mouseCanvasPosition, setMouseCanvasPosition] = useState<Point | null>(null);
+
   // Crop mode state (meta key held during resize of an image)
   const [isCropMode, setIsCropMode] = useState(false);
+
+  // Shader picker dialog state
+  const [shaderPickerOpen, setShaderPickerOpen] = useState(false);
+
+  // Open shader picker immediately when shader tool is activated
+  useEffect(() => {
+    if (tool === "shader") {
+      setShaderPickerOpen(true);
+    }
+  }, [tool]);
+
+  // Prevent text selection during drag/create/resize/rotate/marquee operations
+  useEffect(() => {
+    const isInteracting = isDragging || isCreating || isResizing || isRotating || isMarqueeSelecting;
+    
+    if (isInteracting) {
+      // Prevent text selection via CSS
+      document.body.style.userSelect = "none";
+      document.body.style.webkitUserSelect = "none";
+      
+      // Also prevent selectstart event
+      const preventSelectStart = (e: Event) => {
+        e.preventDefault();
+      };
+      document.addEventListener("selectstart", preventSelectStart);
+      
+      return () => {
+        document.body.style.userSelect = "";
+        document.body.style.webkitUserSelect = "";
+        document.removeEventListener("selectstart", preventSelectStart);
+      };
+    }
+  }, [isDragging, isCreating, isResizing, isRotating, isMarqueeSelecting]);
 
   // Initialize and track mouse position via CSS variables
   useEffect(() => {
@@ -758,14 +897,34 @@ export function Canvas() {
     if (hoveredObjectId && container) {
       const hoveredObj = objects.find((o) => o.id === hoveredObjectId);
       if (hoveredObj) {
-        const objTransform = getObjectTransform(hoveredObj, objects);
-        const screenTr: TransformedRect = {
-          cx: objTransform.cx * transform.scale + transform.x,
-          cy: objTransform.cy * transform.scale + transform.y,
-          width: objTransform.width * transform.scale,
-          height: objTransform.height * transform.scale,
-          rotation: objTransform.rotation,
-        };
+        // Use DOM position for accurate highlighting (accounts for parent borders/padding)
+        const el = container.querySelector(
+          `[data-object-id="${hoveredObj.id}"]`
+        ) as HTMLElement;
+        
+        let screenTr: TransformedRect;
+        
+        if (el) {
+          const elRect = el.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
+          screenTr = {
+            cx: elRect.left - containerRect.left + elRect.width / 2,
+            cy: elRect.top - containerRect.top + elRect.height / 2,
+            width: elRect.width,
+            height: elRect.height,
+            rotation: hoveredObj.rotation,
+          };
+        } else {
+          // Fallback to object model if element not found
+          const objTransform = getObjectTransform(hoveredObj, objects);
+          screenTr = {
+            cx: objTransform.cx * transform.scale + transform.x,
+            cy: objTransform.cy * transform.scale + transform.y,
+            width: objTransform.width * transform.scale,
+            height: objTransform.height * transform.scale,
+            rotation: objTransform.rotation,
+          };
+        }
 
         ctx.strokeStyle = "#3b82f6";
         ctx.lineWidth = 1;
@@ -875,11 +1034,13 @@ export function Canvas() {
     const container = containerRef.current;
     if (!container) return;
     const onWheel = (e: WheelEvent) => {
-      handleWheel(e, container.getBoundingClientRect());
+      if (!isOverSidebar(e.clientX, e.clientY)) {
+        handleWheel(e, container.getBoundingClientRect());
+      }
     };
     container.addEventListener("wheel", onWheel, { passive: false });
     return () => container.removeEventListener("wheel", onWheel);
-  }, [handleWheel]);
+  }, [handleWheel, isOverSidebar]);
 
   const hitTestHandle = useCallback(
     (screenX: number, screenY: number): ResizeHandle | null => {
@@ -1014,11 +1175,14 @@ export function Canvas() {
     (canvasX: number, canvasY: number): string | null => {
       if (!containerRef.current) return null;
 
-      let bestMatch: { id: string; area: number } | null = null;
       const containerRect = containerRef.current.getBoundingClientRect();
 
-      for (const obj of objects) {
+      // Iterate in reverse order (topmost last) to respect z-order
+      // First hit wins, so objects on top are selected
+      for (let i = objects.length - 1; i >= 0; i--) {
+        const obj = objects[i]!;
         if (obj.locked) continue;
+        if (!obj.visible) continue;
 
         // Get actual DOM position for accurate hit testing
         const el = containerRef.current.querySelector(
@@ -1026,6 +1190,8 @@ export function Canvas() {
         ) as HTMLElement;
 
         let canvasPos: { x: number; y: number };
+        let objWidth: number;
+        let objHeight: number;
 
         if (el) {
           // Use DOM position (most accurate, especially for flex children)
@@ -1036,17 +1202,22 @@ export function Canvas() {
               transform.scale,
             y: (elRect.top - containerRect.top - transform.y) / transform.scale,
           };
+          // Use DOM rect dimensions (accounts for rotation)
+          objWidth = elRect.width / transform.scale;
+          objHeight = elRect.height / transform.scale;
         } else {
-          // Fallback to stored position
+          // Fallback to stored position and model dimensions
           canvasPos = getCanvasPosition(obj, objects);
+          objWidth = obj.width;
+          objHeight = obj.height;
         }
 
         // Check object bounds
         const inObject =
           canvasX >= canvasPos.x &&
-          canvasX <= canvasPos.x + obj.width &&
+          canvasX <= canvasPos.x + objWidth &&
           canvasY >= canvasPos.y &&
-          canvasY <= canvasPos.y + obj.height;
+          canvasY <= canvasPos.y + objHeight;
 
         // Check label bounds (only for root objects - those without a parent)
         // Label is above the object with margin. Use generous bounds.
@@ -1061,20 +1232,20 @@ export function Canvas() {
           canvasY <= canvasPos.y;
 
         if (inObject || inLabel) {
-          const area = obj.width * obj.height;
-          // Prefer smaller objects (more nested/specific)
-          if (!bestMatch || area < bestMatch.area) {
-            bestMatch = { id: obj.id, area };
-          }
+          // Return first hit (topmost object) - respects z-order
+          return obj.id;
         }
       }
 
-      return bestMatch?.id ?? null;
+      return null;
     },
     [objects, transform]
   );
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    // Don't handle interactions when command bar is active
+    if (commandState.isActive) return;
+
     const rect = containerRef.current!.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
@@ -1082,7 +1253,10 @@ export function Canvas() {
 
     // Middle click, hand tool, or space held to pan
     if (e.button === 1 || (e.button === 0 && (tool === "hand" || spaceHeld))) {
-      startPan({ x: e.clientX, y: e.clientY });
+      if (!isOverSidebar(e.clientX, e.clientY)) {
+        e.preventDefault(); // Prevent text selection
+        startPan({ x: e.clientX, y: e.clientY });
+      }
       return;
     }
 
@@ -1105,6 +1279,7 @@ export function Canvas() {
 
     if (tool === "select") {
       if (hitTestRotationHandle(screenX, screenY) !== null) {
+        e.preventDefault(); // Prevent text selection
         startRotation(canvasPoint);
         return;
       }
@@ -1112,6 +1287,7 @@ export function Canvas() {
       // Check resize handles (only for single selection)
       const handle = hitTestHandle(screenX, screenY);
       if (handle) {
+        e.preventDefault(); // Prevent text selection
         setHoveredHandle(handle);
         startResize(handle, canvasPoint);
         return;
@@ -1124,27 +1300,33 @@ export function Canvas() {
         if (e.detail === 2) {
           const obj = objects.find((o) => o.id === objectId);
           if (obj && obj.type === "text") {
+            // Don't prevent default for text editing
             setEditingTextId(objectId);
             return;
           }
         }
         // Alt+click on object = duplicate and drag
         if (e.altKey) {
+          e.preventDefault(); // Prevent text selection
           startDuplicateDrag(objectId, canvasPoint);
         } else {
           // Shift+click to add/remove from selection
+          e.preventDefault(); // Prevent text selection
           startDrag(objectId, canvasPoint, e.shiftKey);
         }
       } else {
         // Clicked on empty space - start marquee selection or clear selection
+        e.preventDefault(); // Prevent text selection
         if (!e.shiftKey) {
           select(null);
         }
         startMarquee(canvasPoint);
       }
     } else if (tool === "frame") {
+      e.preventDefault(); // Prevent text selection
       startCreate(canvasPoint);
     } else if (tool === "text") {
+      e.preventDefault(); // Prevent text selection
       createText(canvasPoint);
     }
   };
@@ -1154,9 +1336,14 @@ export function Canvas() {
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
     const canvasPoint = screenToCanvas(screenX, screenY);
+    
+    // Update mouse position for interactive shaders
+    setMouseCanvasPosition(canvasPoint);
 
     if (isPanning) {
-      updatePan({ x: e.clientX, y: e.clientY });
+      if (!isOverSidebar(e.clientX, e.clientY)) {
+        updatePan({ x: e.clientX, y: e.clientY });
+      }
       setHoveredObjectId(null);
     } else if (isCreating) {
       updateCreate(canvasPoint);
@@ -1215,6 +1402,29 @@ export function Canvas() {
     }
     if (isMarqueeSelecting) endMarquee();
   };
+
+  // Calculate normalized mouse position [0-1, 0-1] relative to a shader object
+  const getShaderMousePosition = useCallback((shaderObj: ShaderObject): [number, number] | null => {
+    if (!mouseCanvasPosition) return null;
+    
+    const canvasPos = getCanvasPosition(shaderObj, objects);
+    
+    // Check if mouse is within shader bounds
+    if (
+      mouseCanvasPosition.x < canvasPos.x ||
+      mouseCanvasPosition.x > canvasPos.x + shaderObj.width ||
+      mouseCanvasPosition.y < canvasPos.y ||
+      mouseCanvasPosition.y > canvasPos.y + shaderObj.height
+    ) {
+      return null;
+    }
+    
+    // Calculate normalized position [0-1, 0-1]
+    const normalizedX = (mouseCanvasPosition.x - canvasPos.x) / shaderObj.width;
+    const normalizedY = (mouseCanvasPosition.y - canvasPos.y) / shaderObj.height;
+    
+    return [normalizedX, normalizedY];
+  }, [mouseCanvasPosition, objects]);
 
   // Toggle flex layout on selected frame, or wrap selection in flex frame
   const toggleFlex = useCallback(() => {
@@ -1317,25 +1527,96 @@ export function Canvas() {
       },
       {
         key: "s",
-        action: () => setTool("shader"),
+        action: () => {
+          setTool("shader");
+          setShaderPickerOpen(true);
+        },
         when: () => !commandState.isActive,
       },
 
       // === Editing (Cmd/Ctrl) ===
       { key: "c", modifiers: { meta: true }, action: copySelected },
-      { key: "v", modifiers: { meta: true }, action: pasteClipboard },
+      {
+        key: "v",
+        modifiers: { meta: true },
+        action: async () => {
+          // Check for images in clipboard first
+          try {
+            const clipboardItems = await navigator.clipboard.read();
+            let imageFound = false;
+            for (const item of clipboardItems) {
+              for (const type of item.types) {
+                if (type.startsWith("image/")) {
+                  imageFound = true;
+                  const blob = await item.getType(type);
+                  const reader = new FileReader();
+                  reader.onload = (event) => {
+                    const src = event.target?.result as string;
+                    const img = new Image();
+                    img.onload = () => {
+                      if (!containerRef.current) return;
+
+                      // Check if exactly one shader is selected
+                      if (selectedIds.length === 1) {
+                        const selectedObject = objects.find((o) => o.id === selectedIds[0]);
+                        
+                        if (selectedObject?.type === "shader") {
+                          // Clear cache for this shader to ensure fresh params are computed
+                          const shaderId = selectedObject.id;
+                          for (const key of paramsCacheRef.current.keys()) {
+                            if (key.startsWith(`${shaderId}-`)) {
+                              paramsCacheRef.current.delete(key);
+                            }
+                          }
+                          
+                          replaceShaderImageFill(selectedObject.id, src).catch((error) => {
+                            console.error("Failed to replace shader image fill:", error);
+                          });
+                          return; // Exit early, shader image fill handled
+                        }
+                      }
+
+                      // Default behavior: Place image at center of viewport
+                      const rect = containerRef.current.getBoundingClientRect();
+                      const centerX = rect.width / 2;
+                      const centerY = rect.height / 2;
+                      const canvasPoint = screenToCanvas(centerX, centerY);
+                      addImage(src, img.naturalWidth, img.naturalHeight, canvasPoint);
+                    };
+                    img.onerror = () => {
+                      console.error("Failed to load pasted image");
+                    };
+                    img.src = src;
+                  };
+                  reader.onerror = () => {
+                    console.error("Failed to read pasted image");
+                  };
+                  reader.readAsDataURL(blob);
+                  return; // Exit early, image handled
+                }
+              }
+            }
+            // No image found, use canvas paste
+            if (!imageFound) {
+              pasteClipboard();
+            }
+          } catch (error) {
+            // Clipboard API not available or failed, try sync API via paste event
+            // The paste event handler will catch it
+            pasteClipboard();
+          }
+        },
+      },
       { key: "d", modifiers: { meta: true }, action: duplicateSelected },
       {
         key: "z",
         modifiers: { meta: true },
         action: undo,
-        when: () => canUndo,
       },
       {
         key: "z",
         modifiers: { meta: true, shift: true },
         action: redo,
-        when: () => canRedo,
       },
       {
         key: "a",
@@ -1396,9 +1677,11 @@ export function Canvas() {
         action: () => moveSelected(10, 0),
       },
 
-      // === Z-order (with modifiers only) ===
+      // === Z-order ===
+      { key: "]", action: bringToFront },
       { key: "]", modifiers: { meta: true }, action: bringForward },
       { key: "[", modifiers: { meta: true }, action: sendBackward },
+      { key: "[", action: sendToBack },
 
       // === Grouping ===
       {
@@ -1435,16 +1718,41 @@ export function Canvas() {
       toggleFlex,
       toggleClipContent,
       moveSelected,
+      bringToFront,
+      sendToBack,
       bringForward,
       sendBackward,
       frameSelection,
       setSidebarMode,
+      undo,
+      redo,
+      selectedIds,
+      objects,
+      replaceShaderImageFill,
+      screenToCanvas,
+      addImage,
     ]
   );
 
   useKeyboardShortcuts(shortcuts, {
     enabled: !editingTextId,
     onKeyDown: (e) => {
+      if (e.key === "z" && (e.metaKey || e.ctrlKey)) {
+        const target = e.target as HTMLElement;
+        if (
+          target.tagName !== "INPUT" &&
+          target.tagName !== "TEXTAREA" &&
+          !target.isContentEditable
+        ) {
+          e.preventDefault();
+        }
+      }
+      
+      const target = e.target as HTMLElement;
+      if (target?.isContentEditable) {
+        return;
+      }
+      
       // Special case: space for temporary pan (needs repeat check)
       if (e.key === " " && !e.repeat) {
         e.preventDefault();
@@ -1506,6 +1814,126 @@ export function Canvas() {
     },
     [screenToCanvas, addImage]
   );
+
+  // Paste image handler - use refs to access latest values without causing re-renders
+  const selectedIdsRef = useRef(selectedIds);
+  const objectsRef = useRef(objects);
+  const replaceShaderImageFillRef = useRef(replaceShaderImageFill);
+  
+  useEffect(() => {
+    selectedIdsRef.current = selectedIds;
+    objectsRef.current = objects;
+    replaceShaderImageFillRef.current = replaceShaderImageFill;
+  }, [selectedIds, objects, replaceShaderImageFill]);
+  
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      // Don't handle paste if user is editing text or typing in an input
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
+      // Don't handle paste if command bar is active
+      if (commandState.isActive) {
+        return;
+      }
+
+      const processImage = (blob: Blob) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const src = event.target?.result as string;
+          const img = new Image();
+          img.onload = () => {
+            if (!containerRef.current) return;
+
+            // Check if exactly one shader is selected (use refs for latest values)
+            const currentSelectedIds = selectedIdsRef.current;
+            const currentObjects = objectsRef.current;
+            
+            if (currentSelectedIds.length === 1) {
+              const selectedObject = currentObjects.find((o) => o.id === currentSelectedIds[0]);
+              
+              if (selectedObject?.type === "shader") {
+                // Clear cache for this shader to ensure fresh params are computed
+                // The cache key format is: `${shaderId}-${JSON.stringify(shaderParams)}-${imageFill?.src || 'none'}-${imageFill?.id || 'none'}`
+                const shaderId = selectedObject.id;
+                for (const key of paramsCacheRef.current.keys()) {
+                  if (key.startsWith(`${shaderId}-`)) {
+                    paramsCacheRef.current.delete(key);
+                  }
+                }
+                
+                replaceShaderImageFillRef.current(selectedObject.id, src).catch((error) => {
+                  console.error("Failed to replace shader image fill:", error);
+                });
+                return;
+              }
+            }
+
+            // Default behavior: Place image at center of viewport
+            const rect = containerRef.current.getBoundingClientRect();
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            const canvasPoint = screenToCanvas(centerX, centerY);
+
+            addImage(src, img.naturalWidth, img.naturalHeight, canvasPoint);
+          };
+          img.onerror = () => {
+            console.error("Failed to load pasted image");
+          };
+          img.src = src;
+        };
+        reader.onerror = () => {
+          console.error("Failed to read pasted image");
+        };
+        reader.readAsDataURL(blob);
+      };
+
+      // First, try the async Clipboard API (for images copied via our copy function)
+      try {
+        const clipboardItems = await navigator.clipboard.read();
+        for (const item of clipboardItems) {
+          for (const type of item.types) {
+            if (type.startsWith("image/")) {
+              e.preventDefault();
+              e.stopPropagation();
+              const blob = await item.getType(type);
+              processImage(blob);
+              return;
+            }
+          }
+        }
+      } catch (error) {
+        // Clipboard API might not be available or might fail, fall through to sync API
+      }
+
+      // Fallback to synchronous clipboard API (for external pastes)
+      if (e.clipboardData) {
+        const items = Array.from(e.clipboardData.items);
+        const imageItem = items.find((item) => item.type.startsWith("image/"));
+
+        if (imageItem) {
+          e.preventDefault();
+          e.stopPropagation();
+
+          const file = imageItem.getAsFile();
+          if (file) {
+            processImage(file);
+          }
+        }
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => {
+      window.removeEventListener("paste", handlePaste);
+    };
+  }, [screenToCanvas, addImage, commandState.isActive]);
 
   const getHandleCursor = useCallback(
     (handle: ResizeHandle | null): string => {
@@ -1591,11 +2019,6 @@ export function Canvas() {
             onDrop={handleDrop}
             onContextMenu={handleContextMenu}
           >
-            {/* Command hint */}
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 text-xs text-muted-foreground/50 pointer-events-none">
-              ⌘K to open command bar
-            </div>
-
             {/* DOM layer - objects */}
             <div
               className="absolute top-0 left-0 origin-top-left pointer-events-none"
@@ -1604,6 +2027,50 @@ export function Canvas() {
               }}
             >
               {(() => {
+                // Helper: Merge image fills into shader params for image shaders
+                const mergeImageFillIntoShaderParams = (
+                  shaderDef: ShaderDefinition,
+                  shaderObj: ShaderObject
+                ): Record<string, unknown> => {
+                  // Create cache key from shader object's relevant properties
+                  const imageFill = shaderObj.fills.find(
+                    (fill): fill is ImageFill => fill.type === 'image' && fill.visible
+                  );
+                  const cacheKey = `${shaderObj.id}-${JSON.stringify(shaderObj.shaderParams)}-${imageFill?.src || 'none'}-${imageFill?.id || 'none'}`;
+                  
+                  if (paramsCacheRef.current.has(cacheKey)) {
+                    return paramsCacheRef.current.get(cacheKey)!;
+                  }
+                  
+                  const params = { ...shaderObj.shaderParams };
+                  
+                  // Find imageUrl parameters in the shader definition
+                  const imageParamNames = Object.entries(shaderDef.paramDefinitions || {})
+                    .filter(([_, def]) => def.control.type === 'imageUrl')
+                    .map(([name]) => name);
+                  
+                  // If shader has image parameters, check for image fills
+                  if (imageParamNames.length > 0) {
+                    // Use the image fill's src for all image parameters
+                    if (imageFill) {
+                      for (const paramName of imageParamNames) {
+                        params[paramName] = imageFill.src;
+                      }
+                    }
+                  }
+                  
+                  // Cache the result (limit cache size to prevent memory leaks)
+                  if (paramsCacheRef.current.size > 100) {
+                    const firstKey = paramsCacheRef.current.keys().next().value;
+                    if (firstKey !== undefined) {
+                      paramsCacheRef.current.delete(firstKey);
+                    }
+                  }
+                  paramsCacheRef.current.set(cacheKey, params);
+                  
+                  return params;
+                };
+
                 // Render an object (always recursive - children render inside parent)
                 const renderObject = (obj: CanvasObject): React.ReactNode => {
                   if (!obj.visible) return null;
@@ -1784,6 +2251,41 @@ export function Canvas() {
                             </div>
                           );
                         })()}
+
+                      {obj.type === "shader" &&
+                        (() => {
+                          const shaderObj = obj as ShaderObject;
+                          const shaderDef = getShader(shaderObj.shaderType);
+
+                          if (!shaderDef) {
+                            return (
+                              <div className="w-full h-full flex items-center justify-center text-muted-foreground text-sm">
+                                Unknown shader: {shaderObj.shaderType}
+                              </div>
+                            );
+                          }
+
+                          const shaderStyles = computeShaderStyle(shaderObj);
+                          
+                          // Merge image fills into shader params if applicable (memoized)
+                          const mergedParams = mergeImageFillIntoShaderParams(shaderDef, shaderObj);
+                          
+                          // Get mouse position relative to this shader
+                          const shaderMousePos = getShaderMousePosition(shaderObj);
+                          
+                          return (
+                            <div style={shaderStyles}>
+                              <ShaderRendererComponent
+                                shader={shaderDef}
+                                params={mergedParams}
+                                width={obj.width}
+                                height={obj.height}
+                                speed={1}
+                                mousePosition={shaderMousePos}
+                              />
+                            </div>
+                          );
+                        })()}
                     </div>
                   );
                 };
@@ -1828,6 +2330,31 @@ export function Canvas() {
               sidebarMode={sidebarMode}
             />
 
+            {/* Shader picker dialog */}
+            <ShaderPickerDialog
+              open={shaderPickerOpen}
+              onOpenChange={(open) => {
+                setShaderPickerOpen(open);
+                if (!open && tool === "shader") {
+                  setTool("select");
+                }
+              }}
+              onSelect={(shaderId) => {
+                const shaderDef = getShader(shaderId);
+                if (shaderDef) {
+                  const rect = containerRef.current!.getBoundingClientRect();
+                  const centerX = rect.width / 2;
+                  const centerY = rect.height / 2;
+                  const canvasPoint = screenToCanvas(centerX, centerY);
+                  createShader(shaderId, shaderDef.defaultParams, canvasPoint, null, shaderDef.name).catch((error) => {
+                    console.error("Failed to create shader:", error);
+                  });
+                  setTool("select");
+                  setShaderPickerOpen(false);
+                }
+              }}
+            />
+
             {/* Property panel */}
             <PropertyPanel
               selectedObjects={selectedObjects}
@@ -1836,6 +2363,8 @@ export function Canvas() {
               sidebarMode={sidebarMode}
               canvasBackground={canvasBackground}
               onCanvasBackgroundChange={setCanvasBackground}
+              containerRef={containerRef}
+              exportPng={exportPng}
             />
 
             {/* Toolbar */}
@@ -1953,6 +2482,15 @@ export function Canvas() {
                   <ContextMenuItem onClick={distributeVertical}>
                     Distribute vertically
                     <ContextMenuShortcut>⌥⇧V</ContextMenuShortcut>
+                  </ContextMenuItem>
+                </>
+              )}
+              {selectedObjects.length === 1 && 
+               (selectedObjects[0]?.type === "frame" || selectedObjects[0]?.type === "shader") && (
+                <>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onClick={copyAsPng}>
+                    Copy as PNG
                   </ContextMenuItem>
                 </>
               )}

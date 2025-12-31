@@ -9,14 +9,14 @@
  * 3. Discriminated union via `type` field for type narrowing
  */
 
+import type { Point } from "../types";
+
 // ============================================================================
 // Primitives
 // ============================================================================
 
-export interface Point {
-  x: number;
-  y: number;
-}
+// Re-export Point for convenience
+export type { Point } from "../types";
 
 export interface Size {
   width: number;
@@ -29,7 +29,7 @@ export interface Bounds extends Point, Size {}
 // Common Types
 // ============================================================================
 
-export type ObjectType = "frame" | "text" | "image";
+export type ObjectType = "frame" | "text" | "image" | "shader";
 
 /** How an object sizes itself */
 export type SizeMode = "fixed" | "fit" | "expand";
@@ -323,10 +323,58 @@ export interface ImageObject extends BaseObject {
 }
 
 // ============================================================================
+// Shader Object
+// ============================================================================
+
+export interface ShaderObject extends BaseObject {
+  type: "shader";
+
+  /** Shader type identifier (e.g., "meshGradient", "neuroNoise") */
+  shaderType: string;
+
+  /** Shader-specific parameters stored as a JSON object */
+  shaderParams: Record<string, unknown>;
+
+  // === Stackable Fills (rendered bottom to top) ===
+  fills: Fill[];
+
+  // === Border Radius ===
+  radius: number;
+  radiusTL?: number;
+  radiusTR?: number;
+  radiusBR?: number;
+  radiusBL?: number;
+
+  // === Blending ===
+  blendMode?: BlendMode;
+
+  // === Clipping ===
+  clipContent: boolean;
+
+  // === Border (inside) ===
+  border?: string;
+  borderWidth?: number;
+  borderOpacity?: number;
+  borderStyle?: StrokeStyle;
+  borderSide?: BorderSide;
+
+  // === Outline (outside) ===
+  outline?: string;
+  outlineWidth?: number;
+  outlineOpacity?: number;
+  outlineStyle?: StrokeStyle;
+  outlineOffset?: number;
+
+  // === Stackable Shadows ===
+  shadows: ShadowProps[];
+  innerShadows: ShadowProps[];
+}
+
+// ============================================================================
 // Union Type
 // ============================================================================
 
-export type CanvasObject = FrameObject | TextObject | ImageObject;
+export type CanvasObject = FrameObject | TextObject | ImageObject | ShaderObject;
 
 // ============================================================================
 // Type Guards
@@ -342,4 +390,8 @@ export function isText(obj: CanvasObject): obj is TextObject {
 
 export function isImage(obj: CanvasObject): obj is ImageObject {
   return obj.type === "image";
+}
+
+export function isShader(obj: CanvasObject): obj is ShaderObject {
+  return obj.type === "shader";
 }

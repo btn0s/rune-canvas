@@ -1,6 +1,6 @@
 import type { Command } from "./types";
 import { registerCommand } from "./registry";
-import { createShadow, createInnerShadow } from "../types";
+import { createShadow, createInnerShadow } from "../objects/types";
 
 function defineCommand(cmd: Command) {
   registerCommand(cmd);
@@ -45,6 +45,15 @@ defineCommand({
   category: "tool",
   shortcutHint: "T",
   execute: (ctx) => ctx.setTool("text"),
+});
+
+defineCommand({
+  id: "shader",
+  name: "Shader Tool",
+  aliases: ["s", "shade"],
+  category: "tool",
+  shortcutHint: "S",
+  execute: (ctx) => ctx.setTool("shader"),
 });
 
 // =============================================================================
@@ -1345,6 +1354,17 @@ defineCommand({
   category: "view",
   shortcutHint: "Esc",
   execute: (ctx) => ctx.setSelectedIds([]),
+});
+
+defineCommand({
+  id: "exportPng",
+  name: "Export PNG",
+  aliases: ["export", "png", "save"],
+  category: "export",
+  description: "Export the selected frame or shader as a PNG image",
+  execute: async (ctx) => {
+    await ctx.exportPng();
+  },
 });
 
 export function initializeCommands() {
