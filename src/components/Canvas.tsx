@@ -592,6 +592,29 @@ export function Canvas() {
     }
   }, [tool]);
 
+  // Prevent text selection during drag/create/resize/rotate/marquee operations
+  useEffect(() => {
+    const isInteracting = isDragging || isCreating || isResizing || isRotating || isMarqueeSelecting;
+    
+    if (isInteracting) {
+      // Prevent text selection via CSS
+      document.body.style.userSelect = "none";
+      document.body.style.webkitUserSelect = "none";
+      
+      // Also prevent selectstart event
+      const preventSelectStart = (e: Event) => {
+        e.preventDefault();
+      };
+      document.addEventListener("selectstart", preventSelectStart);
+      
+      return () => {
+        document.body.style.userSelect = "";
+        document.body.style.webkitUserSelect = "";
+        document.removeEventListener("selectstart", preventSelectStart);
+      };
+    }
+  }, [isDragging, isCreating, isResizing, isRotating, isMarqueeSelecting]);
+
   // Initialize and track mouse position via CSS variables
   useEffect(() => {
     const updateMousePosition = (e: MouseEvent) => {
@@ -1231,6 +1254,7 @@ export function Canvas() {
     // Middle click, hand tool, or space held to pan
     if (e.button === 1 || (e.button === 0 && (tool === "hand" || spaceHeld))) {
       if (!isOverSidebar(e.clientX, e.clientY)) {
+        e.preventDefault(); // Prevent text selection
         startPan({ x: e.clientX, y: e.clientY });
       }
       return;
@@ -1255,6 +1279,7 @@ export function Canvas() {
 
     if (tool === "select") {
       if (hitTestRotationHandle(screenX, screenY) !== null) {
+        e.preventDefault(); // Prevent text selection
         startRotation(canvasPoint);
         return;
       }
@@ -1262,6 +1287,7 @@ export function Canvas() {
       // Check resize handles (only for single selection)
       const handle = hitTestHandle(screenX, screenY);
       if (handle) {
+        e.preventDefault(); // Prevent text selection
         setHoveredHandle(handle);
         startResize(handle, canvasPoint);
         return;
@@ -1274,27 +1300,33 @@ export function Canvas() {
         if (e.detail === 2) {
           const obj = objects.find((o) => o.id === objectId);
           if (obj && obj.type === "text") {
+            // Don't prevent default for text editing
             setEditingTextId(objectId);
             return;
           }
         }
         // Alt+click on object = duplicate and drag
         if (e.altKey) {
+          e.preventDefault(); // Prevent text selection
           startDuplicateDrag(objectId, canvasPoint);
         } else {
           // Shift+click to add/remove from selection
+          e.preventDefault(); // Prevent text selection
           startDrag(objectId, canvasPoint, e.shiftKey);
         }
       } else {
         // Clicked on empty space - start marquee selection or clear selection
+        e.preventDefault(); // Prevent text selection
         if (!e.shiftKey) {
           select(null);
         }
         startMarquee(canvasPoint);
       }
     } else if (tool === "frame") {
+      e.preventDefault(); // Prevent text selection
       startCreate(canvasPoint);
     } else if (tool === "text") {
+      e.preventDefault(); // Prevent text selection
       createText(canvasPoint);
     }
   };

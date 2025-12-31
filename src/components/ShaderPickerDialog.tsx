@@ -129,8 +129,12 @@ function ShaderPreview({
   }, []);
   
   return (
-    <div className="relative group w-full">
-      <div className="aspect-square bg-muted/50 relative rounded-md overflow-hidden">
+    <button
+      className="relative group text-left w-full transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-md"
+      onMouseEnter={onHover}
+      onClick={onSelect}
+    >
+      <div className="aspect-square bg-muted/50 relative rounded-md overflow-hidden border border-border group-hover:border-primary/50 group-hover:shadow-sm transition-all">
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="w-full h-full flex items-center justify-center">
             <ShaderRendererComponent
@@ -145,13 +149,11 @@ function ShaderPreview({
           </div>
         </div>
       </div>
-      <button
-        className="mt-1.5 px-0.5 text-left w-full transition-colors hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
-        onMouseEnter={onHover}
-        onClick={onSelect}
-      >
-        <h3 className="text-xs font-medium text-foreground leading-tight">{shader.name}</h3>
-      </button>
-    </div>
+      <div className="mt-1.5 px-0.5">
+        <h3 className="text-xs font-medium text-foreground leading-tight">
+          {shader.name}
+        </h3>
+      </div>
+    </button>
   );
 }
